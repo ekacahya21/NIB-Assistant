@@ -20,6 +20,7 @@ export default function AutomationPage() {
   const [akunOss, setAkunOss] = useState<string>("belum");
   const [otp, setOtp] = useState<string>("");
   const [isSubmittingOtp, setIsSubmittingOtp] = useState<boolean>(false);
+  const [isPromptingOtp, setIsPromptingOtp] = useState<boolean>(false);
 
   // Password Setup States
   const [isPromptingPassword, setIsPromptingPassword] = useState<boolean>(false);
@@ -27,6 +28,16 @@ export default function AutomationPage() {
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
   const [isSubmittingPassword, setIsSubmittingPassword] = useState<boolean>(false);
+
+  // Error and Update States
+  const [failedStep, setFailedStep] = useState<number | null>(null);
+  const [errorType, setErrorType] = useState<"nik" | "email" | "ktp_mismatch" | "generic" | null>(null);
+  const [errorText, setErrorText] = useState<string>("");
+  const [updatedValue, setUpdatedValue] = useState<string>("");
+  const [updatedNik, setUpdatedNik] = useState<string>("");
+  const [updatedNama, setUpdatedNama] = useState<string>("");
+  const [isUpdatingDraft, setIsUpdatingDraft] = useState<boolean>(false);
+  const streamRef = useRef<EventSource | null>(null);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -44,20 +55,17 @@ export default function AutomationPage() {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // Handle step timers and simulator or real-time SSE stream
-  useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let fallbackTimers: NodeJS.Timeout[] = [];
-    
+  // Handle step timers and real-time SSE stream
+  const connectStream = () => {
     const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
     const isBelum = typeof window !== "undefined" ? sessionStorage.getItem("akun_oss") || "belum" : "belum";
     setAkunOss(isBelum);
 
-    // Attempt connecting to the real-time NestJS Server-Sent Events stream
     try {
       addLog("Menghubungkan ke backend local NIB Assistant (port 3001)...", "info");
-      eventSource = new EventSource(`http://localhost:3001/automation/stream/${draftId}?akunOss=${isBelum}`);
-      
+      const eventSource = new EventSource(`http://localhost:3001/automation/stream/${draftId}?akunOss=${isBelum}`);
+      streamRef.current = eventSource;
+
       eventSource.onopen = () => {
         addLog("Koneksi SSE Backend Lokal BERHASIL. Mendengarkan stream otomatisasi...", "success");
       };
@@ -66,17 +74,36 @@ export default function AutomationPage() {
         try {
           const payload = JSON.parse(event.data);
           if (payload && typeof payload.step === "number") {
-            setCurrentStep(payload.step);
+            if (payload.status === "error") {
+              setFailedStep(payload.step);
+              setErrorText(payload.text);
+              if (payload.text.toLowerCase().includes("ktp")) {
+                setErrorType("ktp_mismatch");
+              } else if (payload.text.toLowerCase().includes("nik")) {
+                setErrorType("nik");
+              } else if (payload.text.toLowerCase().includes("email")) {
+                setErrorType("email");
+              } else {
+                setErrorType("generic");
+              }
+              setStatusText("Otomatisasi Gagal");
+            } else {
+              setCurrentStep(payload.step);
+            }
             addLog(payload.text, payload.status || "info");
             
             // Map text to UI Status indicator
             if (payload.step === 1) setStatusText("Membuka Portal OSS");
-            if (payload.step === 2) {
+            if (payload.step === 2 && payload.status !== "error") {
               if (payload.text.includes("PENTING")) {
                 setStatusText(isBelum === "belum" ? "Menunggu Anda memasukkan OTP..." : "Menunggu Anda login di portal OSS...");
-              } else if (payload.text.includes("Mendeteksi form pembuatan kata sandi")) {
+                setIsPromptingOtp(true);
+              } else if (payload.text.includes("Silakan masukkan kata sandi")) {
                 setStatusText("Menunggu Anda mengatur Kata Sandi...");
                 setIsPromptingPassword(true);
+                setIsPromptingOtp(false);
+              } else if (payload.text.includes("OTP diterima") || payload.text.includes("Verifikasi berhasil") || payload.text.includes("SUKSES")) {
+                setIsPromptingOtp(false);
               } else if (payload.text.includes("Mengisi") || payload.text.includes("Mengklik")) {
                 setStatusText("Mengisi form registrasi...");
               } else {
@@ -93,86 +120,96 @@ export default function AutomationPage() {
       };
 
       eventSource.onerror = () => {
-        // Close event source and fall back to simulator
         if (eventSource) {
           eventSource.close();
-          eventSource = null;
         }
-        addLog("Koneksi backend tidak terdeteksi. Menjalankan simulasi otomatisasi offline...", "warn");
-        runOfflineSimulation();
+        // Only log warning if not a planned verification error
+        setFailedStep((prev) => {
+          if (prev === null) {
+            addLog("Koneksi backend tidak terdeteksi.", "warn");
+          }
+          return prev;
+        });
       };
     } catch (e) {
-      addLog("Koneksi backend tidak terdeteksi. Menjalankan simulasi otomatisasi offline...", "warn");
-      runOfflineSimulation();
+      addLog("Koneksi backend tidak terdeteksi.", "warn");
     }
+  };
 
-    function runOfflineSimulation() {
-      if (isBelum === "belum") {
-        // Step 1: Connecting
-        addLog("Menginisialisasi browser Playwright di backend local...", "info");
-        const t1 = setTimeout(() => {
-          addLog("Browser Chromium headful berhasil diluncurkan.", "success");
-          addLog("Membuka alamat resmi portal registrasi: https://oss.go.id", "info");
-          setCurrentStep(2);
-          setStatusText("Membuka Portal OSS");
-        }, 1500);
-
-        // Step 2: Filling registration form
-        const t2 = setTimeout(() => {
-          addLog("Portal OSS berhasil dimuat. Jendela browser terbuka.", "success");
-          setStatusText("Mengisi form registrasi pelaku usaha...");
-        }, 3000);
-
-        const t3 = setTimeout(() => {
-          addLog('Mengklik tombol "Pilih jenis pelaku usaha" dan memilih "Orang Perseorangan" [SUKSES]', 'info');
-        }, 4200);
-
-        const t4 = setTimeout(() => {
-          addLog('Mengisi NIK Pemilik: 3277022105940008 [SUKSES]', 'info');
-        }, 5500);
-
-        const t5 = setTimeout(() => {
-          addLog('Mengisi Email Pemilik: testaja123@yopmail.com [SUKSES]', 'info');
-        }, 6800);
-
-        const t6 = setTimeout(() => {
-          addLog('Mengklik tombol "Verifikasi" [SUKSES]', 'info');
-        }, 8000);
-
-        const t7 = setTimeout(() => {
-          addLog("PENTING: Silakan buka email Anda, salin kode OTP, dan masukkan kode OTP di halaman aplikasi.", "warn");
-          setStatusText("Menunggu Anda memasukkan OTP...");
-        }, 9200);
-
-        fallbackTimers.push(t1, t2, t3, t4, t5, t6, t7);
-      } else {
-        // Step 1: Connecting
-        addLog("Menginisialisasi browser Playwright di backend local...", "info");
-        const t1 = setTimeout(() => {
-          addLog("Browser Chromium headful berhasil diluncurkan.", "success");
-          addLog("Membuka alamat resmi: https://oss.go.id", "info");
-          setCurrentStep(2);
-          setStatusText("Membuka Portal OSS");
-        }, 1800);
-
-        // Step 2: Waiting for user login
-        const t2 = setTimeout(() => {
-          addLog("Portal OSS berhasil dimuat. Jendela browser terbuka di komputer Anda.", "success");
-          addLog("PENTING: Silakan selesaikan proses LOGIN / OTP di jendela browser Chrome yang terbuka.", "warn");
-          setStatusText("Menunggu Anda login di portal OSS...");
-        }, 3800);
-
-        fallbackTimers.push(t1, t2);
-      }
-    }
-
+  useEffect(() => {
+    connectStream();
     return () => {
-      if (eventSource) {
-        eventSource.close();
+      if (streamRef.current) {
+        streamRef.current.close();
       }
-      fallbackTimers.forEach(clearTimeout);
     };
   }, []);
+
+  const handleRestartAutomation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (errorType !== "ktp_mismatch" && errorType !== "generic" && !updatedValue.trim()) return;
+    if (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim()) return;
+
+    setIsUpdatingDraft(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+
+    try {
+      if (errorType !== "generic") {
+        let bodyData = {};
+        let successMsg = "";
+        if (errorType === "nik") {
+          bodyData = { nik: updatedValue.trim() };
+          successMsg = `[Sistem] Berhasil memperbarui NIK menjadi: ${updatedValue}`;
+        } else if (errorType === "email") {
+          bodyData = { email: updatedValue.trim() };
+          successMsg = `[Sistem] Berhasil memperbarui Email menjadi: ${updatedValue}`;
+        } else if (errorType === "ktp_mismatch") {
+          bodyData = {
+            ...(updatedNik.trim() ? { nik: updatedNik.trim() } : {}),
+            ...(updatedNama.trim() ? { namaPemilik: updatedNama.trim().toUpperCase() } : {}),
+          };
+          successMsg = `[Sistem] Berhasil memperbarui data KTP (${updatedNik.trim() ? "NIK" : ""} ${updatedNama.trim() ? "Nama" : ""})`;
+        }
+
+        const response = await fetch(`http://localhost:3001/drafts/${draftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyData)
+        });
+        
+        if (!response.ok) throw new Error("Gagal memperbarui draf");
+
+        addLog(successMsg, "success");
+      } else {
+        addLog("[Sistem] Memulai ulang otomatisasi...", "info");
+      }
+      
+      // Reset States
+      setFailedStep(null);
+      setErrorType(null);
+      setErrorText("");
+      setUpdatedValue("");
+      setUpdatedNik("");
+      setUpdatedNama("");
+      setCurrentStep(1);
+      setStatusText("Memulai ulang otomatisasi...");
+      setLogs([]);
+      setIsPromptingOtp(false);
+      setIsPromptingPassword(false);
+
+      if (streamRef.current) {
+        streamRef.current.close();
+      }
+      
+      // Connect stream again to restart
+      connectStream();
+    } catch (err: any) {
+      console.error(err);
+      addLog(`Gagal memperbarui data: ${err.message || String(err)}`, "error");
+    } finally {
+      setIsUpdatingDraft(false);
+    }
+  };
 
   // Resume after user clicks "Saya sudah login"
   const handleUserLoggedIn = () => {
@@ -186,38 +223,6 @@ export default function AutomationPage() {
 
     addLog("Persetujuan diterima: User melaporkan login berhasil.", "success");
     addLog("Melakukan sinkronisasi session state browser...", "info");
-    
-    // Move to step 3: Filling Data
-    setCurrentStep(3);
-    setStatusText("Mengisi formulir data pemilik & lokasi usaha...");
-
-    setTimeout(() => {
-      addLog("Mengisi kolom Nama Pemilik: Budi Santoso [SUKSES]", "info");
-    }, 1000);
-
-    setTimeout(() => {
-      addLog("Mengisi NIK Pemilik: 3171234567890001 [SUKSES]", "info");
-    }, 2200);
-
-    setTimeout(() => {
-      addLog("Mengisi Kontak WhatsApp & Alamat Detail [SUKSES]", "info");
-    }, 3500);
-
-    // Move to step 4: Selecting KBLI
-    setTimeout(() => {
-      setCurrentStep(4);
-      setStatusText("Memilih Sektor KBLI & Modal Usaha...");
-      addLog("Memilih KBLI: 56103 (Kedai Makanan) [SUKSES]", "info");
-      addLog("Menginput Modal Usaha & Jumlah Pekerja [SUKSES]", "info");
-    }, 4800);
-
-    // Move to step 5: Final Review / Complete
-    setTimeout(() => {
-      setCurrentStep(5);
-      setStatusText("Draft NIB siap! Menunggu konfirmasi final di OSS.");
-      addLog("Semua data berhasil diisi ke form portal OSS.", "success");
-      addLog("Silakan periksa kembali halaman browser Anda, klik 'Terbitkan NIB' untuk finalisasi.", "success");
-    }, 6500);
   };
 
   // Submit OTP
@@ -237,40 +242,6 @@ export default function AutomationPage() {
       .catch((err) => console.log("Offline or connection error: using simulated progression", err))
       .finally(() => {
         setIsSubmittingOtp(false);
-        // Continue automation simulation/stages
-        addLog("OTP diterima. Memverifikasi kode OTP... [SUKSES]", "success");
-        addLog("Melakukan sinkronisasi session state browser...", "info");
-        
-        setCurrentStep(3);
-        setStatusText("Mengisi formulir data pemilik & lokasi usaha...");
-
-        setTimeout(() => {
-          addLog("Mengisi kolom Nama Pemilik: Budi Santoso [SUKSES]", "info");
-        }, 1000);
-
-        setTimeout(() => {
-          addLog("Mengisi NIK Pemilik: 3277022105940008 [SUKSES]", "info");
-        }, 2200);
-
-        setTimeout(() => {
-          addLog("Mengisi Kontak WhatsApp & Alamat Detail [SUKSES]", "info");
-        }, 3500);
-
-        // Move to step 4: Selecting KBLI
-        setTimeout(() => {
-          setCurrentStep(4);
-          setStatusText("Memilih Sektor KBLI & Modal Usaha...");
-          addLog("Memilih KBLI: 56103 (Kedai Makanan) [SUKSES]", "info");
-          addLog("Menginput Modal Usaha & Jumlah Pekerja [SUKSES]", "info");
-        }, 4800);
-
-        // Move to step 5: Final Review / Complete
-        setTimeout(() => {
-          setCurrentStep(5);
-          setStatusText("Draft NIB siap! Menunggu konfirmasi final di OSS.");
-          addLog("Semua data berhasil diisi ke form portal OSS.", "success");
-          addLog("Silakan periksa kembali halaman browser Anda, klik 'Terbitkan NIB' untuk finalisasi.", "success");
-        }, 6500);
       });
   };
 
@@ -349,24 +320,145 @@ export default function AutomationPage() {
           </div>
 
           {/* Status Card Indicator with Pulse Ring */}
-          <div className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm flex items-center gap-4">
-            <div className="relative w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              {currentStep < 5 ? (
+          <div className={`rounded-2xl p-4 border shadow-sm flex items-center gap-4 transition-all duration-300 ${
+            failedStep !== null
+              ? "bg-rose-50 border-rose-200"
+              : "bg-surface-card border-border-light"
+          }`}>
+            <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+              failedStep !== null
+                ? "bg-rose-100 text-rose-600"
+                : "bg-primary/10 text-primary"
+            }`}>
+              {currentStep < 5 && failedStep === null ? (
                 <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
               ) : null}
-              <span className={`material-symbols-outlined text-2xl ${currentStep < 5 ? "animate-spin" : "text-emerald-500"}`}>
-                {currentStep < 5 ? "sync" : "verified"}
+              <span className={`material-symbols-outlined text-2xl ${
+                failedStep !== null
+                  ? "text-rose-600"
+                  : currentStep < 5
+                  ? "animate-spin"
+                  : "text-emerald-500"
+              }`}>
+                {failedStep !== null ? "error" : currentStep < 5 ? "sync" : "verified"}
               </span>
             </div>
             <div>
-              <h3 className="font-bold text-sm text-on-surface">
-                {currentStep === 5 ? "Otomatisasi Selesai" : "Otomatisasi Sedang Berjalan"}
+              <h3 className={`font-bold text-sm ${failedStep !== null ? "text-rose-800" : "text-on-surface"}`}>
+                {failedStep !== null
+                  ? "Otomatisasi Terhenti"
+                  : currentStep === 5
+                  ? "Otomatisasi Selesai"
+                  : "Otomatisasi Sedang Berjalan"}
               </h3>
-              <p className="text-xs text-on-surface-variant italic">
+              <p className={`text-xs italic ${failedStep !== null ? "text-rose-600" : "text-on-surface-variant"}`}>
                 {statusText}
               </p>
             </div>
           </div>
+
+          {/* Notification Alert and Update Option */}
+          {failedStep !== null && (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 space-y-4 shadow-sm animate-fade-in">
+              <div className="flex gap-3">
+                <span className="material-symbols-outlined text-rose-500 text-2xl shrink-0">warning</span>
+                <div>
+                  <h4 className="font-bold text-sm text-rose-800">
+                    {errorType === "ktp_mismatch"
+                      ? "Verifikasi Data KTP Gagal"
+                      : errorType === "generic"
+                      ? "Kegagalan Sistem Otomatisasi"
+                      : "Verifikasi NIK & Email Gagal"}
+                  </h4>
+                  <p className="text-xs text-rose-700 mt-1 leading-relaxed">{errorText}</p>
+                </div>
+              </div>
+              
+              <div className="border-t border-rose-200/60 pt-4">
+                <form onSubmit={handleRestartAutomation} className="space-y-3.5">
+                  {errorType === "ktp_mismatch" ? (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-rose-800">
+                          Nama Pemilik Baru (Sesuai KTP)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: ARYANTO WICAKSONO"
+                          value={updatedNama}
+                          onChange={(e) => setUpdatedNama(e.target.value)}
+                          className="w-full bg-white border border-rose-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-sm text-rose-900 placeholder:text-rose-300 font-semibold"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-rose-800">
+                          Nomor NIK Baru (16 Digit)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={16}
+                          placeholder="Contoh: 3175081108770004"
+                          value={updatedNik}
+                          onChange={(e) => setUpdatedNik(e.target.value)}
+                          className="w-full bg-white border border-rose-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-sm text-rose-900 placeholder:text-rose-300 font-semibold"
+                        />
+                      </div>
+                      <p className="text-[10px] text-rose-600 italic">
+                        *Anda boleh mengisi nama pemilik saja, NIK saja, atau keduanya jika salah ketik.
+                      </p>
+                    </div>
+                  ) : errorType === "generic" ? (
+                    <div className="py-1">
+                      <p className="text-xs text-rose-700 leading-relaxed font-semibold">
+                        Terjadi kegagalan teknis dalam mengeksekusi browser otomatisasi (kemungkinan timeout atau kendala koneksi server portal OSS). Silakan coba lagi.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-rose-800">
+                        Masukkan {errorType === "nik" ? "Nomor NIK Baru (16 Digit)" : "Alamat Email Baru"}
+                      </label>
+                      <input
+                        type={errorType === "nik" ? "text" : "email"}
+                        maxLength={errorType === "nik" ? 16 : 100}
+                        placeholder={errorType === "nik" ? "Contoh: 3175081108770004" : "Contoh: namabaru@email.com"}
+                        value={updatedValue}
+                        onChange={(e) => setUpdatedValue(e.target.value)}
+                        className="w-full bg-white border border-rose-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-sm text-rose-900 placeholder:text-rose-300 font-semibold"
+                        required
+                      />
+                    </div>
+                  )}
+                  
+                  <button
+                    type="submit"
+                    disabled={
+                      isUpdatingDraft || 
+                      (errorType !== "ktp_mismatch" && errorType !== "generic" && !updatedValue.trim()) ||
+                      (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim())
+                    }
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 px-6 rounded-full text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingDraft ? (
+                      <>
+                        <span className="animate-spin text-sm">sync</span>
+                        <span>Memproses Perubahan...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-base">refresh</span>
+                        <span>
+                          {errorType === "generic"
+                            ? "Mulai Ulang Otomatisasi"
+                            : "Perbarui & Mulai Ulang Otomatisasi"}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* Vertical Stepper Timeline */}
           <div className="bg-surface-card rounded-2xl p-5 border border-border-light shadow-sm">
@@ -391,28 +483,44 @@ export default function AutomationPage() {
               {/* Step 2: User Action Login */}
               <div className="relative">
                 <div className={`absolute -left-[35px] top-0 w-6.5 h-6.5 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface-card z-10 ${
-                  currentStep > 2
+                  failedStep === 2
+                    ? "bg-rose-500 text-white animate-pulse"
+                    : currentStep > 2
                     ? "bg-primary text-on-primary"
                     : currentStep === 2
                     ? "bg-amber-500 text-white animate-pulse"
                     : "bg-surface-container-high text-on-surface-variant"
                 }`}>
-                  {currentStep > 2 ? (
+                  {failedStep === 2 ? (
+                    <span className="material-symbols-outlined text-sm font-bold">close</span>
+                  ) : currentStep > 2 ? (
                     <span className="material-symbols-outlined text-sm font-bold">check</span>
                   ) : currentStep === 2 ? (
                     <span className="material-symbols-outlined text-sm font-bold">priority_high</span>
                   ) : "2"}
                 </div>
                 <div className="text-sm font-bold">
-                  <span className={currentStep > 2 ? "line-through text-outline-variant" : currentStep === 2 ? "text-amber-600 font-extrabold" : "text-outline"}>
+                  <span className={
+                    failedStep === 2
+                      ? "text-rose-600 font-extrabold"
+                      : currentStep > 2
+                      ? "line-through text-outline-variant"
+                      : currentStep === 2
+                      ? "text-amber-600 font-extrabold"
+                      : "text-outline"
+                  }>
                     {akunOss === "belum" ? "Registrasi Akun & Verifikasi OTP" : "Menunggu Login & OTP"}
                   </span>
                 </div>
-                {currentStep === 2 && (
+                {currentStep === 2 && failedStep === null && (
                   <div className="mt-1.5 space-y-3">
                     <p className="text-xs text-on-surface-variant leading-relaxed">
                       {akunOss === "belum"
-                        ? "Sistem sedang menginput NIK & Email Anda di formulir registrasi OSS. Silakan salin kode OTP yang masuk ke email Anda lalu masukkan di bawah."
+                        ? isPromptingPassword 
+                          ? "Kata sandi Anda akan digunakan untuk masuk ke akun OSS baru Anda. Silakan isi kata sandi baru."
+                          : isPromptingOtp
+                          ? "Silakan salin kode OTP yang masuk ke email Anda lalu masukkan di bawah."
+                          : "Sistem sedang menginput NIK & Email Anda di formulir registrasi OSS..."
                         : "Sistem mendeteksi tab login portal OSS terbuka. Silakan isi sandi/OTP, lalu klik tombol konfirmasi di bawah."}
                     </p>
                     
@@ -453,7 +561,7 @@ export default function AutomationPage() {
                             <span className="material-symbols-outlined text-sm">lock</span>
                           </button>
                         </form>
-                      ) : (
+                      ) : isPromptingOtp ? (
                         <form onSubmit={handleOtpSubmit} className="flex items-center gap-2 max-w-xs mt-2">
                           <input
                             type="text"
@@ -472,6 +580,11 @@ export default function AutomationPage() {
                             <span className="material-symbols-outlined text-sm">send</span>
                           </button>
                         </form>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
+                          <span className="material-symbols-outlined text-base animate-spin">sync</span>
+                          <span>Menunggu formulir registrasi dimuat...</span>
+                        </div>
                       )
                     ) : (
                       <button
@@ -530,7 +643,7 @@ export default function AutomationPage() {
                     : "bg-surface-container-high text-on-surface-variant"
                 }`}>
                   {currentStep === 5 ? (
-                    <span className="material-symbols-outlined text-sm font-bold">celebrate</span>
+                    <span className="material-symbols-outlined text-sm font-bold">check</span>
                   ) : "5"}
                 </div>
                 <div className={`text-sm font-bold ${currentStep === 5 ? "text-emerald-600 font-extrabold" : "text-outline"}`}>
@@ -578,7 +691,12 @@ export default function AutomationPage() {
         {/* Bottom Persistent Action Bar */}
         <div className="fixed bottom-0 left-0 right-0 md:absolute md:-bottom-2 bg-surface-card border-t border-border-light px-4 py-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-40 md:rounded-b-2xl">
           <div className="max-w-max-width-form mx-auto flex items-center justify-between gap-4">
-            {currentStep === 2 ? (
+            {failedStep !== null ? (
+              <div className="w-full text-center py-2 text-xs font-semibold text-rose-600 animate-pulse flex items-center justify-center gap-1.5">
+                <span className="material-symbols-outlined text-sm font-bold">warning</span>
+                <span>Otomatisasi Terhenti: Silakan perbarui NIK/Email pada form merah di atas.</span>
+              </div>
+            ) : currentStep === 2 ? (
               <div className="w-full text-center py-2 text-xs font-semibold text-amber-600 animate-pulse flex items-center justify-center gap-1.5">
                 <span className="material-symbols-outlined text-sm font-bold">priority_high</span>
                 <span>Silakan isi konfirmasi / OTP langsung pada Langkah 2 di atas.</span>

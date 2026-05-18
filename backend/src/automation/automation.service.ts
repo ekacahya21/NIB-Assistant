@@ -104,7 +104,7 @@ export class AutomationService {
       });
       page = await context.newPage();
 
-      this.logStep(subject, 1, 'info', 'Membuka alamat resmi portal registrasi: https://ui-login-stg.oss.go.id');
+      this.logStep(subject, 1, 'info', 'Membuka alamat resmi portal registrasi: https://ui-login.oss.go.id');
       
       try {
         await page.goto('https://oss.go.id', { waitUntil: 'networkidle', timeout: 15000 });
@@ -115,7 +115,7 @@ export class AutomationService {
 
       if (isRegister) {
         // 0. Open Register Page
-        await page.goto('https://ui-login-stg.oss.go.id/register', { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto('https://ui-login.oss.go.id/register', { waitUntil: 'networkidle', timeout: 15000 });
         
         // 1. Fill pelaku usaha dropdown
         await page.waitForTimeout(1000);
@@ -129,24 +129,38 @@ export class AutomationService {
         await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).click();
         await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).fill(draft.nik);
 
-        // 3. Fill Email
         await page.waitForTimeout(5000);
+        const isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
+        if (isNikRegistered) {
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: NIK sudah terdaftar di portal OSS. Silakan masuk menggunakan akun terdaftar Anda.');
+          throw new Error('NIK sudah terdaftar di portal OSS.');
+        }
+
+        // 3. Fill Email
         this.logStep(subject, 2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
         await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
         await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).fill(draft.email);
 
-        // 4. Click Verifikasi
+        // Wait for validation/API response
         await page.waitForTimeout(5000);
+        const isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
+        if (isEmailRegistered) {
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Email sudah terdaftar di portal OSS. Silakan gunakan email lain atau masuk dengan email terdaftar.');
+          throw new Error('Email sudah terdaftar di portal OSS.');
+        }
+        
+        // 4. Click Verifikasi
         this.logStep(subject, 2, 'info', 'Mengklik tombol "Verifikasi"...');
         await page.getByRole('button', { name: 'Verifikasi' }).click();
-
+        
         // 5. Prompt OTP
+        await page.waitForTimeout(5000);
         this.logStep(subject, 2, 'warn', 'PENTING: Silakan buka email Anda, salin kode OTP, dan masukkan kode OTP di halaman aplikasi.');
 
         // 6. Asynchronous Wait for OTP submitted from Frontend!
         let otpCode = '';
         const startTime = Date.now();
-        while (Date.now() - startTime < 60000) { // Timeout after 60 seconds
+        while (Date.now() - startTime < 90000) { // Timeout after 60 seconds
           if (this.activeOtps.has(draftId)) {
             otpCode = this.activeOtps.get(draftId)!;
             this.activeOtps.delete(draftId);
@@ -157,17 +171,17 @@ export class AutomationService {
 
         this.logStep(subject, 3, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
         
-        // fill otp
+        // 7. Fill OTP
         await page.locator('.otp-input2').first().fill(otpCode[0] || '');
         await page.locator('div:nth-child(2) > .otp-input2').fill(otpCode[1] || '');
         await page.locator('div:nth-child(3) > .otp-input2').fill(otpCode[2] || '');
         await page.locator('div:nth-child(4) > .otp-input2').fill(otpCode[3] || '');
         await page.locator('div:nth-child(5) > .otp-input2').fill(otpCode[4] || '');
         await page.locator('div:nth-child(6) > .otp-input2').fill(otpCode[5] || '');
+        
+        // 8. Setting up password
         await page.waitForTimeout(5000);
-
-        // 7. Setting up password
-        this.logStep(subject, 2, 'warn', 'Mendeteksi form pembuatan kata sandi. Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
+        this.logStep(subject, 2, 'warn', 'Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
 
         // Search for element with type="password" selector
         try {
@@ -189,12 +203,7 @@ export class AutomationService {
           await page.waitForTimeout(500);
         }
 
-        if (!passwordCode) {
-          passwordCode = 'Pass1234!'; // Strong secure fallback password
-          this.logStep(subject, 2, 'warn', 'Timeout menunggu kata sandi. Menggunakan kata sandi default: Pass1234!');
-        }
-
-        this.logStep(subject, 3, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
+        this.logStep(subject, 2, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
         
         const passwordInputs = page.locator('input[type="password"]');
 
@@ -202,10 +211,10 @@ export class AutomationService {
         await passwordInputs.nth(0).fill(passwordCode);
         await page.waitForTimeout(1000);
         await passwordInputs.nth(1).fill(passwordCode);
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(1000);
         await page.getByRole('button', { name: 'Lanjut' }).click();
         
-        // 8. Fill detail pelaku usaha
+        // 9. Fill detail pelaku usaha
         this.logStep(subject, 3, 'info', 'Lanjut mengisi detail pelaku usaha (nomor ponsel, nama, jenis kelamin, tanggal lahir)...');
         
         // Trim leading 0, 62 or +62 from the phone number
@@ -237,6 +246,15 @@ export class AutomationService {
         }
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
+        
+        // Wait for Dukcapil NIK/Name match checking API
+        this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
+        await page.waitForTimeout(4000);
+        const isKtpMismatch = await page.getByText('Data tidak sesuai KTP').isVisible();
+        if (isKtpMismatch) {
+          this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
+          throw new Error('Data tidak sesuai KTP');
+        }
         
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatUsaha);
@@ -289,7 +307,7 @@ export class AutomationService {
         this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
         await page.getByRole('button', { name: 'Daftar' }).click();
         
-        this.logStep(subject, 5, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
+        this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
 
         // Keep open for a bit
         await page.waitForTimeout(10000);

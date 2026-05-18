@@ -10,6 +10,8 @@ export interface KBLIRecord {
 
 @Injectable()
 export class KbliService {
+  private readonly cache = new Map<string, KBLIRecord[]>();
+
   private readonly kbliList: KBLIRecord[] = [
     {
       code: '56103',
@@ -74,6 +76,11 @@ export class KbliService {
     if (!q) {
       // Default to food codes
       return this.kbliList.filter((k) => k.code.startsWith('56'));
+    }
+
+    if (this.cache.has(q)) {
+      console.log(`[KBLI Agent] [CACHE HIT] Returning cached KBLI results for: "${q}"`);
+      return this.cache.get(q)!;
     }
 
     const vertexProject = process.env.VERTEX_AI_PROJECT;
@@ -166,12 +173,14 @@ Kembalikan HANYA array JSON tersebut saja!`;
             const records = JSON.parse(match[0]) as KBLIRecord[];
             if (Array.isArray(records) && records.length > 0) {
               console.log(`[KBLI Agent] Successfully retrieved ${records.length} records online.`);
+              this.cache.set(q, records);
               return records;
             }
           } else {
             const records = JSON.parse(trimmedText) as KBLIRecord[];
             if (Array.isArray(records) && records.length > 0) {
               console.log(`[KBLI Agent] Successfully retrieved ${records.length} records online from raw text.`);
+              this.cache.set(q, records);
               return records;
             }
           }
