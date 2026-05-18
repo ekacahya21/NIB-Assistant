@@ -20,6 +20,7 @@ export class DraftData {
   caraPenjualan: string;
   kbliCode?: string;
   kbliTitle?: string;
+  jenisKelamin?: string;
   updatedAt?: string;
 }
 

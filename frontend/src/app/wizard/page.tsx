@@ -20,6 +20,7 @@ export default function WizardPage() {
     namaPemilik: "",
     nik: "",
     tanggalLahir: "",
+    jenisKelamin: "Laki-laki",
     // Step 2: Kontak & Lokasi
     nomorHp: "",
     email: "",
@@ -880,6 +881,39 @@ export default function WizardPage() {
                     {errors.namaPemilik}
                   </p>
                 )}
+              </div>
+
+              {/* Input: Jenis Kelamin */}
+              <div className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm flex flex-col gap-2">
+                <label className="text-sm font-bold text-on-surface">
+                  Jenis Kelamin Pemilik (sesuai KTP)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange("jenisKelamin", "Laki-laki")}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-bold transition-all ${
+                      formData.jenisKelamin === "Laki-laki"
+                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        : "border-outline-variant hover:bg-surface-container-low text-on-surface"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg">male</span>
+                    Laki-laki
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange("jenisKelamin", "Perempuan")}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-bold transition-all ${
+                      formData.jenisKelamin === "Perempuan"
+                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        : "border-outline-variant hover:bg-surface-container-low text-on-surface"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg">female</span>
+                    Perempuan
+                  </button>
+                </div>
               </div>
 
               {/* Input: NIK */}

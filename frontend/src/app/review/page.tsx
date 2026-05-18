@@ -10,6 +10,7 @@ export default function ReviewPage() {
     namaPemilik: "",
     nik: "",
     tanggalLahir: "",
+    jenisKelamin: "Laki-laki",
     nomorHp: "",
     email: "",
     alamatKtp: "",
@@ -28,6 +29,10 @@ export default function ReviewPage() {
     jumlahPekerjaLakiLaki: "0",
     jumlahPekerjaPerempuan: "0",
     jumlahPekerja: "0",
+    modalUsaha: "",
+    caraPenjualan: "keduanya",
+    namaUsaha: "",
+    ceritaUsaha: "",
   });
 
   const [downloadingNps, setDownloadingNps] = useState(false);
@@ -159,11 +164,56 @@ export default function ReviewPage() {
     }
   }, []);
 
-  const handleProceedToAutomation = () => {
-    if (isAllConsentGiven) {
-      // Save current status to state/storage for automation screen
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleProceedToAutomation = async () => {
+    if (!isAllConsentGiven || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        namaPemilik: formData.namaPemilik,
+        nik: formData.nik,
+        tanggalLahir: formData.tanggalLahir,
+        jenisKelamin: formData.jenisKelamin,
+        nomorHp: formData.nomorHp,
+        email: formData.email,
+        alamatUsaha: formData.alamatUsahaRaw || formData.alamatUsaha,
+        provinsi: formData.provinsi,
+        kotaKabupaten: formData.kotaKabupaten,
+        kecamatan: formData.kecamatan,
+        kelurahan: formData.kelurahan,
+        kodePos: formData.kodePos,
+        namaUsaha: formData.namaUsaha,
+        ceritaUsaha: formData.ceritaUsaha,
+        modalUsaha: formData.modalUsaha,
+        jumlahPekerja: formData.jumlahPekerja,
+        caraPenjualan: formData.caraPenjualan,
+        kbliCode: selectedKbli.code,
+        kbliTitle: selectedKbli.title,
+      };
+
+      const res = await fetch("http://localhost:3001/drafts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Gagal menyimpan draf di server.");
+      const savedDraft = await res.json();
+      if (savedDraft && savedDraft.id) {
+        sessionStorage.setItem("draft_id", savedDraft.id);
+      }
+
       sessionStorage.setItem("automation_step", "start");
       router.push("/automation");
+    } catch (e) {
+      console.error(e);
+      alert("Gagal melakukan sinkronisasi draf dengan server backend.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -280,6 +330,17 @@ export default function ReviewPage() {
                   <div>
                     <p className="font-bold text-on-surface-variant mb-0.5">Tanggal Lahir</p>
                     <p className="text-on-surface font-medium">{formData.tanggalLahir}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <p className="font-bold text-on-surface-variant mb-0.5">Jenis Kelamin</p>
+                    <p className="text-on-surface font-medium flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">
+                        {formData.jenisKelamin === "Perempuan" ? "female" : "male"}
+                      </span>
+                      {formData.jenisKelamin}
+                    </p>
                   </div>
                 </div>
                 <div className="border-t border-border-light/40 pt-2.5 mt-1">
@@ -530,15 +591,24 @@ export default function ReviewPage() {
           <div className="max-w-max-width-form mx-auto">
             <button
               onClick={handleProceedToAutomation}
-              disabled={!isAllConsentGiven}
+              disabled={!isAllConsentGiven || isSubmitting}
               className={`w-full py-4 px-6 rounded-full font-bold flex items-center justify-center gap-2 min-h-[54px] shadow-md transition-all active:scale-[0.98] ${
-                isAllConsentGiven
+                isAllConsentGiven && !isSubmitting
                   ? "bg-primary text-on-primary hover:bg-primary-container cursor-pointer"
                   : "bg-surface-container-high text-outline opacity-60 cursor-not-allowed"
               }`}
             >
-              Lanjut ke OSS
-              <span className="material-symbols-outlined text-lg">arrow_forward</span>
+              {isSubmitting ? (
+                <>
+                  <span className="w-5 h-5 rounded-full border-2 border-outline border-t-primary animate-spin" />
+                  Menyimpan Draf...
+                </>
+              ) : (
+                <>
+                  Lanjut ke OSS
+                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                </>
+              )}
             </button>
           </div>
         </div>
