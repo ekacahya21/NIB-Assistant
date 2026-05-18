@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Data yang Dibutuhkan - NIB Assistant</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-fixed": "#a0f2e1",
+                      "tertiary-fixed": "#a3f69c",
+                      "outline-variant": "#bec9c5",
+                      "on-primary-fixed": "#00201b",
+                      "surface-container": "#f0eded",
+                      "primary-container": "#00695c",
+                      "status-info": "#0277BD",
+                      "surface-container-highest": "#e5e2e1",
+                      "on-tertiary-fixed": "#002204",
+                      "secondary": "#7e5700",
+                      "border-light": "#E0E0E0",
+                      "on-surface-variant": "#3e4946",
+                      "surface-container-high": "#eae7e7",
+                      "on-secondary-fixed-variant": "#604100",
+                      "on-primary": "#ffffff",
+                      "primary-fixed-dim": "#84d5c5",
+                      "surface-variant": "#e5e2e1",
+                      "on-tertiary-fixed-variant": "#005312",
+                      "on-error": "#ffffff",
+                      "on-primary-container": "#94e5d5",
+                      "secondary-container": "#feb300",
+                      "surface-container-low": "#f6f3f2",
+                      "secondary-fixed": "#ffdeac",
+                      "tertiary": "#005111",
+                      "status-error": "#C62828",
+                      "on-secondary-container": "#6a4800",
+                      "on-background": "#1b1c1c",
+                      "surface-dim": "#dcd9d9",
+                      "on-tertiary": "#ffffff",
+                      "inverse-on-surface": "#f3f0ef",
+                      "bg-off-white": "#FAFAFA",
+                      "on-secondary": "#ffffff",
+                      "on-secondary-fixed": "#281900",
+                      "tertiary-container": "#196b22",
+                      "surface": "#fcf9f8",
+                      "error-container": "#ffdad6",
+                      "inverse-surface": "#303030",
+                      "inverse-primary": "#84d5c5",
+                      "surface-tint": "#046b5e",
+                      "on-surface": "#1b1c1c",
+                      "surface-bright": "#fcf9f8",
+                      "tertiary-fixed-dim": "#88d982",
+                      "primary": "#004f45",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-fixed-dim": "#ffba38",
+                      "background": "#fcf9f8",
+                      "surface-card": "#FFFFFF",
+                      "on-error-container": "#93000a",
+                      "error": "#ba1a1a",
+                      "outline": "#6e7976",
+                      "on-primary-fixed-variant": "#005046",
+                      "on-tertiary-container": "#97e990"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "16px",
+                      "max-width-form": "640px",
+                      "stack-sm": "12px",
+                      "stack-lg": "40px",
+                      "base": "8px",
+                      "stack-md": "24px",
+                      "container-padding-mobile": "16px",
+                      "container-padding-desktop": "40px"
+              },
+              "fontFamily": {
+                      "body-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "caption": [
+                              "Hanken Grotesk"
+                      ],
+                      "label-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-lg-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-lg": [
+                              "Hanken Grotesk"
+                      ]
+              },
+              "fontSize": {
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "caption": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col md:items-center">
+<div class="w-full max-w-max-width-form flex-1 flex flex-col relative pb-24 shadow-none md:shadow-lg bg-background">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-50 flex items-center justify-between px-4 h-14 w-full bg-background dark:bg-background">
+<button aria-label="Kembali" class="text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity Active: scale-95 transition-transform duration-150 p-2 -ml-2 rounded-full">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim absolute left-1/2 transform -translate-x-1/2">
+                NIB Assistant
+            </h1>
+<button aria-label="Bantuan" class="text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity Active: scale-95 transition-transform duration-150 p-2 -mr-2 rounded-full">
+<span class="material-symbols-outlined">help</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="px-gutter pt-stack-md flex-1">
+<div class="mb-stack-lg">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-primary mb-stack-sm">Data yang Dibutuhkan</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                    Siapkan data berikut agar proses pembuatan draft NIB berjalan lancar.
+                </p>
+</div>
+<!-- Bento-style List Container -->
+<div class="flex flex-col gap-stack-md">
+<!-- Card 1: Data Pribadi -->
+<div class="bg-surface-card rounded-xl p-4 shadow-[0_4px_12px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden">
+<div class="absolute top-0 right-0 w-24 h-24 bg-primary-fixed opacity-20 rounded-bl-full -z-10"></div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">1. Data Pribadi</h3>
+</div>
+<ul class="space-y-3 pl-13">
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">KTP (NIK)</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Tanggal Lahir</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Nomor WhatsApp Aktif</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Alamat Email</span>
+</li>
+</ul>
+</div>
+<!-- Card 2: Data Usaha -->
+<div class="bg-surface-card rounded-xl p-4 shadow-[0_4px_12px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden">
+<div class="absolute top-0 right-0 w-24 h-24 bg-tertiary-fixed opacity-20 rounded-bl-full -z-10"></div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">storefront</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">2. Data Usaha</h3>
+</div>
+<ul class="space-y-3 pl-13">
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-tertiary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Nama Usaha</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-tertiary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Alamat Lengkap Usaha</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-tertiary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Cerita singkat tentang apa yang dijual dan bagaimana kegiatannya</span>
+</li>
+</ul>
+</div>
+<!-- Card 3: Skala Usaha -->
+<div class="bg-surface-card rounded-xl p-4 shadow-[0_4px_12px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden">
+<div class="absolute top-0 right-0 w-24 h-24 bg-secondary-fixed opacity-30 rounded-bl-full -z-10"></div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">3. Skala Usaha</h3>
+</div>
+<ul class="space-y-3 pl-13">
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Perkiraan modal usaha</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Jumlah tenaga kerja</span>
+</li>
+</ul>
+</div>
+</div>
+</main>
+<!-- Sticky Bottom CTA Area -->
+<div class="fixed bottom-0 left-0 right-0 md:absolute md:bottom-0 bg-surface-container-lowest px-gutter py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] z-40">
+<div class="max-w-max-width-form mx-auto">
+<button class="w-full bg-primary-container text-on-primary-container font-label-md text-label-md py-4 px-6 rounded-full flex items-center justify-center gap-2 hover:bg-surface-tint hover:text-on-primary transition-colors min-h-[48px] shadow-sm">
+                    Mulai buat draft NIB
+                    <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

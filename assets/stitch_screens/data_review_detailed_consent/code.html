@@ -1,0 +1,298 @@
+<html lang="id"><head></head><body class="bg-bg-off-white text-on-surface antialiased font-body-md text-body-md selection:bg-primary-container selection:text-on-primary-container">```html
+
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Review Data - NIB Assistant</title>
+<!-- Google Fonts: Hanken Grotesk -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#84d5c5",
+                        "on-secondary-container": "#6a4800",
+                        "surface-container-highest": "#e5e2e1",
+                        "border-light": "#E0E0E0",
+                        "on-surface": "#1b1c1c",
+                        "on-primary-container": "#94e5d5",
+                        "on-tertiary-container": "#97e990",
+                        "background": "#fcf9f8",
+                        "inverse-on-surface": "#f3f0ef",
+                        "surface-container-low": "#f6f3f2",
+                        "outline-variant": "#bec9c5",
+                        "secondary-fixed": "#ffdeac",
+                        "error-container": "#ffdad6",
+                        "on-background": "#1b1c1c",
+                        "secondary-fixed-dim": "#ffba38",
+                        "on-primary-fixed-variant": "#005046",
+                        "surface-dim": "#dcd9d9",
+                        "primary": "#004f45",
+                        "inverse-primary": "#84d5c5",
+                        "error": "#ba1a1a",
+                        "bg-off-white": "#FAFAFA",
+                        "on-tertiary-fixed-variant": "#005312",
+                        "status-error": "#C62828",
+                        "secondary": "#7e5700",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#a3f69c",
+                        "surface": "#fcf9f8",
+                        "on-surface-variant": "#3e4946",
+                        "tertiary-fixed-dim": "#88d982",
+                        "surface-container-high": "#eae7e7",
+                        "outline": "#6e7976",
+                        "surface-variant": "#e5e2e1",
+                        "on-error": "#ffffff",
+                        "secondary-container": "#feb300",
+                        "surface-bright": "#fcf9f8",
+                        "surface-card": "#FFFFFF",
+                        "tertiary": "#005111",
+                        "primary-container": "#00695c",
+                        "inverse-surface": "#303030",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#046b5e",
+                        "surface-container": "#f0eded",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed": "#281900",
+                        "on-tertiary-fixed": "#002204",
+                        "tertiary-container": "#196b22",
+                        "on-secondary-fixed-variant": "#604100",
+                        "primary-fixed": "#a0f2e1",
+                        "status-info": "#0277BD",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed": "#00201b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "max-width-form": "640px",
+                        "stack-md": "24px",
+                        "container-padding-desktop": "40px",
+                        "stack-sm": "12px",
+                        "container-padding-mobile": "16px",
+                        "gutter": "16px",
+                        "base": "8px",
+                        "stack-lg": "40px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "label-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "caption": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                        "caption": ["12px", {"lineHeight": "16px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<!-- Fluid-to-Fixed Container -->
+<div class="max-w-form mx-auto bg-background min-h-screen flex flex-col relative shadow-sm">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-50 flex items-center justify-between px-4 h-14 w-full bg-background">
+<button aria-label="Kembali" class="text-primary hover:opacity-80 transition-opacity p-2 -ml-2 rounded-full focus:outline-none focus:ring-2 focus:ring-primary">
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 0;'>arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tight">NIB Assistant</h1>
+<button aria-label="Bantuan" class="text-primary hover:opacity-80 transition-opacity p-2 -mr-2 rounded-full focus:outline-none focus:ring-2 focus:ring-primary">
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 0;'>help</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-container-padding-mobile pt-stack-sm pb-32">
+<!-- Wizard Stepper Indicator -->
+<nav aria-label="Progress pendaftaran" class="mb-stack-lg"><div class="relative flex items-center justify-between w-full"><div class="absolute left-0 top-1/2 -translate-y-1/2 w-full h-[2px] bg-surface-container-highest z-0"></div><div class="absolute left-0 top-1/2 -translate-y-1/2 w-full h-[2px] bg-primary z-0"></div><div class="relative z-10 flex flex-col items-center gap-2 bg-background px-2"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">check</span></div></div><div class="relative z-10 flex flex-col items-center gap-2 bg-background px-2"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">check</span></div></div><div class="relative z-10 flex flex-col items-center gap-2 bg-background px-2"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">check</span></div></div><div class="relative z-10 flex flex-col items-center gap-2 bg-background px-2"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">check</span></div></div><div class="relative z-10 flex flex-col items-center gap-2 bg-background px-2"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md shadow-[0_2px_8px_rgba(0,79,69,0.3)]">5</div></div></div><div class="mt-4 text-center md:hidden"><span class="font-label-md text-label-md text-primary">Langkah 5 dari 5</span></div></nav>
+<!-- Header Section -->
+<header class="mb-stack-lg">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">Cek dulu sebelum diteruskan ke OSS</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Data di bawah ini akan dipakai untuk membantu mengisi formulir di OSS.</p>
+</header>
+<!-- Data Summary Sections -->
+<div class="flex flex-col gap-stack-md mb-stack-lg">
+<!-- Data Pemilik Card -->
+<section class="bg-surface-card rounded-xl p-4 shadow-[0_4px_16px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-surface-variant group-hover:bg-primary transition-colors"></div>
+<div class="flex justify-between items-start mb-4 pl-2">
+<h3 class="font-headline-md text-headline-md text-on-surface">Data Pemilik</h3>
+<button class="text-primary font-label-md text-label-md hover:underline flex items-center gap-1 focus:outline-none">
+<span class="material-symbols-outlined text-[18px]" style='font-variation-settings: "FILL" 0;'>edit</span> Edit
+                        </button>
+</div>
+<div class="space-y-3 pl-2">
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-0.5">Nama Sesuai KTP</p>
+<p class="font-body-md text-body-md text-on-surface">Budi Santoso</p>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-0.5">NIK / Nomor KTP</p>
+<p class="font-body-md text-body-md text-on-surface">3171234567890001</p>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-0.5">Nomor Telepon (WhatsApp)</p>
+<p class="font-body-md text-body-md text-on-surface">0812-3456-7890</p>
+</div>
+</div>
+</section>
+<!-- Lokasi Usaha Card -->
+<section class="bg-surface-card rounded-xl p-4 shadow-[0_4px_16px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-surface-variant group-hover:bg-primary transition-colors"></div>
+<div class="flex justify-between items-start mb-4 pl-2">
+<h3 class="font-headline-md text-headline-md text-on-surface">Lokasi Usaha</h3>
+<button class="text-primary font-label-md text-label-md hover:underline flex items-center gap-1 focus:outline-none">
+<span class="material-symbols-outlined text-[18px]" style='font-variation-settings: "FILL" 0;'>edit</span> Edit
+                        </button>
+</div>
+<div class="pl-2">
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+                            Jl. Jend. Sudirman No. 45, RT 001 / RW 002<br/>
+                            Kelurahan Senayan, Kecamatan Kebayoran Baru<br/>
+                            Kota Administrasi Jakarta Selatan<br/>
+                            DKI Jakarta, 12190
+                        </p>
+</div>
+</section>
+<!-- KBLI Terpilih Card -->
+<section class="bg-surface-card rounded-xl p-4 shadow-[0_4px_16px_rgba(0,0,0,0.05)] border border-border-light relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="pl-2">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-3">KBLI Terpilih</h3>
+<div class="bg-surface-container-low rounded-lg p-3 border border-outline-variant flex gap-3 items-start">
+<div class="bg-primary-container text-on-primary-container rounded-md px-2 py-1 flex items-center justify-center shrink-0">
+<span class="font-label-md text-label-md">56103</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface mb-1">Kedai Makanan</p>
+<p class="font-caption text-caption text-on-surface-variant line-clamp-2">Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap yang menyajikan makanan dan minuman...</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Detailed Consent Information Section -->
+<section class="mb-stack-lg space-y-6">
+<div class="bg-surface-container-low rounded-xl p-5 border border-border-light">
+<h3 class="font-headline-md text-headline-md text-primary mb-4">Informasi Otomatisasi</h3>
+<div class="space-y-5">
+<div>
+<p class="font-label-md text-label-md text-on-surface mb-2">NIB Assistant akan:</p>
+<ul class="space-y-2">
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md">membuka website OSS melalui browser otomatis</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md">mengisi data berdasarkan informasi yang Anda berikan</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md">melakukan navigasi halaman sesuai instruksi</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md">berhenti jika membutuhkan OTP, CAPTCHA, atau persetujuan akhir</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<span class="font-body-md text-body-md">merekam proses untuk keperluan audit dan transparansi</span>
+</li>
+</ul>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface mb-2">NIB Assistant tidak akan:</p>
+<ul class="space-y-2">
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-status-error text-[18px] shrink-0 mt-0.5">cancel</span>
+<span class="font-body-md text-body-md">menyimpan password OSS Anda secara permanen</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-status-error text-[18px] shrink-0 mt-0.5">cancel</span>
+<span class="font-body-md text-body-md">membypass CAPTCHA atau OTP</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-status-error text-[18px] shrink-0 mt-0.5">cancel</span>
+<span class="font-body-md text-body-md">submit permohonan final tanpa persetujuan Anda</span>
+</li>
+<li class="flex items-start gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-status-error text-[18px] shrink-0 mt-0.5">cancel</span>
+<span class="font-body-md text-body-md">mengubah data di luar proses yang Anda setujui</span>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<!-- Consent Checklist Section -->
+<section class="mb-stack-lg border-t border-border-light pt-stack-md">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4">Persetujuan Terakhir</h3>
+<div class="space-y-4">
+<label class="flex items-start gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center shrink-0 mt-0.5">
+<input class="peer appearance-none w-6 h-6 border-2 border-outline rounded bg-surface-card checked:bg-primary checked:border-primary transition-colors focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background" type="checkbox"/>
+<span class="material-symbols-outlined absolute text-on-primary opacity-0 peer-checked:opacity-100 pointer-events-none text-[20px]" style='font-variation-settings: "FILL" 1;'>check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Saya memahami risiko penggunaan otomatisasi.</span>
+</label>
+<label class="flex items-start gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center shrink-0 mt-0.5">
+<input class="peer appearance-none w-6 h-6 border-2 border-outline rounded bg-surface-card checked:bg-primary checked:border-primary transition-colors focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background" type="checkbox"/>
+<span class="material-symbols-outlined absolute text-on-primary opacity-0 peer-checked:opacity-100 pointer-events-none text-[20px]" style='font-variation-settings: "FILL" 1;'>check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Saya mengizinkan NIB Assistant menjalankan proses ini.</span>
+</label>
+<label class="flex items-start gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center shrink-0 mt-0.5">
+<input class="peer appearance-none w-6 h-6 border-2 border-outline rounded bg-surface-card checked:bg-primary checked:border-primary transition-colors focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background" type="checkbox"/>
+<span class="material-symbols-outlined absolute text-on-primary opacity-0 peer-checked:opacity-100 pointer-events-none text-[20px]" style='font-variation-settings: "FILL" 1;'>check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Saya menyetujui proses direkam untuk audit.</span>
+</label>
+<label class="flex items-start gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center shrink-0 mt-0.5">
+<input class="peer appearance-none w-6 h-6 border-2 border-outline rounded bg-surface-card checked:bg-primary checked:border-primary transition-colors focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background" type="checkbox"/>
+<span class="material-symbols-outlined absolute text-on-primary opacity-0 peer-checked:opacity-100 pointer-events-none text-[20px]" style='font-variation-settings: "FILL" 1;'>check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Saya akan memeriksa ulang semua data sebelum submit final.</span>
+</label>
+</div>
+</section>
+</main>
+<!-- Sticky Bottom CTA Area -->
+<div class="fixed bottom-0 left-0 w-full max-w-form mx-auto bg-surface-card px-container-padding-mobile py-4 shadow-[0_-12px_24px_rgba(0,0,0,0.08)] z-40 border-t border-border-light rounded-t-xl sm:left-1/2 sm:-translate-x-1/2">
+<div class="flex flex-col gap-2">
+<button class="w-full min-h-[56px] rounded-full font-label-md text-label-md flex items-center justify-center gap-2 bg-surface-variant text-outline opacity-60 cursor-not-allowed transition-all" disabled="">
+                    Lanjut ke OSS
+                    <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 0;'>arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+```</body></html>
