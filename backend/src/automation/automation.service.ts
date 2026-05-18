@@ -104,10 +104,10 @@ export class AutomationService {
       });
       page = await context.newPage();
 
-      this.logStep(subject, 1, 'info', 'Membuka alamat resmi portal registrasi: https://ui-login.oss.go.id');
+      this.logStep(subject, 1, 'info', `Membuka alamat resmi portal registrasi: ${process.env.OSS_LOGIN_URL}`);
       
       try {
-        await page.goto('https://oss.go.id', { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto(`${process.env.OSS_PORTAL_URL}`, { waitUntil: 'networkidle', timeout: 15000 });
         this.logStep(subject, 2, 'success', 'Portal OSS berhasil dimuat. Jendela browser terbuka.');
       } catch (e) {
         this.logStep(subject, 2, 'warn', 'Koneksi ke oss.go.id lambat. Menjalankan rendering bantuan lokal di browser...');
@@ -115,7 +115,7 @@ export class AutomationService {
 
       if (isRegister) {
         // 0. Open Register Page
-        await page.goto('https://ui-login.oss.go.id/register', { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 15000 });
         
         // 1. Fill pelaku usaha dropdown
         await page.waitForTimeout(1000);
@@ -169,7 +169,7 @@ export class AutomationService {
           await page.waitForTimeout(500);
         }
 
-        this.logStep(subject, 3, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
+        this.logStep(subject, 2, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
         
         // 7. Fill OTP
         await page.locator('.otp-input2').first().fill(otpCode[0] || '');
@@ -297,6 +297,7 @@ export class AutomationService {
         
         this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
 
+        // 10. Mencentang checkbox persetujuan
         this.logStep(subject, 3, 'info', 'Mencentang checkbox persetujuan...');
         try {
           await page.getByRole('checkbox', { name: 'Saya setuju dengan Syarat dan' }).click({ force: true });
@@ -304,6 +305,7 @@ export class AutomationService {
           await page.getByText('Saya setuju dengan Syarat dan Ketentuan').first().click({ force: true });
         }
         
+        // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
         this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
         await page.getByRole('button', { name: 'Daftar' }).click();
         
@@ -410,7 +412,7 @@ export class AutomationService {
       });
       const page = await context.newPage();
 
-      console.log('Opening https://ui-login.oss.go.id/login...');
+      console.log('Opening https://ui-login-stg.oss.go.id/login...');
       await page.goto(`${process.env.OSS_LOGIN_URL}`, {
         waitUntil: 'networkidle',
         timeout: 45000,
