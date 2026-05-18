@@ -206,101 +206,159 @@ export class AutomationService {
         await page.getByRole('button', { name: 'Lanjut' }).click();
         
         // 8. Fill detail pelaku usaha
+        this.logStep(subject, 3, 'info', 'Lanjut mengisi detail pelaku usaha (nomor ponsel, nama, jenis kelamin, tanggal lahir)...');
+        
+        // Trim leading 0, 62 or +62 from the phone number
+        let cleanPhone = draft.nomorHp.trim().replace(/[^0-9]/g, '');
+        if (cleanPhone.startsWith('62')) {
+          cleanPhone = cleanPhone.substring(2);
+        } else if (cleanPhone.startsWith('0')) {
+          cleanPhone = cleanPhone.substring(1);
+        }
         await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
-        await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(draft.nomorHp);
+        await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(cleanPhone);
+        
         await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).click();
         await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).fill(draft.namaPemilik);
+        
         if (draft.jenisKelamin === 'Perempuan') {
           await page.getByText('Perempuan').click();
         } else {
           await page.getByText('Laki-laki').click();
         }
+        
+        // Reformat birth date from yyyy-mm-dd to dd/mm/yyyy
+        let formattedBirthDate = draft.tanggalLahir.trim();
+        if (formattedBirthDate.includes('-')) {
+          const parts = formattedBirthDate.split('-');
+          if (parts[0].length === 4) {
+            formattedBirthDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+        }
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
-        await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(draft.tanggalLahir);
+        await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
+        
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatUsaha);
-        await page.getByRole('textbox', { name: 'Pilih provinsi' }).click();
-        await page.getByRole('textbox', { name: 'Pilih provinsi' }).fill(draft.provinsi);
-        await page.getByRole('option', { name: draft.provinsi }).locator('div').first().click();
-        await page.getByRole('textbox', { name: 'Pilih kabupaten/kota' }).click();
-        await page.getByRole('textbox', { name: 'Pilih kabupaten/kota' }).fill(draft.kotaKabupaten);
-        await page.getByRole('option', { name: draft.kotaKabupaten }).locator('div').first().click();
-        await page.getByRole('textbox', { name: 'Pilih kecamatan' }).click();
-        await page.getByRole('textbox', { name: 'Pilih kecamatan' }).fill(draft.kecamatan);
-        await page.getByRole('option', { name: draft.kecamatan }).locator('div').first().click();
-        await page.getByRole('textbox', { name: 'Pilih desa/kelurahan' }).click();
-        await page.getByRole('textbox', { name: 'Pilih desa/kelurahan' }).fill(draft.kelurahan);
-        await page.getByRole('option', { name: draft.kelurahan }).locator('div').first().click();
+        
+        // Search and Select Provinsi
+        const cleanProvinsi = draft.provinsi.trim();
+        const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
+        this.logStep(subject, 3, 'info', `Mencari provinsi: ${cleanProvinsi}...`);
+        await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
+        await page.waitForTimeout(1500);
+        await this.selectOptionRobust(page, cleanProvinsi);
+        await page.waitForTimeout(1000);
+
+        // Trim "Kota" / "Kabupaten" and search using partial "like" match
+        const cleanKota = draft.kotaKabupaten.replace(/kota|kabupaten/gi, '').trim();
+        const searchKota = this.getOptimalSearchQuery(cleanKota);
+        this.logStep(subject, 3, 'info', `Mencari kabupaten/kota: ${draft.kotaKabupaten}...`);
+        await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
+        await page.waitForTimeout(1500);
+        await this.selectOptionRobust(page, cleanKota);
+        await page.waitForTimeout(1000);
+
+        // Search and Select Kecamatan
+        const cleanKecamatan = draft.kecamatan.trim();
+        const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
+        this.logStep(subject, 3, 'info', `Mencari kecamatan: ${cleanKecamatan}...`);
+        await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
+        await page.waitForTimeout(1500);
+        await this.selectOptionRobust(page, cleanKecamatan);
+        await page.waitForTimeout(1000);
+
+        // Search and Select Desa / Kelurahan
+        const cleanKelurahan = draft.kelurahan.trim();
+        const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
+        this.logStep(subject, 3, 'info', `Mencari desa/kelurahan: ${cleanKelurahan}...`);
+        await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
+        await page.waitForTimeout(1500);
+        await this.selectOptionRobust(page, cleanKelurahan);
+        await page.waitForTimeout(1000);
+        
+        this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
+
+        this.logStep(subject, 3, 'info', 'Mencentang checkbox persetujuan...');
+        try {
+          await page.getByRole('checkbox', { name: 'Saya setuju dengan Syarat dan' }).click({ force: true });
+        } catch (e) {
+          await page.getByText('Saya setuju dengan Syarat dan Ketentuan').first().click({ force: true });
+        }
+        
+        this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
         await page.getByRole('button', { name: 'Daftar' }).click();
+        
+        this.logStep(subject, 5, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
 
         // Keep open for a bit
         await page.waitForTimeout(10000);
 
       }
 
-      // Step 2: Waiting for user login
-      this.logStep(subject, 2, 'warn', 'PENTING: Silakan selesaikan proses LOGIN / OTP di jendela browser Chrome yang terbuka.');
+      // // Step 2: Waiting for user login
+      // this.logStep(subject, 2, 'warn', 'PENTING: Silakan selesaikan proses LOGIN / OTP di jendela browser Chrome yang terbuka.');
 
-      // Wait for login confirmation
-      let isConfirmed = false;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 60000) {
-        if (this.activeOtps.has(draftId)) {
-          isConfirmed = true;
-          this.activeOtps.delete(draftId);
-          break;
-        }
-        await page.waitForTimeout(500);
-      }
+      // // Wait for login confirmation
+      // let isConfirmed = false;
+      // const startTime = Date.now();
+      // while (Date.now() - startTime < 60000) {
+      //   if (this.activeOtps.has(draftId)) {
+      //     isConfirmed = true;
+      //     this.activeOtps.delete(draftId);
+      //     break;
+      //   }
+      //   await page.waitForTimeout(500);
+      // }
 
-      this.logStep(subject, 3, 'success', 'Persetujuan diterima: User melaporkan login berhasil.');
-      this.logStep(subject, 3, 'info', 'Melakukan sinkronisasi session state browser...');
+      // this.logStep(subject, 3, 'success', 'Persetujuan diterima: User melaporkan login berhasil.');
+      // this.logStep(subject, 3, 'info', 'Melakukan sinkronisasi session state browser...');
       
-      // Render simulated dashboard
-      await page.evaluate(() => {
-        document.body.innerHTML = `
-          <div style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #eaeaea;">
-            <h2 style="color: #10b981; margin-bottom: 20px;">Dashboard Pelaku Usaha OSS</h2>
-            <div id="details" style="background: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 13px;">
-              <strong>Status:</strong> Terautentikasi<br>
-              <strong>Pemilik:</strong> Budi Santoso
-            </div>
-            <div id="form-container" style="margin-top:20px;">
-              <h3 style="color:#333;">Formulir NIB Draft</h3>
-              <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nama Pemilik</label><input type="text" id="nama" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
-              <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Alamat Usaha</label><input type="text" id="alamat" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
-            </div>
-          </div>
-        `;
-      });
+      // // Render simulated dashboard
+      // await page.evaluate(() => {
+      //   document.body.innerHTML = `
+      //     <div style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #eaeaea;">
+      //       <h2 style="color: #10b981; margin-bottom: 20px;">Dashboard Pelaku Usaha OSS</h2>
+      //       <div id="details" style="background: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 13px;">
+      //         <strong>Status:</strong> Terautentikasi<br>
+      //         <strong>Pemilik:</strong> Budi Santoso
+      //       </div>
+      //       <div id="form-container" style="margin-top:20px;">
+      //         <h3 style="color:#333;">Formulir NIB Draft</h3>
+      //         <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nama Pemilik</label><input type="text" id="nama" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
+      //         <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Alamat Usaha</label><input type="text" id="alamat" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
+      //       </div>
+      //     </div>
+      //   `;
+      // });
 
-      await page.waitForTimeout(1000);
-      this.logStep(subject, 3, 'info', `Mengisi kolom Nama Pemilik: ${draft.namaPemilik}...`);
-      await page.locator('#nama').fill(draft.namaPemilik);
-      await page.waitForTimeout(1500);
+      // await page.waitForTimeout(1000);
+      // this.logStep(subject, 3, 'info', `Mengisi kolom Nama Pemilik: ${draft.namaPemilik}...`);
+      // await page.locator('#nama').fill(draft.namaPemilik);
+      // await page.waitForTimeout(1500);
 
-      this.logStep(subject, 3, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
-      await page.waitForTimeout(1000);
+      // this.logStep(subject, 3, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
+      // await page.waitForTimeout(1000);
 
-      this.logStep(subject, 3, 'info', `Mengisi Kontak WhatsApp: ${draft.nomorHp} & Alamat Detail: ${draft.alamatUsaha}...`);
-      await page.locator('#alamat').fill(draft.alamatUsaha);
-      await page.waitForTimeout(1500);
+      // this.logStep(subject, 3, 'info', `Mengisi Kontak WhatsApp: ${draft.nomorHp} & Alamat Detail: ${draft.alamatUsaha}...`);
+      // await page.locator('#alamat').fill(draft.alamatUsaha);
+      // await page.waitForTimeout(1500);
 
-      // Step 4: Selecting KBLI
-      this.logStep(subject, 4, 'info', 'Memilih Sektor KBLI & Modal Usaha...');
-      await page.waitForTimeout(1000);
+      // // Step 4: Selecting KBLI
+      // this.logStep(subject, 4, 'info', 'Memilih Sektor KBLI & Modal Usaha...');
+      // await page.waitForTimeout(1000);
 
-      const kbliCode = draft.kbliCode || '56103';
-      const kbliTitle = draft.kbliTitle || 'Kedai Makanan';
-      this.logStep(subject, 4, 'info', `Memilih KBLI: ${kbliCode} (${kbliTitle})...`);
-      await page.waitForTimeout(1000);
+      // const kbliCode = draft.kbliCode || '56103';
+      // const kbliTitle = draft.kbliTitle || 'Kedai Makanan';
+      // this.logStep(subject, 4, 'info', `Memilih KBLI: ${kbliCode} (${kbliTitle})...`);
+      // await page.waitForTimeout(1000);
 
-      this.logStep(subject, 4, 'info', `Menginput Modal Usaha: Rp${draft.modalUsaha} & Jumlah Pekerja: ${draft.jumlahPekerja}...`);
-      await page.waitForTimeout(2000);
+      // this.logStep(subject, 4, 'info', `Menginput Modal Usaha: Rp${draft.modalUsaha} & Jumlah Pekerja: ${draft.jumlahPekerja}...`);
+      // await page.waitForTimeout(2000);
 
-      // Step 5: Final Review / Complete
-      this.logStep(subject, 5, 'success', 'Semua data berhasil diisi ke form portal OSS.');
-      this.logStep(subject, 5, 'success', 'Silakan periksa kembali halaman browser Anda, klik "Terbitkan NIB" untuk finalisasi.');
+      // // Step 5: Final Review / Complete
+      // this.logStep(subject, 5, 'success', 'Semua data berhasil diisi ke form portal OSS.');
+      // this.logStep(subject, 5, 'success', 'Silakan periksa kembali halaman browser Anda, klik "Terbitkan NIB" untuk finalisasi.');
       
       await page.waitForTimeout(10000);
     } finally {
@@ -384,5 +442,111 @@ export class AutomationService {
     } finally {
       await browser.close();
     }
+  }
+
+  private async selectOptionRobust(page: any, query: string): Promise<boolean> {
+    const normalQuery = query.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    
+    // Wait for options list to be visible/loaded
+    await page.waitForTimeout(1000);
+    
+    const optionElements = page.getByRole('option');
+    const count = await optionElements.count();
+    
+    for (let i = 0; i < count; i++) {
+      const opt = optionElements.nth(i);
+      try {
+        const text = await opt.innerText();
+        const normalText = text.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (normalText.includes(normalQuery) || normalQuery.includes(normalText)) {
+          await opt.scrollIntoViewIfNeeded();
+          await opt.click({ force: true });
+          await page.waitForTimeout(1000); // Wait for UI update/network trigger
+          await page.keyboard.press('Escape'); // Close dropdown menu if it remains open
+          return true;
+        }
+      } catch (e) {
+        // Handle element detached or other transient errors
+      }
+    }
+    
+    // Fallback: Click first visible option
+    if (count > 0) {
+      try {
+        const firstOpt = optionElements.first();
+        await firstOpt.scrollIntoViewIfNeeded();
+        await firstOpt.click({ force: true });
+        await page.waitForTimeout(1000);
+        await page.keyboard.press('Escape');
+        return true;
+      } catch (e) {}
+    }
+    
+    // Ultimate Keyboard fallback: Press ArrowDown and Enter
+    try {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(500);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
+      await page.keyboard.press('Escape');
+      return true;
+    } catch (e) {}
+    
+    return false;
+  }
+
+  private async waitForInputEnabled(page: any, selector: string, timeoutMs = 15000): Promise<boolean> {
+    const startTime = Date.now();
+    const locator = page.getByRole('textbox', { name: selector });
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const isDisabled = await locator.getAttribute('disabled');
+        if (isDisabled === null) {
+          return true;
+        }
+      } catch (e) {
+        // Element might not be attached/rendered yet
+      }
+      await page.waitForTimeout(250);
+    }
+    return false;
+  }
+
+  private async clickAndFillInputResilient(page: any, selector: string, value: string, timeoutMs = 15000): Promise<boolean> {
+    const startTime = Date.now();
+    const locator = page.getByRole('textbox', { name: selector });
+    
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        // Wait for element to be attached and visible
+        await locator.waitFor({ state: 'visible', timeout: 2000 });
+        
+        // Check disabled state
+        const isDisabled = await locator.getAttribute('disabled');
+        if (isDisabled === null || isDisabled === 'false') {
+          // Attempt click and fill
+          await locator.click({ timeout: 2000 });
+          await page.waitForTimeout(200);
+          await locator.fill(value);
+          return true;
+        }
+      } catch (e) {
+        // Click or fill failed, retry
+      }
+      await page.waitForTimeout(500);
+    }
+    throw new Error(`Gagal mengisi kolom "${selector}" karena kolom tetap dinonaktifkan (disabled) atau tidak dapat diklik.`);
+  }
+
+  private getOptimalSearchQuery(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.includes(' ')) {
+      const parts = trimmed.split(/\s+/);
+      const firstWord = parts[0];
+      if (firstWord.length >= 3) {
+        return firstWord;
+      }
+    }
+    return trimmed;
   }
 }

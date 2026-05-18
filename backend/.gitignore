@@ -33,3 +33,7 @@ yarn-error.log*
 # ENV
 .env*
 !.env.example
+
+
+# Recordings
+recordings/*
