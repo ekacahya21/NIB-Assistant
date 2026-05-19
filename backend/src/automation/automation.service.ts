@@ -129,21 +129,41 @@ export class AutomationService {
         await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).click();
         await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).fill(draft.nik);
 
-        await page.waitForTimeout(5000);
-        const isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
+        // Wait dynamically for NIK and Email verification status in parallel (up to 15s max, checking every 500ms)
+        this.logStep(subject, 2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
+        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
+        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).fill(draft.email);
+
+        let isNikRegistered = false;
+        let isEmailRegistered = false;
+        const maxPollMs = 15000;
+        const pollIntervalMs = 500;
+        const startPollTime = Date.now();
+
+        while (Date.now() - startPollTime < maxPollMs) {
+          isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
+          isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
+          
+          if (isNikRegistered || isEmailRegistered) {
+            break;
+          }
+
+          // If BOTH fields are valid, the "Verifikasi" button becomes enabled.
+          const isVerifikasiEnabled = await page.getByRole('button', { name: 'Verifikasi' }).isEnabled().catch(() => false);
+          // Wait at least 1.5 seconds to let portal validation APIs query and not short-circuit instantly
+          if (isVerifikasiEnabled && (Date.now() - startPollTime > 1500)) {
+            this.logStep(subject, 2, 'success', 'Validasi NIK dan Email sukses.');
+            break;
+          }
+
+          await page.waitForTimeout(pollIntervalMs);
+        }
+
         if (isNikRegistered) {
           this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: NIK sudah terdaftar di portal OSS. Silakan masuk menggunakan akun terdaftar Anda.');
           throw new Error('NIK sudah terdaftar di portal OSS.');
         }
 
-        // 3. Fill Email
-        this.logStep(subject, 2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
-        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
-        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).fill(draft.email);
-
-        // Wait for validation/API response
-        await page.waitForTimeout(5000);
-        const isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
         if (isEmailRegistered) {
           this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Email sudah terdaftar di portal OSS. Silakan gunakan email lain atau masuk dengan email terdaftar.');
           throw new Error('Email sudah terdaftar di portal OSS.');
@@ -160,13 +180,18 @@ export class AutomationService {
         // 6. Asynchronous Wait for OTP submitted from Frontend!
         let otpCode = '';
         const startTime = Date.now();
-        while (Date.now() - startTime < 90000) { // Timeout after 60 seconds
+        while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
           if (this.activeOtps.has(draftId)) {
             otpCode = this.activeOtps.get(draftId)!;
             this.activeOtps.delete(draftId);
             break;
           }
           await page.waitForTimeout(500);
+        }
+
+        if (!otpCode || otpCode.length !== 6) {
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian OTP telah habis (90 detik). Silakan coba lagi.');
+          throw new Error('Batas waktu pengisian OTP telah habis.');
         }
 
         this.logStep(subject, 2, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
@@ -179,22 +204,30 @@ export class AutomationService {
         await page.locator('div:nth-child(5) > .otp-input2').fill(otpCode[4] || '');
         await page.locator('div:nth-child(6) > .otp-input2').fill(otpCode[5] || '');
         
+        // Check if there is a visible error message on the page related to OTP failure
+        const isOtpErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).isVisible().catch(() => false);
+        if (isOtpErrorVisible) {
+          const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).textContent().catch(() => 'Kode OTP tidak valid.');
+          this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Verifikasi OTP gagal di portal OSS: ${errorMsg}`);
+          throw new Error(`Verifikasi OTP gagal: ${errorMsg}`);
+        }
+
         // 8. Setting up password
         await page.waitForTimeout(5000);
-        this.logStep(subject, 2, 'warn', 'Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
+        this.logStep(subject, 2, 'warn', 'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
 
         // Search for element with type="password" selector
         try {
           await page.waitForSelector('input[type="password"]', { timeout: 30000 });
         } catch (e) {
-          this.logStep(subject, 2, 'error', 'Form pembuatan kata sandi tidak ditemukan atau timeout.');
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Form pembuatan kata sandi tidak ditemukan atau verifikasi OTP gagal.');
           throw new Error('Form pembuatan kata sandi tidak ditemukan.');
         }
 
         // Wait for password submitted from Frontend!
         let passwordCode = '';
         const startTimePass = Date.now();
-        while (Date.now() - startTimePass < 90000) { // Timeout after 90 seconds
+        while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
           if (this.activePasswords.has(draftId)) {
             passwordCode = this.activePasswords.get(draftId)!;
             this.activePasswords.delete(draftId);
@@ -203,16 +236,71 @@ export class AutomationService {
           await page.waitForTimeout(500);
         }
 
-        this.logStep(subject, 2, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
-        
-        const passwordInputs = page.locator('input[type="password"]');
+        if (!passwordCode) {
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian kata sandi telah habis (90 detik).');
+          throw new Error('Batas waktu pengisian kata sandi telah habis.');
+        }
 
         // Fill both password inputs (Kata Sandi & Konfirmasi Kata Sandi)
+        this.logStep(subject, 2, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
+        const passwordInputs = page.locator('input[type="password"]');
         await passwordInputs.nth(0).fill(passwordCode);
         await page.waitForTimeout(1000);
         await passwordInputs.nth(1).fill(passwordCode);
         await page.waitForTimeout(1000);
         await page.getByRole('button', { name: 'Lanjut' }).click();
+
+        // Wait to verify if the password page submitted successfully
+        await page.waitForTimeout(3000);
+        const isPasswordStillVisible = await passwordInputs.first().isVisible().catch(() => false);
+        if (isPasswordStillVisible) {
+          // Check for any visible error text related to password mismatch or validation
+          const isMismatchVisible = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).isVisible().catch(() => false);
+          if (isMismatchVisible) {
+            const mismatchText = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).textContent().catch(() => 'Konfirmasi kata sandi tidak cocok.');
+            this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Konfirmasi kata sandi tidak cocok atau ditolak: ${mismatchText.trim()}`);
+            throw new Error(`Konfirmasi kata sandi tidak cocok: ${mismatchText.trim()}`);
+          }
+
+          // Check individual password requirements checklist for failures (like red cross icons)
+          const requirements = [
+            { key: 'Minimal 8 karakter', text: 'Minimal 8 karakter' },
+            { key: 'Menggunakan huruf', text: 'Menggunakan huruf' },
+            { key: 'Menggunakan angka', text: 'Menggunakan angka' },
+            { key: 'Menggunakan karakter spesial', text: 'Menggunakan karakter spesial (!@#$%^&*_-)' }
+          ];
+          const failedReqs: string[] = [];
+
+          for (const req of requirements) {
+            const textLocator = page.locator(`text="${req.key}"`).first();
+            if (await textLocator.isVisible().catch(() => false)) {
+              const parent = textLocator.locator('xpath=..');
+              let html = await parent.innerHTML().catch(() => '');
+              
+              // Also grab grandparent to capture icons nested outside immediate tag
+              const grandparent = parent.locator('xpath=..');
+              const gHtml = await grandparent.innerHTML().catch(() => '');
+              html += ' ' + gHtml;
+
+              // Check if red cross icon or error status is present
+              const hasRed = html.includes('red') || html.includes('danger') || html.includes('error') || html.includes('cross') || html.includes('close');
+              const hasGreen = html.includes('green') || html.includes('success') || html.includes('check');
+              
+              if (hasRed || !hasGreen) {
+                failedReqs.push(req.text);
+              }
+            }
+          }
+
+          if (failedReqs.length > 0) {
+            const listStr = failedReqs.map(r => `❌ ${r}`).join(', ');
+            this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Kekuatan kata sandi belum terpenuhi. Kriteria yang gagal: ${listStr}`);
+            throw new Error(`Kekuatan kata sandi belum terpenuhi: ${listStr}`);
+          }
+
+          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Pembuatan kata sandi ditolak oleh portal OSS (kemungkinan konfirmasi kata sandi tidak cocok).');
+          throw new Error('Pembuatan kata sandi ditolak atau konfirmasi tidak cocok.');
+        }
         
         // 9. Fill detail pelaku usaha
         this.logStep(subject, 3, 'info', 'Lanjut mengisi detail pelaku usaha (nomor ponsel, nama, jenis kelamin, tanggal lahir)...');
@@ -247,15 +335,7 @@ export class AutomationService {
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
         
-        // Wait for Dukcapil NIK/Name match checking API
-        this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
-        await page.waitForTimeout(4000);
-        const isKtpMismatch = await page.getByText('Data tidak sesuai KTP').isVisible();
-        if (isKtpMismatch) {
-          this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
-          throw new Error('Data tidak sesuai KTP');
-        }
-        
+        // Fill alamat
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatUsaha);
         
@@ -308,6 +388,15 @@ export class AutomationService {
         // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
         this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
         await page.getByRole('button', { name: 'Daftar' }).click();
+
+        // Wait for Dukcapil NIK/Name match checking API
+        this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
+        await page.waitForTimeout(4000);
+        const isKtpMismatch = await page.getByText('Data tidak sesuai KTP').isVisible();
+        if (isKtpMismatch) {
+          this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
+          throw new Error('Data tidak sesuai KTP');
+        }
         
         this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
 

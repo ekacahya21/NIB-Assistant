@@ -5,12 +5,12 @@ import "./globals.css";
 const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-hanken-grotesk",
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "NIB Assistant - Buat NIB Mudah & Cepat untuk UMKM",
-  description: "Asisten cerdas membantu pelaku usaha mikro dan kecil (UMKM) membuat Nomor Induk Berusaha (NIB) dengan mudah.",
+  title: "NIB Assistant — Buat NIB Mudah & Cepat untuk UMKM",
+  description: "Asisten cerdas untuk pelaku UMKM: buat Nomor Induk Berusaha (NIB) dengan panduan langkah demi langkah, rekomendasi KBLI otomatis, dan otomatisasi pengisian OSS.",
 };
 
 export default function RootLayout({
@@ -22,6 +22,7 @@ export default function RootLayout({
     <html
       lang="id"
       className={`${hankenGrotesk.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <link

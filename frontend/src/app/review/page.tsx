@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export default function ReviewPage() {
   const router = useRouter();
   
@@ -41,7 +43,7 @@ export default function ReviewPage() {
   const downloadNpsPdf = async () => {
     setDownloadingNps(true);
     try {
-      const res = await fetch("http://localhost:3001/documents/generate-nps", {
+      const res = await fetch(`${API_URL}/documents/generate-nps`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -77,7 +79,7 @@ export default function ReviewPage() {
     }
     setDownloadingPhoto(true);
     try {
-      const res = await fetch("http://localhost:3001/documents/convert-photo", {
+      const res = await fetch(`${API_URL}/documents/convert-photo`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -193,7 +195,7 @@ export default function ReviewPage() {
         kbliTitle: selectedKbli.title,
       };
 
-      const res = await fetch("http://localhost:3001/drafts", {
+      const res = await fetch(`${API_URL}/drafts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -217,403 +219,305 @@ export default function ReviewPage() {
     }
   };
 
+  const stepLabelsReview = ["Pemilik", "Usaha", "Lokasi", "KBLI", "Review"];
+
   return (
     <div className="flex-1 flex flex-col md:items-center justify-start bg-background min-h-screen">
-      <div className="w-full max-w-max-width-form flex-grow flex flex-col relative bg-background pb-32 md:shadow-lg md:my-6 md:rounded-2xl md:border md:border-border-light overflow-hidden">
+      <div className="w-full max-w-max-width-form flex-grow flex flex-col relative bg-surface-card md:my-8 md:rounded-lg overflow-hidden desktop-container">
         
         {/* Top AppBar */}
-        <header className="sticky top-0 z-50 flex items-center justify-between px-4 h-16 w-full bg-background border-b border-border-light">
-          <button
-            onClick={() => router.push("/kbli")}
-            className="text-primary hover:bg-primary-fixed-dim/20 transition-all p-2 rounded-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Kembali"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-          </button>
-          
-          <h1 className="font-sans text-lg font-bold text-primary absolute left-1/2 transform -translate-x-1/2">
-            NIB Assistant
-          </h1>
-
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="text-primary hover:bg-primary-fixed-dim/20 transition-all p-2 rounded-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary ml-auto z-10"
-            aria-label="Bantuan"
-          >
+        <header className="sticky top-0 z-50 flex items-center justify-between px-4 h-14 w-full bg-background border-b border-border-light shadow-sm">
+          <div className="flex items-center gap-2">
+            <button onClick={() => router.push("/kbli")} className="p-2 hover:opacity-80 transition-opacity text-on-surface-variant" aria-label="Kembali">
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <span className="text-xl font-bold text-primary">NIB Assistant</span>
+          </div>
+          <button onClick={() => router.push("/")} className="p-2 hover:opacity-80 transition-opacity text-on-surface-variant" aria-label="Bantuan">
             <span className="material-symbols-outlined">help</span>
           </button>
         </header>
 
-        {/* Stepper Design matching mockup (5 steps horizontal squircles) */}
-        <div className="px-4 pt-6 flex flex-col items-center">
-          <div className="flex items-center justify-between w-full max-w-[280px] md:max-w-[320px] mb-3">
-            {/* Step 1 */}
-            <div className="w-9 h-9 flex items-center justify-center font-bold text-sm transition-all duration-300 rounded-[12px] bg-surface-container-high text-on-surface-variant/70">
-              1
-            </div>
-            <div className="flex-grow h-[2px] bg-surface-container-highest mx-1" />
-
-            {/* Step 2 */}
-            <div className="w-9 h-9 flex items-center justify-center font-bold text-sm transition-all duration-300 rounded-[12px] bg-surface-container-high text-on-surface-variant/70">
-              2
-            </div>
-            <div className="flex-grow h-[2px] bg-surface-container-highest mx-1" />
-
-            {/* Step 3 */}
-            <div className="w-9 h-9 flex items-center justify-center font-bold text-sm transition-all duration-300 rounded-[12px] bg-surface-container-high text-on-surface-variant/70">
-              3
-            </div>
-            <div className="flex-grow h-[2px] bg-surface-container-highest mx-1" />
-
-            {/* Step 4 */}
-            <div className="w-9 h-9 flex items-center justify-center font-bold text-sm transition-all duration-300 rounded-[12px] bg-surface-container-high text-on-surface-variant/70">
-              4
-            </div>
-            <div className="flex-grow h-[2px] bg-surface-container-highest mx-1" />
-
-            {/* Step 5 */}
-            <div className="w-9 h-9 flex items-center justify-center font-bold text-sm transition-all duration-300 rounded-[12px] bg-primary text-on-primary shadow-md shadow-primary/20 scale-105">
-              5
-            </div>
-          </div>
-          
-          {/* Label Under Stepper */}
-          <div className="text-center">
-            <span className="text-[10px] tracking-wider uppercase font-bold text-outline">
-              Langkah 5 dari 5:{" "}
-              <span className="text-primary font-extrabold normal-case">
-                Peninjauan Akhir
-              </span>
-            </span>
-          </div>
-        </div>
-
         {/* Main Content */}
-        <main className="px-4 py-4 flex-grow space-y-6">
-          
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-primary mb-1.5 leading-tight">
-              Cek dulu sebelum diteruskan ke OSS
-            </h2>
-            <p className="text-on-surface-variant text-sm leading-relaxed">
-              Data di bawah ini akan dipakai untuk membantu mengisi formulir pendaftaran di portal OSS secara otomatis.
-            </p>
-          </div>
-
-          {/* Cards Summaries */}
-          <div className="space-y-4">
+        <main className="flex-grow flex justify-center w-full px-4 md:px-10 py-8 md:py-10">
+          <div className="w-full max-w-[800px] flex flex-col gap-10">
             
-            {/* Card 1: Data Pemilik & Identitas KTP */}
-            <section className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-border-light group-hover:bg-primary transition-colors duration-300"></div>
-              <div className="flex justify-between items-center mb-3 pl-2">
-                <h3 className="font-bold text-base text-on-surface">Identitas Diri & KTP</h3>
-                <button
-                  onClick={() => router.push("/wizard")}
-                  className="text-primary hover:underline font-bold text-xs flex items-center gap-1 focus:outline-none"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                  Edit
-                </button>
-              </div>
-              <div className="space-y-2.5 pl-2 text-xs md:text-sm">
-                <div>
-                  <p className="font-bold text-on-surface-variant mb-0.5">Nama Lengkap (Sesuai KTP)</p>
-                  <p className="text-on-surface font-medium">{formData.namaPemilik}</p>
+            {/* Horizontal Stepper */}
+            <div className="w-full flex items-center justify-between px-4">
+              <div className="flex flex-col items-center gap-2 relative z-10 w-full">
+                <div className="flex items-center w-full">
+                  {stepLabelsReview.map((label, idx) => (
+                    <div key={label} className="flex items-center flex-1 last:flex-none">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                        idx < 4
+                          ? "bg-primary text-on-primary"
+                          : "bg-primary ring-4 ring-primary-container text-on-primary"
+                      }`}>
+                        {idx < 4 ? (
+                          <span className="material-symbols-outlined text-sm">check</span>
+                        ) : "5"}
+                      </div>
+                      {idx < 4 && <div className="flex-grow h-1 bg-primary mx-2" />}
+                    </div>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">NIK (KTP)</p>
-                    <p className="text-on-surface font-mono font-medium">{formData.nik}</p>
-                  </div>
-                  <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Tanggal Lahir</p>
-                    <p className="text-on-surface font-medium">{formData.tanggalLahir}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-1">
-                  <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Jenis Kelamin</p>
-                    <p className="text-on-surface font-medium flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">
-                        {formData.jenisKelamin === "Perempuan" ? "female" : "male"}
-                      </span>
-                      {formData.jenisKelamin}
-                    </p>
-                  </div>
-                </div>
-                <div className="border-t border-border-light/40 pt-2.5 mt-1">
-                  <p className="font-bold text-on-surface-variant mb-0.5">Alamat Tempat Tinggal (Sesuai KTP)</p>
-                  <p className="text-on-surface font-medium leading-relaxed bg-surface-container-low p-2.5 rounded-xl border border-border-light/50">
-                    {formData.alamatKtp || "-"}
-                  </p>
+                <div className="flex justify-between w-full text-xs text-outline mt-2 px-1">
+                  {stepLabelsReview.map((label, idx) => (
+                    <span key={label} className={idx === 4 ? "font-bold text-primary" : ""}>{label}</span>
+                  ))}
                 </div>
               </div>
-            </section>
+            </div>
 
-            {/* Card 2: Kontak Pemilik */}
-            <section className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-border-light group-hover:bg-primary transition-colors duration-300"></div>
-              <div className="flex justify-between items-center mb-3 pl-2">
-                <h3 className="font-bold text-base text-on-surface">Kontak & Komunikasi</h3>
-                <button
-                  onClick={() => router.push("/wizard")}
-                  className="text-primary hover:underline font-bold text-xs flex items-center gap-1 focus:outline-none"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                  Edit
-                </button>
-              </div>
-              <div className="space-y-2.5 pl-2 text-xs md:text-sm">
-                <div className="grid grid-cols-2 gap-4">
+            {/* Page Title */}
+            <div className="text-center mb-[-16px]">
+              <h1 className="text-[32px] leading-[40px] font-bold tracking-tight text-on-surface mb-2">Review & Persetujuan</h1>
+              <p className="text-lg text-on-surface-variant">Pastikan semua data sudah benar sebelum sistem kami memproses NIB Anda secara otomatis di sistem OSS.</p>
+            </div>
+
+            {/* Bento Grid Review Sections */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* Data Pemilik Card */}
+              <div className="bento-card flex flex-col gap-4">
+                <div className="flex items-center justify-between border-b border-border-light pb-3">
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="material-symbols-outlined filled-icon">person</span>
+                    <h2 className="text-xl font-semibold">Data Pemilik</h2>
+                  </div>
+                  <button onClick={() => router.push("/wizard")} className="text-secondary font-semibold text-sm hover:underline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">edit</span> Edit
+                  </button>
+                </div>
+                <div className="flex flex-col gap-3">
                   <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Nomor WhatsApp</p>
-                    <p className="text-on-surface font-medium">{formData.nomorHp}</p>
+                    <span className="block text-xs text-outline">Nama Lengkap</span>
+                    <span className="block text-base text-on-surface font-semibold">{formData.namaPemilik}</span>
                   </div>
                   <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Email Aktif</p>
-                    <p className="text-on-surface font-medium">{formData.email}</p>
+                    <span className="block text-xs text-outline">NIK</span>
+                    <span className="block text-base text-on-surface font-mono">{formData.nik}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-outline">Tanggal Lahir</span>
+                    <span className="block text-base text-on-surface">{formData.tanggalLahir}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-outline">Jenis Kelamin</span>
+                    <span className="block text-base text-on-surface">{formData.jenisKelamin}</span>
                   </div>
                 </div>
               </div>
-            </section>
 
-            {/* Card 3: Informasi Tempat Usaha */}
-            <section className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-border-light group-hover:bg-primary transition-colors duration-300"></div>
-              <div className="flex justify-between items-center mb-3 pl-2">
-                <h3 className="font-bold text-base text-on-surface">Informasi & Lokasi Tempat Usaha</h3>
-                <button
-                  onClick={() => router.push("/wizard")}
-                  className="text-primary hover:underline font-bold text-xs flex items-center gap-1 focus:outline-none"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                  Edit
-                </button>
+              {/* Kontak & Komunikasi Card */}
+              <div className="bento-card flex flex-col gap-4">
+                <div className="flex items-center justify-between border-b border-border-light pb-3">
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="material-symbols-outlined filled-icon">call</span>
+                    <h2 className="text-xl font-semibold">Kontak & Usaha</h2>
+                  </div>
+                  <button onClick={() => router.push("/wizard")} className="text-secondary font-semibold text-sm hover:underline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">edit</span> Edit
+                  </button>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <span className="block text-xs text-outline">Nomor WhatsApp</span>
+                    <span className="block text-base text-on-surface">{formData.nomorHp}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-outline">Email Aktif</span>
+                    <span className="block text-base text-on-surface">{formData.email}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-outline">Modal Usaha</span>
+                    <span className="block text-base text-on-surface">{formData.modalUsaha || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-outline">Jumlah Karyawan</span>
+                    <span className="block text-base text-on-surface">{formData.jumlahPekerja || "0"} Orang</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-3.5 pl-2 text-xs md:text-sm">
-                <div>
-                  <p className="font-bold text-on-surface-variant mb-0.5">Alamat Tempat/Fisik Usaha (Untuk OSS)</p>
-                  <p className="text-on-surface font-medium leading-relaxed bg-surface-container-low p-2.5 rounded-xl border border-border-light/50">
-                    {formData.alamatUsaha}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Luas Lahan / Tanah</p>
-                    <p className="text-on-surface font-semibold text-primary">{formData.luasTanah || "0"} m²</p>
+              {/* Lokasi Usaha Card (Full Width) */}
+              <div className="bento-card flex flex-col gap-4 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-border-light pb-3">
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="material-symbols-outlined filled-icon">location_on</span>
+                    <h2 className="text-xl font-semibold">Lokasi Usaha</h2>
                   </div>
-                  <div>
-                    <p className="font-bold text-on-surface-variant mb-0.5">Jumlah Tenaga Kerja</p>
-                    <p className="text-on-surface font-medium">
-                      L: {formData.jumlahPekerjaLakiLaki || "0"} | P: {formData.jumlahPekerjaPerempuan || "0"} (Total: {formData.jumlahPekerja || "0"} Orang)
-                    </p>
-                  </div>
+                  <button onClick={() => router.push("/wizard")} className="text-secondary font-semibold text-sm hover:underline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">edit</span> Edit
+                  </button>
                 </div>
-
-                <div>
-                  <p className="font-bold text-on-surface-variant mb-0.5">Titik Koordinat Lokasi</p>
-                  <p className="text-on-surface font-mono font-medium">{formData.latitude}, {formData.longitude}</p>
-                </div>
-
-                {/* Map Preview */}
-                <div className="relative w-full h-[150px] rounded-xl overflow-hidden border border-outline-variant shadow-inner mt-1">
-                  <iframe
-                    title="Review Lokasi Usaha Map"
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    scrolling="no"
-                    marginHeight={0}
-                    marginWidth={0}
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(formData.longitude || "106.8456") - 0.002}%2C${parseFloat(formData.latitude || "-6.2088") - 0.002}%2C${parseFloat(formData.longitude || "106.8456") + 0.002}%2C${parseFloat(formData.latitude || "-6.2088") + 0.002}&layer=mapnik&marker=${formData.latitude || "-6.2088"}%2C${formData.longitude || "106.8456"}`}
-                  />
-                </div>
-
-                {/* Location Image Preview */}
-                {formData.fotoLokasi ? (
-                  <div className="flex flex-col gap-1.5 mt-2">
-                    <p className="font-bold text-on-surface-variant mb-0.5">Foto Fisik Lokasi Usaha</p>
-                    <div className="relative w-full h-[140px] rounded-lg overflow-hidden border border-border-light shadow-sm max-w-[240px]">
-                      <img
-                        src={formData.fotoLokasi}
-                        alt="Foto Lokasi Terunggah"
-                        className="w-full h-full object-cover"
-                      />
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  <div className="flex-1 flex flex-col gap-3">
+                    <div>
+                      <span className="block text-xs text-outline">Alamat Lengkap</span>
+                      <span className="block text-base text-on-surface">{formData.alamatUsaha}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="block text-xs text-outline">Luas Tanah</span>
+                        <span className="block text-base text-on-surface">{formData.luasTanah || "0"} m²</span>
+                      </div>
+                      <div>
+                        <span className="block text-xs text-outline">Koordinat</span>
+                        <span className="block text-base text-on-surface font-mono text-sm">{formData.latitude}, {formData.longitude}</span>
+                      </div>
                     </div>
                   </div>
+                  <div className="w-full md:w-1/3 h-32 bg-surface-container rounded-lg overflow-hidden border border-border-light relative shrink-0">
+                    <iframe title="Map" width="100%" height="100%" frameBorder="0" scrolling="no" marginHeight={0} marginWidth={0}
+                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(formData.longitude || "106.8456") - 0.002}%2C${parseFloat(formData.latitude || "-6.2088") - 0.002}%2C${parseFloat(formData.longitude || "106.8456") + 0.002}%2C${parseFloat(formData.latitude || "-6.2088") + 0.002}&layer=mapnik&marker=${formData.latitude || "-6.2088"}%2C${formData.longitude || "106.8456"}`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* KBLI Card (Full Width) */}
+              <div className="bento-card flex flex-col gap-4 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-border-light pb-3">
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="material-symbols-outlined filled-icon">category</span>
+                    <h2 className="text-xl font-semibold">KBLI (Bidang Usaha)</h2>
+                  </div>
+                  <button onClick={() => router.push("/kbli")} className="text-secondary font-semibold text-sm hover:underline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">edit</span> Ubah
+                  </button>
+                </div>
+                <div className="bg-surface-container-low border border-border-light rounded-lg p-4 flex gap-4 items-start">
+                  <div className="bg-primary text-on-primary px-3 py-1 rounded font-semibold text-sm mt-1 shrink-0">{selectedKbli.code}</div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-on-surface">{selectedKbli.title}</h3>
+                    <p className="text-base text-on-surface-variant mt-1">{selectedKbli.description}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dokumen Administrasi (Full Width) */}
+              <div className="bento-card flex flex-col gap-4 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-border-light pb-3">
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="material-symbols-outlined filled-icon">description</span>
+                    <h2 className="text-xl font-semibold">Dokumen Administrasi</h2>
+                  </div>
+                  <span className="text-xs bg-secondary-container text-on-secondary-container font-bold px-2.5 py-1 rounded-full">PDF</span>
+                </div>
+                <p className="text-base text-on-surface-variant">Unduh dokumen administrasi dan foto lokasi usaha untuk melengkapi persyaratan OSS.</p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button type="button" onClick={downloadNpsPdf} disabled={downloadingNps}
+                    className="flex-1 px-4 py-3 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md">
+                    <span className="material-symbols-outlined text-sm">{downloadingNps ? "sync" : "picture_as_pdf"}</span>
+                    {downloadingNps ? "Mengekspor..." : "Unduh Dokumen Adm"}
+                  </button>
+                  <button type="button" onClick={downloadPhotoPdf} disabled={downloadingPhoto || !formData.fotoLokasi}
+                    className="flex-1 px-4 py-3 rounded-lg border-2 border-primary text-primary text-sm font-semibold hover:bg-primary/5 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">{downloadingPhoto ? "sync" : "photo_library"}</span>
+                    {downloadingPhoto ? "Mengekspor..." : "Unduh Foto Lokasi"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Automation Disclosure (border-l-4 accent) */}
+            <div className="bg-surface-container-low border-l-4 border-status-info p-6 rounded-r-lg">
+              <div className="flex items-start gap-4">
+                <span className="material-symbols-outlined text-status-info filled-icon text-3xl">info</span>
+                <div>
+                  <h3 className="text-xl font-semibold text-on-surface mb-2">Pemberitahuan Otomatisasi NIB Assistant</h3>
+                  <p className="text-base text-on-surface-variant mb-4">Dengan menyetujui, Anda memberikan kuasa kepada NIB Assistant untuk:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="text-sm font-semibold text-tertiary-container flex items-center gap-2 mb-2">
+                        <span className="material-symbols-outlined text-lg">check_circle</span> Akan Melakukan
+                      </h4>
+                      <ul className="list-disc list-inside text-base text-on-surface-variant space-y-1">
+                        <li>Memasukkan data Anda ke portal OSS.</li>
+                        <li>Mendaftarkan hak akses (jika belum ada).</li>
+                        <li>Meneruskan proses hingga NIB terbit.</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-status-error flex items-center gap-2 mb-2">
+                        <span className="material-symbols-outlined text-lg">cancel</span> Tidak Akan Melakukan
+                      </h4>
+                      <ul className="list-disc list-inside text-base text-on-surface-variant space-y-1">
+                        <li>Menyimpan password OSS Anda.</li>
+                        <li>Mengubah data selain yang disetujui.</li>
+                        <li>Menggunakan data untuk tujuan komersial lain.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Consent Checklist (bento-card) */}
+            <div className="bento-card border-2 border-primary-container/20">
+              <h3 className="text-xl font-semibold text-on-surface mb-4">Persetujuan Final</h3>
+              <div className="flex flex-col gap-4">
+                {[
+                  { state: consent1, set: setConsent1, text: "Saya menyatakan bahwa seluruh data yang telah diisi adalah benar dan dapat dipertanggungjawabkan." },
+                  { state: consent2, set: setConsent2, text: "Saya mengizinkan NIB Assistant mengisi form OSS atas nama saya." },
+                  { state: consent3, set: setConsent3, text: "Saya menyetujui proses direkam demi keamanan dan transparansi audit." },
+                  { state: consent4, set: setConsent4, text: "Saya berjanji memeriksa ulang semua isian di portal OSS sebelum submit final." }
+                ].map((item, idx) => (
+                  <label key={idx} className="flex items-start gap-3 cursor-pointer group">
+                    <input type="checkbox" checked={item.state} onChange={(e) => item.set(e.target.checked)}
+                      className="mt-1 w-5 h-5 rounded border-outline text-primary focus:ring-primary transition-colors cursor-pointer" />
+                    <span className="text-base text-on-surface group-hover:text-primary transition-colors">{item.text}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Desktop: Inline Pill CTA */}
+            <div className="hidden md:flex flex-row justify-end gap-4 pb-10 border-t border-border-light pt-6">
+              <button className="px-6 py-3 rounded-full border-2 border-primary text-primary font-semibold text-sm hover:bg-surface-container transition-colors min-h-[48px] flex items-center justify-center">
+                Simpan sebagai Draft
+              </button>
+              <button
+                onClick={handleProceedToAutomation}
+                disabled={!isAllConsentGiven || isSubmitting}
+                className={`px-8 py-3 rounded-full font-semibold text-sm min-h-[48px] flex items-center justify-center gap-2 shadow-md transition-all ${
+                  isAllConsentGiven && !isSubmitting
+                    ? "bg-primary text-on-primary hover:opacity-90"
+                    : "bg-surface-container-high text-outline opacity-60 cursor-not-allowed"
+                }`}
+              >
+                {isSubmitting ? (
+                  <><span className="w-5 h-5 rounded-full border-2 border-outline border-t-primary animate-spin" /> Menyimpan Draf...</>
                 ) : (
-                  <p className="text-[10px] text-outline font-semibold italic">Belum ada foto lokasi usaha terpilih.</p>
+                  <>Proses Sekarang <span className="material-symbols-outlined text-[18px]">send</span></>
                 )}
-              </div>
-            </section>
-
-            {/* Card 4: Dokumen Administrasi OSS */}
-            <section className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-border-light group-hover:bg-primary transition-colors duration-300"></div>
-              <div className="flex justify-between items-center mb-3 pl-2">
-                <h3 className="font-bold text-base text-on-surface">Dokumen Ekspor untuk OSS</h3>
-                <span className="text-[10px] bg-secondary-container text-on-secondary-container font-semibold px-2 py-0.5 rounded">
-                  Format PDF Resmi
-                </span>
-              </div>
-              <div className="space-y-3.5 pl-2 text-xs md:text-sm">
-                <p className="text-xs text-on-surface-variant leading-relaxed">
-                  Unduh dokumen administrasi lokasi dan foto fisik usaha di bawah ini. Dokumen ini dapat diunggah ke portal OSS untuk melengkapi persyaratan.
-                </p>
-                {/* Backend PDF Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={downloadNpsPdf}
-                    disabled={downloadingNps}
-                    className="flex-1 px-4 py-2.5 rounded-full bg-primary text-on-primary text-xs font-bold hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <span className="material-symbols-outlined text-sm">
-                      {downloadingNps ? "sync" : "picture_as_pdf"}
-                    </span>
-                    {downloadingNps ? "Mengekspor..." : "Unduh Dokumen Adm (PDF)"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={downloadPhotoPdf}
-                    disabled={downloadingPhoto || !formData.fotoLokasi}
-                    className="flex-1 px-4 py-2.5 rounded-full border border-primary text-primary text-xs font-bold hover:bg-primary-container/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:border-outline-variant disabled:text-outline flex items-center justify-center gap-1.5"
-                  >
-                    <span className="material-symbols-outlined text-sm">
-                      {downloadingPhoto ? "sync" : "photo_library"}
-                    </span>
-                    {downloadingPhoto ? "Mengekspor..." : "Unduh Foto Lokasi (PDF)"}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Card 3: KBLI Terpilih */}
-            <section className="bg-surface-card rounded-2xl p-4 border border-border-light shadow-sm relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-primary"></div>
-              <div className="pl-2">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-bold text-base text-on-surface">KBLI Terpilih</h3>
-                  <button
-                    onClick={() => router.push("/kbli")}
-                    className="text-primary hover:underline font-bold text-xs flex items-center gap-1 focus:outline-none"
-                  >
-                    <span className="material-symbols-outlined text-sm">edit</span>
-                    Ubah
-                  </button>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3.5 border border-outline-variant flex gap-3 items-start">
-                  <div className="bg-primary text-on-primary font-bold px-3 py-1.5 rounded-lg flex items-center justify-center shrink-0 font-mono text-sm border border-primary-container">
-                    {selectedKbli.code}
-                  </div>
-                  <div className="text-xs md:text-sm">
-                    <p className="font-bold text-on-surface mb-0.5">{selectedKbli.title}</p>
-                    <p className="text-on-surface-variant line-clamp-2 leading-relaxed">
-                      {selectedKbli.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
+              </button>
+            </div>
 
           </div>
-
-          {/* Consent Checkboxes */}
-          <section className="border-t border-border-light pt-6 space-y-4">
-            <h3 className="font-bold text-base text-on-surface flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-xl">gavel</span>
-              Persetujuan & Kebijakan Otomatisasi
-            </h3>
-
-            <div className="bg-surface-container-low border border-border-light rounded-2xl p-4 text-xs space-y-4 leading-relaxed text-on-surface-variant">
-              <div>
-                <p className="font-bold text-primary mb-1.5 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm font-bold">check_circle</span>
-                  Yang dilakukan NIB Assistant:
-                </p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Membuka portal resmi OSS Indonesia menggunakan browser otomatis.</li>
-                  <li>Mengisi isian form sesuai data yang Anda tinjau di atas.</li>
-                  <li>Berhenti sementara dan meminta bantuan Anda ketika menemui OTP, CAPTCHA, atau konfirmasi submit akhir.</li>
-                </ul>
-              </div>
-              
-              <div>
-                <p className="font-bold text-status-error mb-1.5 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm font-bold">cancel</span>
-                  Yang TIDAK dilakukan NIB Assistant:
-                </p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>TIDAK menyimpan password/kredensial login Anda secara permanen.</li>
-                  <li>TIDAK membypass kode OTP dari WhatsApp/Email.</li>
-                  <li>TIDAK melakukan klik "Kirim Permohonan Final" sebelum Anda menyetujuinya secara langsung.</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Checkbox Inputs */}
-            <div className="space-y-3.5">
-              {[
-                { state: consent1, set: setConsent1, text: "Saya memahami risiko teknis penggunaan otomatisasi browser." },
-                { state: consent2, set: setConsent2, text: "Saya mengizinkan NIB Assistant mengisi form OSS atas nama saya." },
-                { state: consent3, set: setConsent3, text: "Saya menyetujui proses direkam demi keamanan dan transparansi audit." },
-                { state: consent4, set: setConsent4, text: "Saya berjanji memeriksa ulang semua isian data di portal OSS sebelum submit final." }
-              ].map((item, idx) => (
-                <label key={idx} className="flex items-start gap-3 cursor-pointer group select-none">
-                  <div className="relative flex items-center justify-center shrink-0 mt-0.5">
-                    <input
-                      type="checkbox"
-                      checked={item.state}
-                      onChange={(e) => item.set(e.target.checked)}
-                      className="peer appearance-none w-5.5 h-5.5 border border-outline rounded bg-surface-card checked:bg-primary checked:border-primary transition-all focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                    />
-                    <span className="material-symbols-outlined absolute text-on-primary opacity-0 peer-checked:opacity-100 pointer-events-none text-sm font-bold">
-                      check
-                    </span>
-                  </div>
-                  <span className="text-xs md:text-sm text-on-surface-variant group-hover:text-primary transition-colors font-medium leading-snug">
-                    {item.text}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </section>
-
         </main>
 
-        {/* Bottom CTA Block */}
-        <div className="fixed bottom-0 left-0 right-0 md:absolute md:-bottom-2 bg-surface-card border-t border-border-light px-4 py-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-40 md:rounded-b-2xl">
-          <div className="max-w-max-width-form mx-auto">
-            <button
-              onClick={handleProceedToAutomation}
-              disabled={!isAllConsentGiven || isSubmitting}
-              className={`w-full py-4 px-6 rounded-full font-bold flex items-center justify-center gap-2 min-h-[54px] shadow-md transition-all active:scale-[0.98] ${
-                isAllConsentGiven && !isSubmitting
-                  ? "bg-primary text-on-primary hover:bg-primary-container cursor-pointer"
-                  : "bg-surface-container-high text-outline opacity-60 cursor-not-allowed"
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="w-5 h-5 rounded-full border-2 border-outline border-t-primary animate-spin" />
-                  Menyimpan Draf...
-                </>
-              ) : (
-                <>
-                  Lanjut ke OSS
-                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                </>
-              )}
-            </button>
-          </div>
+        {/* Mobile: Sticky Bottom CTA */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 glass-bar border-t border-border-light px-5 py-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] z-40">
+          <button
+            onClick={handleProceedToAutomation}
+            disabled={!isAllConsentGiven || isSubmitting}
+            className={`w-full py-4 px-6 rounded-full font-bold flex items-center justify-center gap-2.5 min-h-[56px] transition-all ${
+              isAllConsentGiven && !isSubmitting
+                ? "bg-primary text-on-primary shadow-md"
+                : "bg-surface-container-high text-outline opacity-60 cursor-not-allowed"
+            }`}
+          >
+            {isSubmitting ? (
+              <><span className="w-5 h-5 rounded-full border-2 border-outline border-t-primary animate-spin" /> Menyimpan...</>
+            ) : (
+              <>Kirim ke Portal OSS <span className="material-symbols-outlined text-lg">arrow_forward</span></>
+            )}
+          </button>
         </div>
 
       </div>
     </div>
   );
 }
+
