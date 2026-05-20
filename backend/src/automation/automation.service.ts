@@ -348,11 +348,12 @@ export class AutomationService {
         this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
         
         let provPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/provinsi') && response.status() === 200,
-          { timeout: 5000 }
+          response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
+          { timeout: 120000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
-        await Promise.race([provPromise, page.waitForTimeout(3000)]);
+        await provPromise;
+        await page.waitForTimeout(1000);
         await this.selectOptionRobust(page, cleanProvinsi);
         await page.waitForTimeout(1000);
 
@@ -363,11 +364,12 @@ export class AutomationService {
         this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
         
         let kotaPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kota') && response.status() === 200,
-          { timeout: 5000 }
+          response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
+          { timeout: 120000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
-        await Promise.race([kotaPromise, page.waitForTimeout(3000)]);
+        await kotaPromise;
+        await page.waitForTimeout(1000);
         await this.selectOptionRobust(page, cleanKota);
         await page.waitForTimeout(1000);
 
@@ -377,11 +379,12 @@ export class AutomationService {
         this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
         
         let kecPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kecamatan') && response.status() === 200,
-          { timeout: 5000 }
+          response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
+          { timeout: 120000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
-        await Promise.race([kecPromise, page.waitForTimeout(3000)]);
+        await kecPromise;
+        await page.waitForTimeout(1000);
         await this.selectOptionRobust(page, cleanKecamatan);
         await page.waitForTimeout(1000);
 
@@ -391,11 +394,12 @@ export class AutomationService {
         this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
         
         let kelPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kelurahan') && response.status() === 200,
-          { timeout: 5000 }
+          response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
+          { timeout: 120000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
-        await Promise.race([kelPromise, page.waitForTimeout(3000)]);
+        await kelPromise;
+        await page.waitForTimeout(1000);
         await this.selectOptionRobust(page, cleanKelurahan);
         await page.waitForTimeout(1000);
         
