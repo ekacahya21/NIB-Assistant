@@ -346,8 +346,13 @@ export class AutomationService {
         const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
         const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
         this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
+        
+        let provPromise = page.waitForResponse((response: any) => 
+          response.url().includes('/provinsi') && response.status() === 200,
+          { timeout: 5000 }
+        ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
-        await page.waitForTimeout(1500);
+        await Promise.race([provPromise, page.waitForTimeout(3000)]);
         await this.selectOptionRobust(page, cleanProvinsi);
         await page.waitForTimeout(1000);
 
@@ -356,8 +361,13 @@ export class AutomationService {
         const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
         const searchKota = this.getOptimalSearchQuery(cleanKota);
         this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
+        
+        let kotaPromise = page.waitForResponse((response: any) => 
+          response.url().includes('/kota') && response.status() === 200,
+          { timeout: 5000 }
+        ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
-        await page.waitForTimeout(1500);
+        await Promise.race([kotaPromise, page.waitForTimeout(3000)]);
         await this.selectOptionRobust(page, cleanKota);
         await page.waitForTimeout(1000);
 
@@ -365,8 +375,13 @@ export class AutomationService {
         const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
         const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
         this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
+        
+        let kecPromise = page.waitForResponse((response: any) => 
+          response.url().includes('/kecamatan') && response.status() === 200,
+          { timeout: 5000 }
+        ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
-        await page.waitForTimeout(1500);
+        await Promise.race([kecPromise, page.waitForTimeout(3000)]);
         await this.selectOptionRobust(page, cleanKecamatan);
         await page.waitForTimeout(1000);
 
@@ -374,8 +389,13 @@ export class AutomationService {
         const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
         const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
         this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
+        
+        let kelPromise = page.waitForResponse((response: any) => 
+          response.url().includes('/kelurahan') && response.status() === 200,
+          { timeout: 5000 }
+        ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
-        await page.waitForTimeout(1500);
+        await Promise.race([kelPromise, page.waitForTimeout(3000)]);
         await this.selectOptionRobust(page, cleanKelurahan);
         await page.waitForTimeout(1000);
         
