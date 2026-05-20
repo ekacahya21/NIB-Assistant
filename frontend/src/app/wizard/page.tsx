@@ -62,9 +62,17 @@ export default function WizardPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("draft_form_data");
+      const savedStep = sessionStorage.getItem("wizard_step");
       const scale = sessionStorage.getItem("skala_usaha") || "";
       const modalDefault = scale === "mikro" ? "50000000" : scale === "kecil" ? "200000000" : "";
       
+      if (savedStep) {
+        const parsedStep = parseInt(savedStep, 10);
+        if (parsedStep >= 1 && parsedStep <= 3) {
+          setCurrentStep(parsedStep);
+        }
+      }
+
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -589,9 +597,10 @@ export default function WizardPage() {
   const handleInputChange = (field: string, value: string) => {
     let processedValue = value;
 
-    // Transform all typed user inputs to uppercase except email and select dropdowns
+    // Transform all typed user inputs to uppercase except email, gender and select dropdowns
     if (
       field !== "email" &&
+      field !== "jenisKelamin" &&
       field !== "provinsi" &&
       field !== "kotaKabupaten" &&
       field !== "kecamatan" &&
@@ -724,11 +733,19 @@ export default function WizardPage() {
   const handleNext = () => {
     if (validateStep(currentStep)) {
       if (currentStep < 3) {
-        setCurrentStep((prev) => prev + 1);
+        const nextStep = currentStep + 1;
+        setCurrentStep(nextStep);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
+          sessionStorage.setItem("wizard_step", nextStep.toString());
+        }
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         // Save to sessionStorage and proceed to KBLI suggestions
-        sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
+          sessionStorage.setItem("wizard_step", "3");
+        }
         router.push("/kbli");
       }
     }
@@ -736,7 +753,12 @@ export default function WizardPage() {
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
+        sessionStorage.setItem("wizard_step", prevStep.toString());
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       router.push("/");
@@ -1029,6 +1051,138 @@ export default function WizardPage() {
                     </div>
                   </div>
 
+                  {/* Card C: Alamat Sesuai KTP */}
+                  <div className="bento-card flex flex-col gap-4">
+                    <h3 className="text-sm font-bold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-lg">badge</span>
+                      Alamat Sesuai KTP
+                    </h3>
+
+                    {/* Input: Alamat KTP Detail */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-on-surface-variant" htmlFor="alamatKtp">
+                        Alamat Lengkap KTP
+                      </label>
+                      <textarea
+                        id="alamatKtp"
+                        placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04, KEL. BARANANGSIANG"
+                        rows={2}
+                        value={formData.alamatKtp}
+                        onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
+                        className={`w-full p-3.5 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
+                          errors.alamatKtp ? "border-error focus:ring-error" : ""
+                        }`}
+                      />
+                      {errors.alamatKtp && (
+                        <p className="text-xs text-error font-semibold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">error</span>
+                          {errors.alamatKtp}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Province KTP Selector */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="provinsiKtp">
+                          Provinsi (KTP)
+                        </label>
+                        <select
+                          id="provinsiKtp"
+                          value={selectedKtpProvId}
+                          onChange={(e) => handleKtpProvinceChange(e.target.value)}
+                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none"
+                        >
+                          <option value="">{loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}</option>
+                          {provincesList.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
+                          ))}
+                        </select>
+                        {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                      </div>
+
+                      {/* City KTP Selector */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kotaKabupatenKtp">
+                          Kota / Kabupaten (KTP)
+                        </label>
+                        <select
+                          id="kotaKabupatenKtp"
+                          value={selectedKtpCityId}
+                          disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
+                          onChange={(e) => handleKtpCityChange(e.target.value)}
+                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="">{loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}</option>
+                          {citiesKtpList.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>
+                          ))}
+                        </select>
+                        {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
+                      </div>
+                    </div>
+
+                    {/* District KTP Selector */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kecamatanKtp">
+                          Kecamatan (KTP)
+                        </label>
+                        <select
+                          id="kecamatanKtp"
+                          value={selectedKtpDistId}
+                          disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
+                          onChange={(e) => handleKtpDistrictChange(e.target.value)}
+                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="">{loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}</option>
+                          {districtsKtpList.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name.toUpperCase()}</option>
+                          ))}
+                        </select>
+                        {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
+                      </div>
+
+                      {/* Sub-District KTP Selector */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kelurahanKtp">
+                          Kelurahan / Desa (KTP)
+                        </label>
+                        <select
+                          id="kelurahanKtp"
+                          value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
+                          disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
+                          onChange={(e) => handleKtpVillageChange(e.target.value)}
+                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="">{loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}</option>
+                          {villagesKtpList.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>
+                          ))}
+                        </select>
+                        {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
+                      </div>
+                    </div>
+
+                    {/* KTP Postal Code */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-on-surface-variant" htmlFor="kodePosKtp">
+                        Kode Pos (KTP)
+                      </label>
+                      <input
+                        type="text"
+                        id="kodePosKtp"
+                        placeholder="Contoh: 16143"
+                        value={formData.kodePosKtp}
+                        onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                        className="w-full min-h-[50px] px-3.5 py-2.5 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column Container */}
+                <div className="flex flex-col gap-6">
                   {/* Card B: Alamat Tempat Usaha */}
                   <div className="bento-card flex flex-col gap-4">
                     <h3 className="text-sm font-bold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
@@ -1193,138 +1347,6 @@ export default function WizardPage() {
                         disabled={formData.isAddressSame}
                         onChange={(e) => handleInputChange("kodePos", e.target.value.replace(/\D/g, "").slice(0, 5))}
                         className="w-full min-h-[50px] px-3.5 py-2.5 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50 disabled:bg-surface-container-low"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column Container */}
-                <div className="flex flex-col gap-6">
-                  {/* Card C: Alamat Sesuai KTP */}
-                  <div className="bento-card flex flex-col gap-4">
-                    <h3 className="text-sm font-bold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary text-lg">badge</span>
-                      Alamat Sesuai KTP
-                    </h3>
-
-                    {/* Input: Alamat KTP Detail */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-on-surface-variant" htmlFor="alamatKtp">
-                        Alamat Lengkap KTP
-                      </label>
-                      <textarea
-                        id="alamatKtp"
-                        placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04, KEL. BARANANGSIANG"
-                        rows={2}
-                        value={formData.alamatKtp}
-                        onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
-                        className={`w-full p-3.5 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                          errors.alamatKtp ? "border-error focus:ring-error" : ""
-                        }`}
-                      />
-                      {errors.alamatKtp && (
-                        <p className="text-xs text-error font-semibold flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">error</span>
-                          {errors.alamatKtp}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Province KTP Selector */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="provinsiKtp">
-                          Provinsi (KTP)
-                        </label>
-                        <select
-                          id="provinsiKtp"
-                          value={selectedKtpProvId}
-                          onChange={(e) => handleKtpProvinceChange(e.target.value)}
-                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none"
-                        >
-                          <option value="">{loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}</option>
-                          {provincesList.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
-                          ))}
-                        </select>
-                        {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
-                      </div>
-
-                      {/* City KTP Selector */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kotaKabupatenKtp">
-                          Kota / Kabupaten (KTP)
-                        </label>
-                        <select
-                          id="kotaKabupatenKtp"
-                          value={selectedKtpCityId}
-                          disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
-                          onChange={(e) => handleKtpCityChange(e.target.value)}
-                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
-                        >
-                          <option value="">{loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}</option>
-                          {citiesKtpList.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>
-                          ))}
-                        </select>
-                        {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
-                      </div>
-                    </div>
-
-                    {/* District KTP Selector */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kecamatanKtp">
-                          Kecamatan (KTP)
-                        </label>
-                        <select
-                          id="kecamatanKtp"
-                          value={selectedKtpDistId}
-                          disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
-                          onChange={(e) => handleKtpDistrictChange(e.target.value)}
-                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
-                        >
-                          <option value="">{loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}</option>
-                          {districtsKtpList.map((d) => (
-                            <option key={d.id} value={d.id}>{d.name.toUpperCase()}</option>
-                          ))}
-                        </select>
-                        {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
-                      </div>
-
-                      {/* Sub-District KTP Selector */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="kelurahanKtp">
-                          Kelurahan / Desa (KTP)
-                        </label>
-                        <select
-                          id="kelurahanKtp"
-                          value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
-                          disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
-                          onChange={(e) => handleKtpVillageChange(e.target.value)}
-                          className="w-full min-h-[50px] px-3 py-2 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none disabled:opacity-50"
-                        >
-                          <option value="">{loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}</option>
-                          {villagesKtpList.map((s) => (
-                            <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>
-                          ))}
-                        </select>
-                        {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
-                      </div>
-                    </div>
-
-                    {/* KTP Postal Code */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-on-surface-variant" htmlFor="kodePosKtp">
-                        Kode Pos (KTP)
-                      </label>
-                      <input
-                        type="text"
-                        id="kodePosKtp"
-                        placeholder="Contoh: 16143"
-                        value={formData.kodePosKtp}
-                        onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
-                        className="w-full min-h-[50px] px-3.5 py-2.5 rounded-xl border border-outline-variant bg-transparent text-sm focus:border-primary focus:outline-none"
                       />
                     </div>
                   </div>

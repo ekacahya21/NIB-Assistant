@@ -262,6 +262,17 @@ export default function AutomationPage() {
     addLog("Melakukan sinkronisasi session state browser...", "info");
   };
 
+  // Reset and restart the entire registration wizard from scratch
+  const handleResetAndRestartWizard = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("draft_form_data");
+      sessionStorage.removeItem("wizard_step");
+      sessionStorage.removeItem("skala_usaha");
+      sessionStorage.removeItem("draft_id");
+    }
+    router.push("/wizard");
+  };
+
   // Submit OTP
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -525,8 +536,18 @@ export default function AutomationPage() {
                 </div>
               )}
               {currentStep === 5 && (
-                <button onClick={() => router.push("/")} className="mt-2 px-8 py-3 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 mx-auto shadow-md">
-                  Kembali ke Beranda <span className="material-symbols-outlined text-[18px]">home</span>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
+                  <button onClick={() => router.push("/")} className="px-8 py-3 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 shadow-md">
+                    Kembali ke Beranda <span className="material-symbols-outlined text-[18px]">home</span>
+                  </button>
+                  <button onClick={handleResetAndRestartWizard} className="px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 shadow-md">
+                    Mulai Kembali <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                  </button>
+                </div>
+              )}
+              {failedStep !== null && (
+                <button onClick={handleResetAndRestartWizard} className="mt-2 px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 mx-auto shadow-md">
+                  Mulai Kembali <span className="material-symbols-outlined text-[18px]">restart_alt</span>
                 </button>
               )}
             </div>

@@ -91,6 +91,7 @@ export class AutomationService {
     });
 
     let page: any = null;
+    let activeStep = 1;
 
     try {
       this.logStep(subject, 1, 'success', 'Browser Chromium headful berhasil diluncurkan.');
@@ -114,8 +115,9 @@ export class AutomationService {
       }
 
       if (isRegister) {
+        activeStep = 2;
         // 0. Open Register Page
-        await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 30000 });
         
         // 1. Fill pelaku usaha dropdown
         await page.waitForTimeout(1000);
@@ -303,6 +305,7 @@ export class AutomationService {
         }
         
         // 9. Fill detail pelaku usaha
+        activeStep = 3;
         this.logStep(subject, 3, 'info', 'Lanjut mengisi detail pelaku usaha (nomor ponsel, nama, jenis kelamin, tanggal lahir)...');
         
         // Trim leading 0, 62 or +62 from the phone number
@@ -337,7 +340,7 @@ export class AutomationService {
         
         // Fill alamat
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
-        await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatUsaha);
+        await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatKtp || draft.alamatUsaha);
         
         // Search and Select Provinsi
         const cleanProvinsi = draft.provinsi.trim();
@@ -392,7 +395,17 @@ export class AutomationService {
         // Wait for Dukcapil NIK/Name match checking API
         this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
         await page.waitForTimeout(4000);
-        const isKtpMismatch = await page.getByText('Data tidak sesuai KTP').isVisible();
+        
+        let isKtpMismatch = false;
+        try {
+          const count = await page.getByText('Data tidak sesuai KTP').count();
+          if (count > 0) {
+            isKtpMismatch = await page.getByText('Data tidak sesuai KTP').first().isVisible().catch(() => false);
+          }
+        } catch (e) {
+          isKtpMismatch = false;
+        }
+
         if (isKtpMismatch) {
           this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
           throw new Error('Data tidak sesuai KTP');
@@ -470,6 +483,10 @@ export class AutomationService {
       // this.logStep(subject, 5, 'success', 'Silakan periksa kembali halaman browser Anda, klik "Terbitkan NIB" untuk finalisasi.');
       
       await page.waitForTimeout(10000);
+    } catch (error: any) {
+      console.error('Playwright execution error inside runPlaywrightAutomation:', error);
+      const errMsg = error.message || String(error);
+      this.logStep(subject, activeStep, 'error', `Terjadi kesalahan kritis: ${errMsg}`);
     } finally {
       try {
         const videoPath = await page.video()?.path();

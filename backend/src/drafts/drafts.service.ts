@@ -8,6 +8,7 @@ export class DraftData {
   nomorHp: string;
   email: string;
   alamatUsaha: string;
+  alamatKtp?: string;
   provinsi: string;
   kotaKabupaten: string;
   kecamatan: string;
