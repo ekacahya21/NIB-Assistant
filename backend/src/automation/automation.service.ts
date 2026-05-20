@@ -343,36 +343,37 @@ export class AutomationService {
         await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatKtp || draft.alamatUsaha);
         
         // Search and Select Provinsi
-        const cleanProvinsi = draft.provinsi.trim();
+        const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
         const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
-        this.logStep(subject, 3, 'info', `Mencari provinsi: ${cleanProvinsi}...`);
+        this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
         await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
         await page.waitForTimeout(1500);
         await this.selectOptionRobust(page, cleanProvinsi);
         await page.waitForTimeout(1000);
 
         // Trim "Kota" / "Kabupaten" and search using partial "like" match
-        const cleanKota = draft.kotaKabupaten.replace(/kota|kabupaten/gi, '').trim();
+        const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
+        const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
         const searchKota = this.getOptimalSearchQuery(cleanKota);
-        this.logStep(subject, 3, 'info', `Mencari kabupaten/kota: ${draft.kotaKabupaten}...`);
+        this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
         await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
         await page.waitForTimeout(1500);
         await this.selectOptionRobust(page, cleanKota);
         await page.waitForTimeout(1000);
 
         // Search and Select Kecamatan
-        const cleanKecamatan = draft.kecamatan.trim();
+        const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
         const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
-        this.logStep(subject, 3, 'info', `Mencari kecamatan: ${cleanKecamatan}...`);
+        this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
         await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
         await page.waitForTimeout(1500);
         await this.selectOptionRobust(page, cleanKecamatan);
         await page.waitForTimeout(1000);
 
         // Search and Select Desa / Kelurahan
-        const cleanKelurahan = draft.kelurahan.trim();
+        const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
         const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
-        this.logStep(subject, 3, 'info', `Mencari desa/kelurahan: ${cleanKelurahan}...`);
+        this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
         await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
         await page.waitForTimeout(1500);
         await this.selectOptionRobust(page, cleanKelurahan);

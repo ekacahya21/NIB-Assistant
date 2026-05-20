@@ -9,6 +9,11 @@ export class DraftData {
   email: string;
   alamatUsaha: string;
   alamatKtp?: string;
+  provinsiKtp?: string;
+  kotaKabupatenKtp?: string;
+  kecamatanKtp?: string;
+  kelurahanKtp?: string;
+  kodePosKtp?: string;
   provinsi: string;
   kotaKabupaten: string;
   kecamatan: string;
