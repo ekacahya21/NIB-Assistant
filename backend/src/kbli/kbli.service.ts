@@ -91,7 +91,7 @@ export class KbliService {
       try {
         console.log(`[KBLI Agent] Executing online Google ADK agent search for: "${query}"`);
         // Dynamically import ADK modules to prevent initial compilation load issues
-        const { LlmAgent, InMemoryRunner, GOOGLE_SEARCH, stringifyContent, Gemini } = await import('@google/adk');
+        const { LlmAgent, InMemoryRunner, GOOGLE_SEARCH, VertexAiSearchTool, stringifyContent, Gemini } = await import('@google/adk');
 
         let llmModel: any;
         if (vertexProject) {
@@ -107,18 +107,39 @@ export class KbliService {
           llmModel = 'gemini-2.5-flash';
         }
 
+        // Configure the search tool. Use Vertex AI Search (Data Store) if ID is configured to leverage trial credits.
+        const rawDataStoreId = process.env.VERTEX_AI_DATASTORE_ID;
+        let kbliSearchTool: any;
+
+        if (rawDataStoreId) {
+          let formattedDataStoreId = rawDataStoreId;
+          if (!rawDataStoreId.startsWith('projects/')) {
+            const project = vertexProject || 'jarvistant-ai-491514';
+            const location = process.env.VERTEX_AI_DATASTORE_LOCATION || 'global';
+            formattedDataStoreId = `projects/${project}/locations/${location}/collections/default_collection/dataStores/${rawDataStoreId}`;
+          }
+
+          console.log(`[KBLI Agent] Initializing Vertex AI Search with Formatted Data Store ID: "${formattedDataStoreId}"`);
+          kbliSearchTool = new VertexAiSearchTool({
+            dataStoreId: formattedDataStoreId
+          });
+        } else {
+          console.log(`[KBLI Agent] VERTEX_AI_DATASTORE_ID is not configured. Using standard Web GOOGLE_SEARCH.`);
+          kbliSearchTool = GOOGLE_SEARCH;
+        }
+
         const agent = new LlmAgent({
           name: 'kbli_search_agent',
           model: llmModel,
           instruction: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) 2020 yang handal.
 Tugas Anda adalah:
 1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
-2. Menggunakan pencarian online (Google Search) bila diperlukan untuk menemukan kecocokan kode KBLI 2020 resmi terbaru yang paling akurat dari BPS atau Lembaga OSS.
+2. Menggunakan tool pencarian KBLI (Vertex AI Search atau Google Search) untuk menemukan kecocokan kode KBLI 2020 resmi terbaru yang paling akurat dari BPS atau Lembaga OSS.
 3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON yang valid.
 
 Kriteria 'confidence' harus bernilai 'sangat_cocok' untuk 1-2 kecocokan utama, dan 'alternatif' untuk rekomendasi pendukung.
 Pastikan HANYA menghasilkan JSON yang valid, tanpa penjelasan markdown lain di luar blok code JSON (atau langsung kembalikan raw JSON agar mudah diparsing).`,
-          tools: [GOOGLE_SEARCH]
+          tools: [kbliSearchTool]
         });
 
         const runner = new InMemoryRunner({
