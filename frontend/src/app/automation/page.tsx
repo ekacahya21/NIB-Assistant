@@ -135,7 +135,7 @@ export default function AutomationPage() {
             if (payload.step === 1) setStatusText("Membuka Portal OSS");
             if (payload.step === 2 && payload.status !== "error") {
               if (payload.text.includes("OTP") && payload.status === "warn") {
-                setStatusText(isBelum === "belum" ? "Menunggu Anda memasukkan OTP..." : "Menunggu Anda login di portal OSS...");
+                setStatusText("Menunggu Anda memasukkan OTP...");
                 setIsPromptingOtp(true);
               } else if (payload.text.includes("Silakan masukkan kata sandi")) {
                 setStatusText("Menunggu Anda mengatur Kata Sandi...");
@@ -149,9 +149,25 @@ export default function AutomationPage() {
                 setStatusText("Membuka Portal OSS");
               }
             }
-            if (payload.step === 3 && failedStepRef.current === null) setStatusText("Mengisi formulir data pemilik & lokasi...");
-            if (payload.step === 4 && failedStepRef.current === null) setStatusText("Memilih Sektor KBLI & Modal Usaha...");
-            if (payload.step === 5 && failedStepRef.current === null) setStatusText("Draft NIB siap! Menunggu konfirmasi final.");
+            if (payload.step === 3 && failedStepRef.current === null) setStatusText("Mengisi detail akun & mendaftar...");
+            if (payload.step === 4 && failedStepRef.current === null) {
+              if (payload.text.includes("Silakan masukkan kata sandi")) {
+                setStatusText("Menunggu Anda memasukkan Kata Sandi...");
+                setIsPromptingPassword(true);
+                setIsPromptingOtp(false);
+              } else if (payload.text.includes("CAPTCHA")) {
+                setStatusText("Menunggu Anda menyelesaikan CAPTCHA...");
+                setIsPromptingOtp(true);
+                setIsPromptingPassword(false);
+              } else if (payload.text.includes("Login berhasil")) {
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+                setStatusText("Login Berhasil!");
+              } else {
+                setStatusText("Autentikasi & Login OSS...");
+              }
+            }
+            if (payload.step === 5 && failedStepRef.current === null) setStatusText("Proses Otomatisasi Selesai!");
           }
         } catch (err) {
           console.error("Error parsing EventSource data", err);
@@ -181,16 +197,18 @@ export default function AutomationPage() {
     };
   }, []);
 
-  const handleRestartAutomation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (errorType !== "ktp_mismatch" && errorType !== "generic" && !updatedValue.trim()) return;
-    if (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim()) return;
+  const handleRestartAutomation = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (e) {
+      if (errorType !== "ktp_mismatch" && errorType !== "generic" && !updatedValue.trim()) return;
+      if (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim()) return;
+    }
 
     setIsUpdatingDraft(true);
     const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
 
     try {
-      if (errorType !== "generic") {
+      if (e && errorType !== "generic") {
         let bodyData = {};
         let successMsg = "";
         if (errorType === "nik") {
@@ -326,12 +344,16 @@ export default function AutomationPage() {
       });
   };
   // Step label data
-  const stepLabels = [
-    { label: "Validasi Data", icon: "verified", step: 1 },
-    { label: akunOss === "belum" ? "Registrasi Akun & OTP" : "Login & OTP", icon: "login", step: 2 },
-    { label: "Profil Pemilik", icon: "person", step: 3 },
-    { label: "Sektor & KBLI", icon: "category", step: 4 },
-    { label: "Terbitkan NIB", icon: "draft", step: 5 },
+  const stepLabels = akunOss === "belum" ? [
+    { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
+    { label: "Validasi NIK & OTP", icon: "sms", step: 2 },
+    { label: "Detail Profil & Registrasi", icon: "app_registration", step: 3 },
+    { label: "Login & CAPTCHA", icon: "login", step: 4 },
+    { label: "Selesai", icon: "check_circle", step: 5 }
+  ] : [
+    { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
+    { label: "Login & CAPTCHA", icon: "login", step: 4 },
+    { label: "Selesai", icon: "check_circle", step: 5 }
   ];
 
   return (
@@ -372,7 +394,7 @@ export default function AutomationPage() {
                 const isCompleted = failedStep === null ? (currentStep > step) : (step < failedStep);
                 const isCurrent = failedStep === null && currentStep === step;
                 const isFailed = failedStep === step;
-                const isWaiting = step === 2 && isCurrent && failedStep === null;
+                const isWaiting = step === currentStep && isCurrent && failedStep === null;
 
                 return (
                   <div key={step} className="relative flex items-start gap-4 group">
@@ -397,63 +419,99 @@ export default function AutomationPage() {
                       {isFailed && <p className="text-xs text-rose-600">{errorText}</p>}
                       {isCompleted && step === 1 && <p className="text-xs text-on-surface-variant">Semua data valid.</p>}
 
-                      {/* Step 2: Interactive inputs */}
+                      {/* Interactive inputs based on active step */}
                       {isWaiting && (
                         <div className="mt-3 space-y-3">
-                          {akunOss === "belum" ? (
-                            isPromptingPassword ? (
-                              <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-1">
-                                <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
-                                  <span>Buat Kata Sandi Baru:</span>
-                                  <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
-                                    <span className="material-symbols-outlined text-[12px]">schedule</span>
-                                    {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
-                                  </span>
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Kata Sandi Baru</label>
-                                  <input type="password" placeholder="Minimal 8 karakter" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={timeLeft === 0}
-                                    className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Konfirmasi</label>
-                                  <input type="password" placeholder="Ulangi" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={timeLeft === 0}
-                                    className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
-                                </div>
-                                {passwordError && <p className="text-[10px] text-error font-semibold">{passwordError}</p>}
-                                <button type="submit" disabled={isSubmittingPassword || !newPassword || !confirmPassword || timeLeft === 0}
-                                  className="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                  {isSubmittingPassword ? "Mengonfigurasi..." : "Buat Kata Sandi"}
-                                </button>
-                              </form>
-                            ) : isPromptingOtp ? (
-                              <div className="space-y-2 mt-1">
-                                <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
-                                  <span>Masukkan Kode OTP:</span>
-                                  <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
-                                    <span className="material-symbols-outlined text-[12px]">schedule</span>
-                                    {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
-                                  </span>
-                                </div>
-                                <form onSubmit={handleOtpSubmit} className="flex items-center gap-2">
-                                  <input type="text" placeholder="Kode OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} disabled={timeLeft === 0}
-                                    className="flex-1 bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs font-bold font-mono tracking-widest text-center focus:outline-none focus:border-primary disabled:opacity-50" />
-                                  <button type="submit" disabled={isSubmittingOtp || !otp || timeLeft === 0}
-                                    className="bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs disabled:opacity-50 shrink-0">
-                                    {isSubmittingOtp ? "..." : "Kirim"}
+                          {currentStep === 2 && (
+                            <>
+                              {isPromptingPassword ? (
+                                <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-1">
+                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
+                                    <span>Buat Kata Sandi Baru:</span>
+                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
+                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
+                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Kata Sandi Baru</label>
+                                    <input type="password" placeholder="Minimal 8 karakter" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={timeLeft === 0}
+                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Konfirmasi</label>
+                                    <input type="password" placeholder="Ulangi" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={timeLeft === 0}
+                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
+                                  </div>
+                                  {passwordError && <p className="text-[10px] text-error font-semibold">{passwordError}</p>}
+                                  <button type="submit" disabled={isSubmittingPassword || !newPassword || !confirmPassword || timeLeft === 0}
+                                    className="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                    {isSubmittingPassword ? "Mengonfigurasi..." : "Buat Kata Sandi"}
                                   </button>
                                 </form>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
-                                <span className="material-symbols-outlined text-base animate-spin">sync</span>
-                                <span>Menunggu form dimuat...</span>
-                              </div>
-                            )
-                          ) : (
-                            <button onClick={handleUserLoggedIn} className="bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center gap-1.5 mt-1">
-                              Saya sudah login <span className="material-symbols-outlined text-sm">open_in_new</span>
-                            </button>
+                              ) : isPromptingOtp ? (
+                                <div className="space-y-2 mt-1">
+                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
+                                    <span>Masukkan Kode OTP:</span>
+                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
+                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
+                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
+                                    </span>
+                                  </div>
+                                  <form onSubmit={handleOtpSubmit} className="flex items-center gap-2">
+                                    <input type="text" placeholder="Kode OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} disabled={timeLeft === 0}
+                                      className="flex-1 bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs font-bold font-mono tracking-widest text-center focus:outline-none focus:border-primary disabled:opacity-50" />
+                                    <button type="submit" disabled={isSubmittingOtp || !otp || timeLeft === 0}
+                                      className="bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs disabled:opacity-50 shrink-0">
+                                      {isSubmittingOtp ? "..." : "Kirim"}
+                                    </button>
+                                  </form>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
+                                  <span className="material-symbols-outlined text-base animate-spin">sync</span>
+                                  <span>Menunggu form dimuat...</span>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {currentStep === 4 && (
+                            <>
+                              {isPromptingPassword ? (
+                                <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-1">
+                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
+                                    <span>Masukkan Kata Sandi:</span>
+                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
+                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
+                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <input type="password" placeholder="Kata Sandi Akun OSS" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={timeLeft === 0}
+                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
+                                  </div>
+                                  {passwordError && <p className="text-[10px] text-error font-semibold">{passwordError}</p>}
+                                  <button type="submit" disabled={isSubmittingPassword || !newPassword || timeLeft === 0}
+                                    className="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                    {isSubmittingPassword ? "Mengirim..." : "Kirim Kata Sandi"}
+                                  </button>
+                                </form>
+                              ) : isPromptingOtp ? (
+                                <div className="space-y-2 mt-1">
+                                  <div className="text-[11px] font-semibold text-on-surface-variant leading-relaxed">
+                                    Silakan selesaikan CAPTCHA di jendela browser Chrome, lalu klik tombol di bawah untuk melanjutkan:
+                                  </div>
+                                  <button onClick={handleUserLoggedIn} className="w-full bg-primary text-on-primary font-bold py-2.5 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 mt-1 hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                                    Saya sudah menyelesaikan CAPTCHA & Masuk <span className="material-symbols-outlined text-sm">check_circle</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
+                                  <span className="material-symbols-outlined text-base animate-spin">sync</span>
+                                  <span>Menjalankan otomatisasi login...</span>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       )}
@@ -541,14 +599,19 @@ export default function AutomationPage() {
                     Kembali ke Beranda <span className="material-symbols-outlined text-[18px]">home</span>
                   </button>
                   <button onClick={handleResetAndRestartWizard} className="px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 shadow-md">
-                    Mulai Kembali <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                    Isi Ulang Form <span className="material-symbols-outlined text-[18px]">restart_alt</span>
                   </button>
                 </div>
               )}
               {failedStep !== null && (
-                <button onClick={handleResetAndRestartWizard} className="mt-2 px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 mx-auto shadow-md">
-                  Mulai Kembali <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                </button>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
+                  <button onClick={() => handleRestartAutomation()} className="px-8 py-3 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 shadow-md">
+                    Mulai Kembali <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+                  </button>
+                  <button onClick={handleResetAndRestartWizard} className="px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 shadow-md">
+                    Isi Ulang Form <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>

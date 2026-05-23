@@ -19,6 +19,12 @@ export class AutomationService {
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
   private readonly activePasswords = new Map<string, string>();
+  private readonly subjectToDraftId = new Map<Subject<AutomationEvent>, string>();
+  private readonly executionTimers = new Map<string, {
+    startTime: number;
+    lastLogTime: number;
+    stepStartTimes: Map<number, number>;
+  }>();
 
   constructor(private readonly draftsService: DraftsService) {}
 
@@ -41,6 +47,7 @@ export class AutomationService {
   // Observable SSE stream for automation status
   getStream(draftId: string, akunOss?: string): Observable<AutomationEvent> {
     const subject = new Subject<AutomationEvent>();
+    this.subjectToDraftId.set(subject, draftId);
     
     // Launch the background automation process asynchronously
     this.runPlaywrightAutomation(draftId, akunOss, subject).catch((err) => {
@@ -59,8 +66,53 @@ export class AutomationService {
     status: 'info' | 'success' | 'warn' | 'error',
     text: string
   ) {
-    subject.next({ step, status, text });
-    const formattedText = `[Step ${step}] [${status.toUpperCase()}] ${text}`;
+    const draftId = this.subjectToDraftId.get(subject) || 'unknown';
+    const timers = this.executionTimers.get(draftId);
+    let timeSuffix = '';
+    
+    if (timers) {
+      const now = Date.now();
+      const totalElapsed = ((now - timers.startTime) / 1000).toFixed(2);
+      const diffFromLast = ((now - timers.lastLogTime) / 1000).toFixed(2);
+      
+      if (!timers.stepStartTimes.has(step)) {
+        // Step transition! The previous step just completed.
+        let prevStep = -1;
+        for (const k of timers.stepStartTimes.keys()) {
+          if (k > prevStep && k < step) {
+            prevStep = k;
+          }
+        }
+        if (prevStep !== -1) {
+          const prevStartTime = timers.stepStartTimes.get(prevStep)!;
+          const prevStepElapsed = ((now - prevStartTime) / 1000).toFixed(2);
+          
+          const stepNames: Record<number, string> = {
+            1: 'Inisialisasi Portal',
+            2: 'Validasi NIK & OTP',
+            3: 'Detail Profil & Registrasi',
+            4: 'Login & CAPTCHA'
+          };
+          const prevStepName = stepNames[prevStep] || `Langkah ${prevStep}`;
+          
+          const completionMsg = `✨ [Selesai] ${prevStepName} berhasil diselesaikan dalam ${prevStepElapsed} detik.`;
+          subject.next({ step: prevStep, status: 'success', text: completionMsg });
+          this.logger.log(`[Tx: ${draftId}] ${completionMsg}`);
+        }
+        timers.stepStartTimes.set(step, now);
+      }
+      
+      const stepStartTime = timers.stepStartTimes.get(step) || now;
+      const stepElapsed = ((now - stepStartTime) / 1000).toFixed(2);
+      
+      timers.lastLogTime = now;
+      timeSuffix = ` (+${diffFromLast}s, Step: ${stepElapsed}s, Total: ${totalElapsed}s)`;
+    }
+
+    const richText = `${text}${timeSuffix}`;
+    subject.next({ step, status, text: richText });
+    
+    const formattedText = `[Tx: ${draftId}] [Step ${step}] [${status.toUpperCase()}] ${richText}`;
     if (status === 'error') {
       this.logger.error(formattedText);
     } else if (status === 'warn') {
@@ -82,6 +134,13 @@ export class AutomationService {
 
     const isRegister = akunOss === 'belum';
 
+    const timerNow = Date.now();
+    this.executionTimers.set(draftId, {
+      startTime: timerNow,
+      lastLogTime: timerNow,
+      stepStartTimes: new Map<number, number>([[1, timerNow]])
+    });
+
     this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
     
     // Launch Playwright headfully so user can see it
@@ -92,6 +151,7 @@ export class AutomationService {
 
     let page: any = null;
     let activeStep = 1;
+    let passwordCode = '';
 
     try {
       this.logStep(subject, 1, 'success', 'Browser Chromium headful berhasil diluncurkan.');
@@ -104,6 +164,7 @@ export class AutomationService {
         },
       });
       page = await context.newPage();
+      this.setupNetworkLogging(page, `automation-${draftId}`);
 
       this.logStep(subject, 1, 'info', `Membuka alamat resmi portal registrasi: ${process.env.OSS_LOGIN_URL}`);
       
@@ -227,7 +288,7 @@ export class AutomationService {
         }
 
         // Wait for password submitted from Frontend!
-        let passwordCode = '';
+        passwordCode = '';
         const startTimePass = Date.now();
         while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
           if (this.activePasswords.has(draftId)) {
@@ -306,7 +367,7 @@ export class AutomationService {
         
         // 9. Fill detail pelaku usaha
         activeStep = 3;
-        this.logStep(subject, 3, 'info', 'Lanjut mengisi detail pelaku usaha (nomor ponsel, nama, jenis kelamin, tanggal lahir)...');
+        this.logStep(subject, 3, 'info', 'Mengisi detail pelaku usaha...');
         
         // Trim leading 0, 62 or +62 from the phone number
         let cleanPhone = draft.nomorHp.trim().replace(/[^0-9]/g, '');
@@ -315,12 +376,15 @@ export class AutomationService {
         } else if (cleanPhone.startsWith('0')) {
           cleanPhone = cleanPhone.substring(1);
         }
+        this.logStep(subject, 3, 'info', `Mengisi nomor ponsel: ${draft.nomorHp}...`);
         await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
         await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(cleanPhone);
         
+        this.logStep(subject, 3, 'info', `Mengisi nama pelaku usaha sesuai KTP: ${draft.namaPemilik}...`);
         await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).click();
         await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).fill(draft.namaPemilik);
         
+        this.logStep(subject, 3, 'info', `Memilih jenis kelamin: ${draft.jenisKelamin}...`);
         if (draft.jenisKelamin === 'Perempuan') {
           await page.getByText('Perempuan').click();
         } else {
@@ -335,6 +399,7 @@ export class AutomationService {
             formattedBirthDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
           }
         }
+        this.logStep(subject, 3, 'info', `Mengisi tanggal lahir: ${formattedBirthDate}...`);
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
         await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
         
@@ -349,13 +414,13 @@ export class AutomationService {
         
         let provPromise = page.waitForResponse((response: any) => 
           response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
-          { timeout: 120000 }
+          { timeout: 3000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
         await provPromise;
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         await this.selectOptionRobust(page, cleanProvinsi);
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
 
         // Trim "Kota" / "Kabupaten" and search using partial "like" match
         const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
@@ -365,13 +430,13 @@ export class AutomationService {
         
         let kotaPromise = page.waitForResponse((response: any) => 
           response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
-          { timeout: 120000 }
+          { timeout: 3000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
         await kotaPromise;
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         await this.selectOptionRobust(page, cleanKota);
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
 
         // Search and Select Kecamatan
         const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
@@ -380,13 +445,13 @@ export class AutomationService {
         
         let kecPromise = page.waitForResponse((response: any) => 
           response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
-          { timeout: 120000 }
+          { timeout: 3000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
         await kecPromise;
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         await this.selectOptionRobust(page, cleanKecamatan);
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
 
         // Search and Select Desa / Kelurahan
         const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
@@ -395,13 +460,13 @@ export class AutomationService {
         
         let kelPromise = page.waitForResponse((response: any) => 
           response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
-          { timeout: 120000 }
+          { timeout: 3000 }
         ).catch(() => null);
         await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
         await kelPromise;
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         await this.selectOptionRobust(page, cleanKelurahan);
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         
         this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
 
@@ -443,71 +508,117 @@ export class AutomationService {
 
       }
 
-      // // Step 2: Waiting for user login
-      // this.logStep(subject, 2, 'warn', 'PENTING: Silakan selesaikan proses LOGIN / OTP di jendela browser Chrome yang terbuka.');
+      // after register successful run login automation
+      activeStep = 4; // Step 4 is login/authentication
+      this.logStep(subject, 4, 'info', 'Menjalankan otomatisasi login ke portal OSS...');
 
-      // // Wait for login confirmation
-      // let isConfirmed = false;
-      // const startTime = Date.now();
-      // while (Date.now() - startTime < 60000) {
-      //   if (this.activeOtps.has(draftId)) {
-      //     isConfirmed = true;
-      //     this.activeOtps.delete(draftId);
-      //     break;
-      //   }
-      //   await page.waitForTimeout(500);
-      // }
+      try {
+        await page.goto(`${process.env.OSS_LOGIN_URL}`, { waitUntil: 'networkidle', timeout: 30000 });
+      } catch (e) {
+        this.logStep(subject, 4, 'warn', 'Koneksi ke halaman login OSS lambat. Melanjutkan...');
+      }
 
-      // this.logStep(subject, 3, 'success', 'Persetujuan diterima: User melaporkan login berhasil.');
-      // this.logStep(subject, 3, 'info', 'Melakukan sinkronisasi session state browser...');
+      this.logStep(subject, 4, 'info', 'Mencari kolom input login (Username & Password)...');
       
-      // // Render simulated dashboard
-      // await page.evaluate(() => {
-      //   document.body.innerHTML = `
-      //     <div style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #eaeaea;">
-      //       <h2 style="color: #10b981; margin-bottom: 20px;">Dashboard Pelaku Usaha OSS</h2>
-      //       <div id="details" style="background: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 13px;">
-      //         <strong>Status:</strong> Terautentikasi<br>
-      //         <strong>Pemilik:</strong> Budi Santoso
-      //       </div>
-      //       <div id="form-container" style="margin-top:20px;">
-      //         <h3 style="color:#333;">Formulir NIB Draft</h3>
-      //         <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nama Pemilik</label><input type="text" id="nama" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
-      //         <div style="margin-bottom:10px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Alamat Usaha</label><input type="text" id="alamat" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; box-sizing: border-box;" /></div>
-      //       </div>
-      //     </div>
-      //   `;
-      // });
+      const usernameSelector = 'input[name="username"], input[type="text"], input[placeholder*="Username"], input[placeholder*="Email"], #username';
+      const passwordSelector = 'input[name="password"], input[type="password"], input[placeholder*="Sandi"], input[placeholder*="Password"], #password';
 
-      // await page.waitForTimeout(1000);
-      // this.logStep(subject, 3, 'info', `Mengisi kolom Nama Pemilik: ${draft.namaPemilik}...`);
-      // await page.locator('#nama').fill(draft.namaPemilik);
-      // await page.waitForTimeout(1500);
+      try {
+        await page.waitForSelector(usernameSelector, { timeout: 15000 });
+      } catch (e) {
+        this.logStep(subject, 4, 'error', 'Halaman login tidak dapat dimuat atau input username tidak ditemukan.');
+        throw new Error('Halaman login tidak dapat dimuat.');
+      }
 
-      // this.logStep(subject, 3, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
-      // await page.waitForTimeout(1000);
+      // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
+      if (!passwordCode) {
+        this.logStep(subject, 4, 'warn', 'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.');
+        const startTimePass = Date.now();
+        while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
+          if (this.activePasswords.has(draftId)) {
+            passwordCode = this.activePasswords.get(draftId)!;
+            this.activePasswords.delete(draftId);
+            break;
+          }
+          await page.waitForTimeout(500);
+        }
+      }
 
-      // this.logStep(subject, 3, 'info', `Mengisi Kontak WhatsApp: ${draft.nomorHp} & Alamat Detail: ${draft.alamatUsaha}...`);
-      // await page.locator('#alamat').fill(draft.alamatUsaha);
-      // await page.waitForTimeout(1500);
+      if (!passwordCode) {
+        this.logStep(subject, 4, 'error', 'Batas waktu pengisian kata sandi telah habis.');
+        throw new Error('Batas waktu pengisian kata sandi telah habis.');
+      }
 
-      // // Step 4: Selecting KBLI
-      // this.logStep(subject, 4, 'info', 'Memilih Sektor KBLI & Modal Usaha...');
-      // await page.waitForTimeout(1000);
+      this.logStep(subject, 4, 'info', `Mengisi kolom Username dengan Email: ${draft.email}...`);
+      await page.fill(usernameSelector, draft.email);
+      await page.waitForTimeout(500);
 
-      // const kbliCode = draft.kbliCode || '56103';
-      // const kbliTitle = draft.kbliTitle || 'Kedai Makanan';
-      // this.logStep(subject, 4, 'info', `Memilih KBLI: ${kbliCode} (${kbliTitle})...`);
-      // await page.waitForTimeout(1000);
+      this.logStep(subject, 4, 'info', 'Mengisi kata sandi...');
+      await page.fill(passwordSelector, passwordCode);
+      await page.waitForTimeout(1000);
 
-      // this.logStep(subject, 4, 'info', `Menginput Modal Usaha: Rp${draft.modalUsaha} & Jumlah Pekerja: ${draft.jumlahPekerja}...`);
-      // await page.waitForTimeout(2000);
+      // Check if captcha is visible on the page
+      const isCaptchaVisible = await page.locator('input[placeholder*="Captcha"], input[name*="captcha"], #captcha').isVisible().catch(() => false);
+      if (isCaptchaVisible) {
+        this.logStep(subject, 4, 'warn', 'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.');
+        // Wait for the user to complete login manually
+        let isLoginConfirmed = false;
+        const startTime = Date.now();
+        while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
+          const currentUrl = page.url();
+          if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
+            isLoginConfirmed = true;
+            break;
+          }
+          if (this.activeOtps.has(draftId)) {
+            const statusVal = this.activeOtps.get(draftId);
+            this.activeOtps.delete(draftId);
+            if (statusVal === 'CONFIRMED') {
+              isLoginConfirmed = true;
+              break;
+            }
+          }
+          await page.waitForTimeout(1000);
+        }
+        if (!isLoginConfirmed) {
+          this.logStep(subject, 4, 'error', 'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).');
+          throw new Error('Batas waktu login habis.');
+        }
+      } else {
+        this.logStep(subject, 4, 'info', 'Mengklik tombol "Masuk"...');
+        const loginButtonSelector = 'button[type="button"], button[type="submit"]';
+        await page.click(loginButtonSelector);
 
-      // // Step 5: Final Review / Complete
-      // this.logStep(subject, 5, 'success', 'Semua data berhasil diisi ke form portal OSS.');
-      // this.logStep(subject, 5, 'success', 'Silakan periksa kembali halaman browser Anda, klik "Terbitkan NIB" untuk finalisasi.');
-      
-      await page.waitForTimeout(10000);
+        // Wait for redirection
+        this.logStep(subject, 4, 'info', 'Menunggu pengalihan (redirection) setelah masuk...');
+        let isRedirected = false;
+        const startTime = Date.now();
+        while (Date.now() - startTime < 30000) {
+          const currentUrl = page.url();
+          if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
+            isRedirected = true;
+            break;
+          }
+          await page.waitForTimeout(1000);
+        }
+
+        if (!isRedirected) {
+          // Check for any visible error message on the page related to login failure
+          const isLoginErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).isVisible().catch(() => false);
+          if (isLoginErrorVisible) {
+            const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).textContent().catch(() => 'Username atau Kata Sandi salah.');
+            this.logStep(subject, 4, 'error', `Login GAGAL di portal OSS: ${errorMsg.trim()}`);
+            throw new Error(`Login gagal: ${errorMsg.trim()}`);
+          }
+          
+          this.logStep(subject, 4, 'error', 'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).');
+          throw new Error('Login ditolak atau butuh penyelesaian CAPTCHA manual.');
+        }
+      }
+
+      this.logStep(subject, 4, 'success', 'Login berhasil! Sesi terautentikasi berhasil didirikan.');
+      await page.waitForTimeout(5000);
+      this.logStep(subject, 5, 'success', 'Proses otomatisasi selesai! Akun telah berhasil login ke portal OSS.');
     } catch (error: any) {
       console.error('Playwright execution error inside runPlaywrightAutomation:', error);
       const errMsg = error.message || String(error);
@@ -522,6 +633,8 @@ export class AutomationService {
       } catch (videoErr) {
         this.logger.error('Gagal mengambil path video rekaman', videoErr);
       }
+      this.executionTimers.delete(draftId);
+      this.subjectToDraftId.delete(subject);
       await browser.close();
       subject.complete();
     }
@@ -542,6 +655,7 @@ export class AutomationService {
         viewport: { width: 1280, height: 720 },
       });
       const page = await context.newPage();
+      this.setupNetworkLogging(page, `login-${username}`);
 
       console.log('Opening https://ui-login-stg.oss.go.id/login...');
       await page.goto(`${process.env.OSS_LOGIN_URL}`, {
@@ -595,39 +709,94 @@ export class AutomationService {
     }
   }
 
+  private setupNetworkLogging(page: any, txId: string) {
+    page.on('request', (request: any) => {
+      const type = request.resourceType();
+      if (type !== 'xhr' && type !== 'fetch') {
+        return;
+      }
+      const url = request.url();
+      const method = request.method();
+      this.logger.log(`[Tx: ${txId}] [Network Request] ${method} ${url}`);
+      
+      const postData = request.postData();
+      if (postData && (url.includes('/api/') || url.includes('/ref/') || url.includes('oss.go.id'))) {
+        this.logger.log(`[Tx: ${txId}] [Network Request Body] ${postData}`);
+      }
+    });
+
+    page.on('response', async (response: any) => {
+      const request = response.request();
+      const type = request.resourceType();
+      if (type !== 'xhr' && type !== 'fetch') {
+        return;
+      }
+      const url = response.url();
+      const status = response.status();
+      this.logger.log(`[Tx: ${txId}] [Network Response] ${status} ${url}`);
+      
+      if (url.includes('/ref/') || url.includes('oss.go.id/api') || url.includes('/provinsi') || url.includes('/kota') || url.includes('/kecamatan') || url.includes('/kelurahan')) {
+        try {
+          if (status >= 200 && status < 300) {
+            const text = await response.text();
+            const trimmed = text.length > 200 ? text.substring(0, 200) + '...' : text;
+            this.logger.log(`[Tx: ${txId}] [Network Response Body] ${trimmed}`);
+          }
+        } catch (e) {
+          // Response body might not be readable or already closed/navigated
+        }
+      }
+    });
+
+    page.on('requestfailed', (request: any) => {
+      const type = request.resourceType();
+      if (type !== 'xhr' && type !== 'fetch') {
+        return;
+      }
+      this.logger.warn(`[Tx: ${txId}] [Network Request Failed] ${request.method()} ${request.url()} - ${request.failure()?.errorText || 'Unknown error'}`);
+    });
+  }
+
   private async selectOptionRobust(page: any, query: string): Promise<boolean> {
     const normalQuery = query.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     
-    // Wait for options list to be visible/loaded
-    await page.waitForTimeout(1000);
+    // Dynamic wait for option elements to load rather than a forced delay
+    try {
+      await page.getByRole('option').first().waitFor({ state: 'attached', timeout: 3000 });
+    } catch (e) {
+      // Gracefully continue and let page.getByRole('option') retry dynamically
+    }
     
     const optionElements = page.getByRole('option');
-    const count = await optionElements.count();
     
-    for (let i = 0; i < count; i++) {
-      const opt = optionElements.nth(i);
+    // Blistering fast single round-trip fetch of all inner texts instead of a sequential loop
+    const texts = await optionElements.allInnerTexts().catch(() => []);
+    
+    const matchedIndex = texts.findIndex((text: string) => {
+      const normalText = text.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      return normalText.includes(normalQuery) || normalQuery.includes(normalText);
+    });
+
+    if (matchedIndex !== -1) {
       try {
-        const text = await opt.innerText();
-        const normalText = text.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        if (normalText.includes(normalQuery) || normalQuery.includes(normalText)) {
-          await opt.scrollIntoViewIfNeeded();
-          await opt.click({ force: true });
-          await page.waitForTimeout(1000); // Wait for UI update/network trigger
-          await page.keyboard.press('Escape'); // Close dropdown menu if it remains open
-          return true;
-        }
+        const opt = optionElements.nth(matchedIndex);
+        await opt.scrollIntoViewIfNeeded();
+        await opt.click({ force: true });
+        await page.waitForTimeout(200); // Quick brief wait for UI state commit
+        await page.keyboard.press('Escape'); // Close dropdown menu if it remains open
+        return true;
       } catch (e) {
-        // Handle element detached or other transient errors
+        // Fallback to sequential search if element became detached
       }
     }
     
     // Fallback: Click first visible option
-    if (count > 0) {
+    if (texts.length > 0) {
       try {
         const firstOpt = optionElements.first();
         await firstOpt.scrollIntoViewIfNeeded();
         await firstOpt.click({ force: true });
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(200);
         await page.keyboard.press('Escape');
         return true;
       } catch (e) {}
@@ -636,9 +805,9 @@ export class AutomationService {
     // Ultimate Keyboard fallback: Press ArrowDown and Enter
     try {
       await page.keyboard.press('ArrowDown');
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(100);
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(200);
       await page.keyboard.press('Escape');
       return true;
     } catch (e) {}
