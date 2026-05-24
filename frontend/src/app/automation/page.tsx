@@ -391,8 +391,8 @@ export default function AutomationPage() {
             {/* Vertical Stepper */}
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-4 before:-translate-x-px before:h-full before:w-0.5 before:bg-border-light">
               {stepLabels.map(({ label, icon, step }) => {
-                const isCompleted = failedStep === null ? (currentStep > step) : (step < failedStep);
-                const isCurrent = failedStep === null && currentStep === step;
+                const isCompleted = failedStep === null ? (currentStep > step || (step === 5 && currentStep === 5)) : (step < failedStep);
+                const isCurrent = failedStep === null && currentStep === step && step !== 5;
                 const isFailed = failedStep === step;
                 const isWaiting = step === currentStep && isCurrent && failedStep === null;
 
@@ -414,10 +414,12 @@ export default function AutomationPage() {
                       <div className="flex items-center justify-between mb-1">
                         <h3 className={`text-sm font-semibold ${isFailed ? "text-rose-600" : isCurrent ? "text-primary font-bold" : isCompleted ? "text-on-surface" : "text-outline"}`}>{label}</h3>
                         {isCurrent && !isFailed && <span className="text-xs text-primary font-medium">Sedang Proses</span>}
+                        {isCompleted && step === 5 && <span className="text-xs text-primary font-semibold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Sukses</span>}
                       </div>
                       {isCurrent && !isFailed && <p className="text-xs text-on-surface-variant">{statusText}</p>}
                       {isFailed && <p className="text-xs text-rose-600">{errorText}</p>}
                       {isCompleted && step === 1 && <p className="text-xs text-on-surface-variant">Semua data valid.</p>}
+                      {isCompleted && step === 5 && <p className="text-xs text-on-surface-variant">Proses otomatisasi selesai dengan sukses!</p>}
 
                       {/* Interactive inputs based on active step */}
                       {isWaiting && (
