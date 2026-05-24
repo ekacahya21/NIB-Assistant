@@ -133,7 +133,6 @@ export class AutomationService {
     }
 
     const isRegister = akunOss === 'belum';
-
     const timerNow = Date.now();
     this.executionTimers.set(draftId, {
       startTime: timerNow,
@@ -141,21 +140,70 @@ export class AutomationService {
       stepStartTimes: new Map<number, number>([[1, timerNow]])
     });
 
-    this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
-    
-    // Launch Playwright headfully so user can see it
-    const browser = await chromium.launch({
-      headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
-      slowMo: 1000,
-    });
-
+    let browser: any = null;
+    let context: any = null;
     let page: any = null;
     let activeStep = 1;
     let passwordCode = '';
 
     try {
+      // Step 1: Initialize Browser
+      const initResult = await this.initializeBrowser(draftId, subject);
+      browser = initResult.browser;
+      context = initResult.context;
+      page = initResult.page;
+
+      if (isRegister) {
+        // Step 2: Registration & Verification
+        activeStep = 2;
+        passwordCode = await this.executeRegistrationSteps(page, draft, draftId, subject);
+
+        // Step 3: Fill Detailed Profile Information
+        activeStep = 3;
+        await this.executeDetailProfileSteps(page, draft, subject);
+      }
+
+      // Step 4: Login & Authentication
+      activeStep = 4;
+      await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
+
+    } catch (error: any) {
+      console.error('Playwright execution error inside runPlaywrightAutomation:', error);
+      const errMsg = error.message || String(error);
+      this.logStep(subject, activeStep, 'error', `Terjadi kesalahan kritis: ${errMsg}`);
+    } finally {
+      if (page) {
+        try {
+          const videoPath = await page.video()?.path();
+          if (videoPath) {
+            this.logger.log(`Otomatisasi selesai. Rekaman disimpan di: ${videoPath}`);
+            this.logStep(subject, 5, 'info', `Rekaman otomatisasi disimpan di: ${videoPath}`);
+          }
+        } catch (videoErr) {
+          this.logger.error('Gagal mengambil path video rekaman', videoErr);
+        }
+      }
+      this.executionTimers.delete(draftId);
+      this.subjectToDraftId.delete(subject);
+      if (browser) {
+        await browser.close();
+      }
+      subject.complete();
+    }
+  }
+
+  private async initializeBrowser(
+    draftId: string,
+    subject: Subject<AutomationEvent>
+  ): Promise<{ browser: any; context: any; page: any }> {
+    this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
+    const browser = await chromium.launch({
+      headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
+      slowMo: 1000,
+    });
+
+    try {
       this.logStep(subject, 1, 'success', 'Browser Chromium headful berhasil diluncurkan.');
-      
       const context = await browser.newContext({
         viewport: { width: 1024, height: 768 },
         recordVideo: {
@@ -163,11 +211,10 @@ export class AutomationService {
           size: { width: 1024, height: 768 },
         },
       });
-      page = await context.newPage();
+      const page = await context.newPage();
       this.setupNetworkLogging(page, `automation-${draftId}`);
 
       this.logStep(subject, 1, 'info', `Membuka alamat resmi portal registrasi: ${process.env.OSS_LOGIN_URL}`);
-      
       try {
         await page.goto(`${process.env.OSS_PORTAL_URL}`, { waitUntil: 'networkidle', timeout: 15000 });
         this.logStep(subject, 2, 'success', 'Portal OSS berhasil dimuat. Jendela browser terbuka.');
@@ -175,538 +222,463 @@ export class AutomationService {
         this.logStep(subject, 2, 'warn', 'Koneksi ke oss.go.id lambat. Menjalankan rendering bantuan lokal di browser...');
       }
 
-      if (isRegister) {
-        activeStep = 2;
-        // 0. Open Register Page
-        await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 30000 });
-        
-        // 1. Fill pelaku usaha dropdown
-        await page.waitForTimeout(1000);
-        this.logStep(subject, 2, 'info', 'Mengklik tombol "Pilih jenis pelaku usaha" dan memilih "Orang Perseorangan"...');
-        await page.getByRole('textbox', { name: 'Pilih jenis pelaku usaha' }).click();
-        await page.getByText('Orang Perseorangan').click();
-        
-        // 2. Fill NIK
-        await page.waitForTimeout(1000);
-        this.logStep(subject, 2, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
-        await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).click();
-        await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).fill(draft.nik);
-
-        // Wait dynamically for NIK and Email verification status in parallel (up to 15s max, checking every 500ms)
-        this.logStep(subject, 2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
-        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
-        await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).fill(draft.email);
-
-        let isNikRegistered = false;
-        let isEmailRegistered = false;
-        const maxPollMs = 15000;
-        const pollIntervalMs = 500;
-        const startPollTime = Date.now();
-
-        while (Date.now() - startPollTime < maxPollMs) {
-          isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
-          isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
-          
-          if (isNikRegistered || isEmailRegistered) {
-            break;
-          }
-
-          // If BOTH fields are valid, the "Verifikasi" button becomes enabled.
-          const isVerifikasiEnabled = await page.getByRole('button', { name: 'Verifikasi' }).isEnabled().catch(() => false);
-          // Wait at least 1.5 seconds to let portal validation APIs query and not short-circuit instantly
-          if (isVerifikasiEnabled && (Date.now() - startPollTime > 1500)) {
-            this.logStep(subject, 2, 'success', 'Validasi NIK dan Email sukses.');
-            break;
-          }
-
-          await page.waitForTimeout(pollIntervalMs);
-        }
-
-        if (isNikRegistered) {
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: NIK sudah terdaftar di portal OSS. Silakan masuk menggunakan akun terdaftar Anda.');
-          throw new Error('NIK sudah terdaftar di portal OSS.');
-        }
-
-        if (isEmailRegistered) {
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Email sudah terdaftar di portal OSS. Silakan gunakan email lain atau masuk dengan email terdaftar.');
-          throw new Error('Email sudah terdaftar di portal OSS.');
-        }
-        
-        // 4. Click Verifikasi
-        this.logStep(subject, 2, 'info', 'Mengklik tombol "Verifikasi"...');
-        await page.getByRole('button', { name: 'Verifikasi' }).click();
-        
-        // 5. Prompt OTP
-        await page.waitForTimeout(5000);
-        this.logStep(subject, 2, 'warn', 'PENTING: Silakan buka email Anda, salin kode OTP, dan masukkan kode OTP di halaman aplikasi.');
-
-        // 6. Asynchronous Wait for OTP submitted from Frontend!
-        let otpCode = '';
-        const startTime = Date.now();
-        while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
-          if (this.activeOtps.has(draftId)) {
-            otpCode = this.activeOtps.get(draftId)!;
-            this.activeOtps.delete(draftId);
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
-
-        if (!otpCode || otpCode.length !== 6) {
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian OTP telah habis (90 detik). Silakan coba lagi.');
-          throw new Error('Batas waktu pengisian OTP telah habis.');
-        }
-
-        this.logStep(subject, 2, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
-        
-        // 7. Fill OTP
-        await page.locator('.otp-input2').first().fill(otpCode[0] || '');
-        await page.locator('div:nth-child(2) > .otp-input2').fill(otpCode[1] || '');
-        await page.locator('div:nth-child(3) > .otp-input2').fill(otpCode[2] || '');
-        await page.locator('div:nth-child(4) > .otp-input2').fill(otpCode[3] || '');
-        await page.locator('div:nth-child(5) > .otp-input2').fill(otpCode[4] || '');
-        await page.locator('div:nth-child(6) > .otp-input2').fill(otpCode[5] || '');
-        
-        // Check if there is a visible error message on the page related to OTP failure
-        const isOtpErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).isVisible().catch(() => false);
-        if (isOtpErrorVisible) {
-          const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).textContent().catch(() => 'Kode OTP tidak valid.');
-          this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Verifikasi OTP gagal di portal OSS: ${errorMsg}`);
-          throw new Error(`Verifikasi OTP gagal: ${errorMsg}`);
-        }
-
-        // 8. Setting up password
-        await page.waitForTimeout(5000);
-        this.logStep(subject, 2, 'warn', 'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
-
-        // Search for element with type="password" selector
-        try {
-          await page.waitForSelector('input[type="password"]', { timeout: 30000 });
-        } catch (e) {
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Form pembuatan kata sandi tidak ditemukan atau verifikasi OTP gagal.');
-          throw new Error('Form pembuatan kata sandi tidak ditemukan.');
-        }
-
-        // Wait for password submitted from Frontend!
-        passwordCode = '';
-        const startTimePass = Date.now();
-        while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
-          if (this.activePasswords.has(draftId)) {
-            passwordCode = this.activePasswords.get(draftId)!;
-            this.activePasswords.delete(draftId);
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
-
-        if (!passwordCode) {
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian kata sandi telah habis (90 detik).');
-          throw new Error('Batas waktu pengisian kata sandi telah habis.');
-        }
-
-        // Fill both password inputs (Kata Sandi & Konfirmasi Kata Sandi)
-        this.logStep(subject, 2, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
-        const passwordInputs = page.locator('input[type="password"]');
-        await passwordInputs.nth(0).fill(passwordCode);
-        await page.waitForTimeout(1000);
-        await passwordInputs.nth(1).fill(passwordCode);
-        await page.waitForTimeout(1000);
-        await page.getByRole('button', { name: 'Lanjut' }).click();
-
-        // Wait to verify if the password page submitted successfully
-        await page.waitForTimeout(3000);
-        const isPasswordStillVisible = await passwordInputs.first().isVisible().catch(() => false);
-        if (isPasswordStillVisible) {
-          // Check for any visible error text related to password mismatch or validation
-          const isMismatchVisible = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).isVisible().catch(() => false);
-          if (isMismatchVisible) {
-            const mismatchText = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).textContent().catch(() => 'Konfirmasi kata sandi tidak cocok.');
-            this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Konfirmasi kata sandi tidak cocok atau ditolak: ${mismatchText.trim()}`);
-            throw new Error(`Konfirmasi kata sandi tidak cocok: ${mismatchText.trim()}`);
-          }
-
-          // Check individual password requirements checklist for failures (like red cross icons)
-          const requirements = [
-            { key: 'Minimal 8 karakter', text: 'Minimal 8 karakter' },
-            { key: 'Menggunakan huruf', text: 'Menggunakan huruf' },
-            { key: 'Menggunakan angka', text: 'Menggunakan angka' },
-            { key: 'Menggunakan karakter spesial', text: 'Menggunakan karakter spesial (!@#$%^&*_-)' }
-          ];
-          const failedReqs: string[] = [];
-
-          for (const req of requirements) {
-            const textLocator = page.locator(`text="${req.key}"`).first();
-            if (await textLocator.isVisible().catch(() => false)) {
-              const parent = textLocator.locator('xpath=..');
-              let html = await parent.innerHTML().catch(() => '');
-              
-              // Also grab grandparent to capture icons nested outside immediate tag
-              const grandparent = parent.locator('xpath=..');
-              const gHtml = await grandparent.innerHTML().catch(() => '');
-              html += ' ' + gHtml;
-
-              // Check if red cross icon or error status is present
-              const hasRed = html.includes('red') || html.includes('danger') || html.includes('error') || html.includes('cross') || html.includes('close');
-              const hasGreen = html.includes('green') || html.includes('success') || html.includes('check');
-              
-              if (hasRed || !hasGreen) {
-                failedReqs.push(req.text);
-              }
-            }
-          }
-
-          if (failedReqs.length > 0) {
-            const listStr = failedReqs.map(r => `❌ ${r}`).join(', ');
-            this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Kekuatan kata sandi belum terpenuhi. Kriteria yang gagal: ${listStr}`);
-            throw new Error(`Kekuatan kata sandi belum terpenuhi: ${listStr}`);
-          }
-
-          this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Pembuatan kata sandi ditolak oleh portal OSS (kemungkinan konfirmasi kata sandi tidak cocok).');
-          throw new Error('Pembuatan kata sandi ditolak atau konfirmasi tidak cocok.');
-        }
-        
-        // 9. Fill detail pelaku usaha
-        activeStep = 3;
-        this.logStep(subject, 3, 'info', 'Mengisi detail pelaku usaha...');
-        
-        // Trim leading 0, 62 or +62 from the phone number
-        let cleanPhone = draft.nomorHp.trim().replace(/[^0-9]/g, '');
-        if (cleanPhone.startsWith('62')) {
-          cleanPhone = cleanPhone.substring(2);
-        } else if (cleanPhone.startsWith('0')) {
-          cleanPhone = cleanPhone.substring(1);
-        }
-        this.logStep(subject, 3, 'info', `Mengisi nomor ponsel: ${draft.nomorHp}...`);
-        await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
-        await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(cleanPhone);
-        
-        this.logStep(subject, 3, 'info', `Mengisi nama pelaku usaha sesuai KTP: ${draft.namaPemilik}...`);
-        await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).click();
-        await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).fill(draft.namaPemilik);
-        
-        this.logStep(subject, 3, 'info', `Memilih jenis kelamin: ${draft.jenisKelamin}...`);
-        if (draft.jenisKelamin === 'Perempuan') {
-          await page.getByText('Perempuan').click();
-        } else {
-          await page.getByText('Laki-laki').click();
-        }
-        
-        // Reformat birth date from yyyy-mm-dd to dd/mm/yyyy
-        let formattedBirthDate = draft.tanggalLahir.trim();
-        if (formattedBirthDate.includes('-')) {
-          const parts = formattedBirthDate.split('-');
-          if (parts[0].length === 4) {
-            formattedBirthDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
-          }
-        }
-        this.logStep(subject, 3, 'info', `Mengisi tanggal lahir: ${formattedBirthDate}...`);
-        await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
-        await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
-        
-        // Fill alamat
-        await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
-        await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatKtp || draft.alamatUsaha);
-        
-        // Search and Select Provinsi
-        const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
-        const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
-        this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
-        
-        let provPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
-          { timeout: 3000 }
-        ).catch(() => null);
-        await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
-        await provPromise;
-        await page.waitForTimeout(200);
-        await this.selectOptionRobust(page, cleanProvinsi);
-        await page.waitForTimeout(200);
-
-        // Trim "Kota" / "Kabupaten" and search using partial "like" match
-        const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
-        const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
-        const searchKota = this.getOptimalSearchQuery(cleanKota);
-        this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
-        
-        let kotaPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
-          { timeout: 3000 }
-        ).catch(() => null);
-        await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
-        await kotaPromise;
-        await page.waitForTimeout(200);
-        await this.selectOptionRobust(page, cleanKota);
-        await page.waitForTimeout(200);
-
-        // Search and Select Kecamatan
-        const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
-        const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
-        this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
-        
-        let kecPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
-          { timeout: 3000 }
-        ).catch(() => null);
-        await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
-        await kecPromise;
-        await page.waitForTimeout(200);
-        await this.selectOptionRobust(page, cleanKecamatan);
-        await page.waitForTimeout(200);
-
-        // Search and Select Desa / Kelurahan
-        const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
-        const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
-        this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
-        
-        let kelPromise = page.waitForResponse((response: any) => 
-          response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
-          { timeout: 3000 }
-        ).catch(() => null);
-        await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
-        await kelPromise;
-        await page.waitForTimeout(200);
-        await this.selectOptionRobust(page, cleanKelurahan);
-        await page.waitForTimeout(200);
-        
-        this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
-
-        // 10. Mencentang checkbox persetujuan
-        this.logStep(subject, 3, 'info', 'Mencentang checkbox persetujuan...');
-        try {
-          await page.getByRole('checkbox', { name: 'Saya setuju dengan Syarat dan' }).click({ force: true });
-        } catch (e) {
-          await page.getByText('Saya setuju dengan Syarat dan Ketentuan').first().click({ force: true });
-        }
-        
-        // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
-        this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
-        await page.getByRole('button', { name: 'Daftar' }).click();
-
-        // Wait for Dukcapil NIK/Name match checking API
-        this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
-        await page.waitForTimeout(4000);
-        
-        let isKtpMismatch = false;
-        try {
-          const count = await page.getByText('Data tidak sesuai KTP').count();
-          if (count > 0) {
-            isKtpMismatch = await page.getByText('Data tidak sesuai KTP').first().isVisible().catch(() => false);
-          }
-        } catch (e) {
-          isKtpMismatch = false;
-        }
-
-        if (isKtpMismatch) {
-          this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
-          throw new Error('Data tidak sesuai KTP');
-        }
-        
-        this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
-
-        // Keep open for a bit
-        await page.waitForTimeout(10000);
-
-      }
-
-      // after register successful run login automation
-      activeStep = 4; // Step 4 is login/authentication
-      this.logStep(subject, 4, 'info', 'Menjalankan otomatisasi login ke portal OSS...');
-
-      try {
-        await page.goto(`${process.env.OSS_LOGIN_URL}`, { waitUntil: 'networkidle', timeout: 30000 });
-      } catch (e) {
-        this.logStep(subject, 4, 'warn', 'Koneksi ke halaman login OSS lambat. Melanjutkan...');
-      }
-
-      this.logStep(subject, 4, 'info', 'Mencari kolom input login (Username & Password)...');
-      
-      const usernameSelector = 'input[name="username"], input[type="text"], input[placeholder*="Username"], input[placeholder*="Email"], #username';
-      const passwordSelector = 'input[name="password"], input[type="password"], input[placeholder*="Sandi"], input[placeholder*="Password"], #password';
-
-      try {
-        await page.waitForSelector(usernameSelector, { timeout: 15000 });
-      } catch (e) {
-        this.logStep(subject, 4, 'error', 'Halaman login tidak dapat dimuat atau input username tidak ditemukan.');
-        throw new Error('Halaman login tidak dapat dimuat.');
-      }
-
-      // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
-      if (!passwordCode) {
-        this.logStep(subject, 4, 'warn', 'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.');
-        const startTimePass = Date.now();
-        while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
-          if (this.activePasswords.has(draftId)) {
-            passwordCode = this.activePasswords.get(draftId)!;
-            this.activePasswords.delete(draftId);
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
-      }
-
-      if (!passwordCode) {
-        this.logStep(subject, 4, 'error', 'Batas waktu pengisian kata sandi telah habis.');
-        throw new Error('Batas waktu pengisian kata sandi telah habis.');
-      }
-
-      this.logStep(subject, 4, 'info', `Mengisi kolom Username dengan Email: ${draft.email}...`);
-      await page.fill(usernameSelector, draft.email);
-      await page.waitForTimeout(500);
-
-      this.logStep(subject, 4, 'info', 'Mengisi kata sandi...');
-      await page.fill(passwordSelector, passwordCode);
-      await page.waitForTimeout(1000);
-
-      // Check if captcha is visible on the page
-      const isCaptchaVisible = await page.locator('input[placeholder*="Captcha"], input[name*="captcha"], #captcha').isVisible().catch(() => false);
-      if (isCaptchaVisible) {
-        this.logStep(subject, 4, 'warn', 'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.');
-        // Wait for the user to complete login manually
-        let isLoginConfirmed = false;
-        const startTime = Date.now();
-        while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
-          const currentUrl = page.url();
-          if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
-            isLoginConfirmed = true;
-            break;
-          }
-          if (this.activeOtps.has(draftId)) {
-            const statusVal = this.activeOtps.get(draftId);
-            this.activeOtps.delete(draftId);
-            if (statusVal === 'CONFIRMED') {
-              isLoginConfirmed = true;
-              break;
-            }
-          }
-          await page.waitForTimeout(1000);
-        }
-        if (!isLoginConfirmed) {
-          this.logStep(subject, 4, 'error', 'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).');
-          throw new Error('Batas waktu login habis.');
-        }
-      } else {
-        this.logStep(subject, 4, 'info', 'Mengklik tombol "Masuk"...');
-        const loginButtonSelector = 'button[type="button"], button[type="submit"]';
-        await page.click(loginButtonSelector);
-
-        // Wait for redirection
-        this.logStep(subject, 4, 'info', 'Menunggu pengalihan (redirection) setelah masuk...');
-        let isRedirected = false;
-        const startTime = Date.now();
-        while (Date.now() - startTime < 30000) {
-          const currentUrl = page.url();
-          if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
-            isRedirected = true;
-            break;
-          }
-          await page.waitForTimeout(1000);
-        }
-
-        if (!isRedirected) {
-          // Check for any visible error message on the page related to login failure
-          const isLoginErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).isVisible().catch(() => false);
-          if (isLoginErrorVisible) {
-            const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).textContent().catch(() => 'Username atau Kata Sandi salah.');
-            this.logStep(subject, 4, 'error', `Login GAGAL di portal OSS: ${errorMsg.trim()}`);
-            throw new Error(`Login gagal: ${errorMsg.trim()}`);
-          }
-          
-          this.logStep(subject, 4, 'error', 'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).');
-          throw new Error('Login ditolak atau butuh penyelesaian CAPTCHA manual.');
-        }
-      }
-
-      this.logStep(subject, 4, 'success', 'Login berhasil! Sesi terautentikasi berhasil didirikan.');
-      await page.waitForTimeout(5000);
-      this.logStep(subject, 5, 'success', 'Proses otomatisasi selesai! Akun telah berhasil login ke portal OSS.');
-    } catch (error: any) {
-      console.error('Playwright execution error inside runPlaywrightAutomation:', error);
-      const errMsg = error.message || String(error);
-      this.logStep(subject, activeStep, 'error', `Terjadi kesalahan kritis: ${errMsg}`);
-    } finally {
-      try {
-        const videoPath = await page.video()?.path();
-        if (videoPath) {
-          this.logger.log(`Otomatisasi selesai. Rekaman disimpan di: ${videoPath}`);
-          this.logStep(subject, 5, 'info', `Rekaman otomatisasi disimpan di: ${videoPath}`);
-        }
-      } catch (videoErr) {
-        this.logger.error('Gagal mengambil path video rekaman', videoErr);
-      }
-      this.executionTimers.delete(draftId);
-      this.subjectToDraftId.delete(subject);
+      return { browser, context, page };
+    } catch (err) {
       await browser.close();
-      subject.complete();
+      throw err;
     }
   }
 
-  async runPlaywrightLogin(username: string, password: string): Promise<{ success: boolean; redirectedUrl: string; error?: string }> {
-    const headless = process.env.PLAYWRIGHT_HEADLESS === 'true';
-    const slowMo = parseInt(process.env.PLAYWRIGHT_SLOW_MO || '500', 10);
+  private async executeRegistrationSteps(
+    page: any,
+    draft: any,
+    draftId: string,
+    subject: Subject<AutomationEvent>
+  ): Promise<string> {
+    // 0. Open Register Page
+    await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 30000 });
     
-    console.log(`Launching Playwright (headless: ${headless}, slowMo: ${slowMo}ms)...`);
-    const browser = await chromium.launch({
-      headless,
-      slowMo,
-    });
+    // 1. Fill pelaku usaha dropdown
+    await page.waitForTimeout(1000);
+    this.logStep(subject, 2, 'info', 'Mengklik tombol "Pilih jenis pelaku usaha" dan memilih "Orang Perseorangan"...');
+    await page.getByRole('textbox', { name: 'Pilih jenis pelaku usaha' }).click();
+    await page.getByText('Orang Perseorangan').click();
+    
+    // 2. Fill NIK
+    await page.waitForTimeout(1000);
+    this.logStep(subject, 2, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
+    await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).click();
+    await page.getByRole('textbox', { name: 'Masukkan 16 digit NIK sesuai' }).fill(draft.nik);
+
+    // Wait dynamically for NIK and Email verification status in parallel (up to 15s max, checking every 500ms)
+    this.logStep(subject, 2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
+    await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
+    await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).fill(draft.email);
+
+    let isNikRegistered = false;
+    let isEmailRegistered = false;
+    const maxPollMs = 15000;
+    const pollIntervalMs = 500;
+    const startPollTime = Date.now();
+
+    while (Date.now() - startPollTime < maxPollMs) {
+      isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
+      isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
+      
+      if (isNikRegistered || isEmailRegistered) {
+        break;
+      }
+
+      const isVerifikasiEnabled = await page.getByRole('button', { name: 'Verifikasi' }).isEnabled().catch(() => false);
+      if (isVerifikasiEnabled && (Date.now() - startPollTime > 1500)) {
+        this.logStep(subject, 2, 'success', 'Validasi NIK dan Email sukses.');
+        break;
+      }
+
+      await page.waitForTimeout(pollIntervalMs);
+    }
+
+    if (isNikRegistered) {
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: NIK sudah terdaftar di portal OSS. Silakan masuk menggunakan akun terdaftar Anda.');
+      throw new Error('NIK sudah terdaftar di portal OSS.');
+    }
+
+    if (isEmailRegistered) {
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Email sudah terdaftar di portal OSS. Silakan gunakan email lain atau masuk dengan email terdaftar.');
+      throw new Error('Email sudah terdaftar di portal OSS.');
+    }
+    
+    // 4. Click Verifikasi
+    this.logStep(subject, 2, 'info', 'Mengklik tombol "Verifikasi"...');
+    await page.getByRole('button', { name: 'Verifikasi' }).click();
+    
+    // 5. Prompt OTP
+    await page.waitForTimeout(5000);
+    this.logStep(subject, 2, 'warn', 'PENTING: Silakan buka email Anda, salin kode OTP, dan masukkan kode OTP di halaman aplikasi.');
+
+    // 6. Asynchronous Wait for OTP submitted from Frontend!
+    let otpCode = '';
+    const startTime = Date.now();
+    while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
+      if (this.activeOtps.has(draftId)) {
+        otpCode = this.activeOtps.get(draftId)!;
+        this.activeOtps.delete(draftId);
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
+
+    if (!otpCode || otpCode.length !== 6) {
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian OTP telah habis (90 detik). Silakan coba lagi.');
+      throw new Error('Batas waktu pengisian OTP telah habis.');
+    }
+
+    this.logStep(subject, 2, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
+    
+    // 7. Fill OTP
+    await page.locator('.otp-input2').first().fill(otpCode[0] || '');
+    await page.locator('div:nth-child(2) > .otp-input2').fill(otpCode[1] || '');
+    await page.locator('div:nth-child(3) > .otp-input2').fill(otpCode[2] || '');
+    await page.locator('div:nth-child(4) > .otp-input2').fill(otpCode[3] || '');
+    await page.locator('div:nth-child(5) > .otp-input2').fill(otpCode[4] || '');
+    await page.locator('div:nth-child(6) > .otp-input2').fill(otpCode[5] || '');
+    
+    const isOtpErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).isVisible().catch(() => false);
+    if (isOtpErrorVisible) {
+      const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).textContent().catch(() => 'Kode OTP tidak valid.');
+      this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Verifikasi OTP gagal di portal OSS: ${errorMsg}`);
+      throw new Error(`Verifikasi OTP gagal: ${errorMsg}`);
+    }
+
+    // 8. Setting up password
+    await page.waitForTimeout(5000);
+    this.logStep(subject, 2, 'warn', 'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
 
     try {
-      const context = await browser.newContext({
-        viewport: { width: 1280, height: 720 },
-      });
-      const page = await context.newPage();
-      this.setupNetworkLogging(page, `login-${username}`);
+      await page.waitForSelector('input[type="password"]', { timeout: 30000 });
+    } catch (e) {
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Form pembuatan kata sandi tidak ditemukan atau verifikasi OTP gagal.');
+      throw new Error('Form pembuatan kata sandi tidak ditemukan.');
+    }
 
-      console.log('Opening https://ui-login-stg.oss.go.id/login...');
-      await page.goto(`${process.env.OSS_LOGIN_URL}`, {
-        waitUntil: 'networkidle',
-        timeout: 45000,
-      });
+    // Wait for password submitted from Frontend!
+    let passwordCode = '';
+    const startTimePass = Date.now();
+    while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
+      if (this.activePasswords.has(draftId)) {
+        passwordCode = this.activePasswords.get(draftId)!;
+        this.activePasswords.delete(draftId);
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
 
-      console.log('Looking for login inputs...');
-      const usernameSelector = 'input[name="username"], input[type="text"], input[placeholder*="Username"], input[placeholder*="Email"], #username';
-      const passwordSelector = 'input[name="password"], input[type="password"], input[placeholder*="Sandi"], input[placeholder*="Password"], #password';
+    if (!passwordCode) {
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian kata sandi telah habis (90 detik).');
+      throw new Error('Batas waktu pengisian kata sandi telah habis.');
+    }
 
+    // Fill both password inputs (Kata Sandi & Konfirmasi Kata Sandi)
+    this.logStep(subject, 2, 'info', 'Mengisi kata sandi baru dan konfirmasi kata sandi...');
+    const passwordInputs = page.locator('input[type="password"]');
+    await passwordInputs.nth(0).fill(passwordCode);
+    await page.waitForTimeout(1000);
+    await passwordInputs.nth(1).fill(passwordCode);
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Lanjut' }).click();
+
+    // Wait to verify if the password page submitted successfully
+    await page.waitForTimeout(3000);
+    const isPasswordStillVisible = await passwordInputs.first().isVisible().catch(() => false);
+    if (isPasswordStillVisible) {
+      const isMismatchVisible = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).isVisible().catch(() => false);
+      if (isMismatchVisible) {
+        const mismatchText = await page.getByText(/tidak sama|tidak sesuai|tidak cocok|konfirmasi/i).textContent().catch(() => 'Konfirmasi kata sandi tidak cocok.');
+        this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Konfirmasi kata sandi tidak cocok atau ditolak: ${mismatchText.trim()}`);
+        throw new Error(`Konfirmasi kata sandi tidak cocok: ${mismatchText.trim()}`);
+      }
+
+      const requirements = [
+        { key: 'Minimal 8 karakter', text: 'Minimal 8 karakter' },
+        { key: 'Menggunakan huruf', text: 'Menggunakan huruf' },
+        { key: 'Menggunakan angka', text: 'Menggunakan angka' },
+        { key: 'Menggunakan karakter spesial', text: 'Menggunakan karakter spesial (!@#$%^&*_-)' }
+      ];
+      const failedReqs: string[] = [];
+
+      for (const req of requirements) {
+        const textLocator = page.locator(`text="${req.key}"`).first();
+        if (await textLocator.isVisible().catch(() => false)) {
+          const parent = textLocator.locator('xpath=..');
+          let html = await parent.innerHTML().catch(() => '');
+          const grandparent = parent.locator('xpath=..');
+          const gHtml = await grandparent.innerHTML().catch(() => '');
+          html += ' ' + gHtml;
+
+          const hasRed = html.includes('red') || html.includes('danger') || html.includes('error') || html.includes('cross') || html.includes('close');
+          const hasGreen = html.includes('green') || html.includes('success') || html.includes('check');
+          
+          if (hasRed || !hasGreen) {
+            failedReqs.push(req.text);
+          }
+        }
+      }
+
+      if (failedReqs.length > 0) {
+        const listStr = failedReqs.map(r => `❌ ${r}`).join(', ');
+        this.logStep(subject, 2, 'error', `Pendaftaran GAGAL: Kekuatan kata sandi belum terpenuhi. Kriteria yang gagal: ${listStr}`);
+        throw new Error(`Kekuatan kata sandi belum terpenuhi: ${listStr}`);
+      }
+
+      this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Pembuatan kata sandi ditolak oleh portal OSS (kemungkinan konfirmasi kata sandi tidak cocok).');
+      throw new Error('Pembuatan kata sandi ditolak atau konfirmasi tidak cocok.');
+    }
+
+    return passwordCode;
+  }
+
+  private async executeDetailProfileSteps(
+    page: any,
+    draft: any,
+    subject: Subject<AutomationEvent>
+  ): Promise<void> {
+    this.logStep(subject, 3, 'info', 'Mengisi detail pelaku usaha...');
+    
+    // Trim leading 0, 62 or +62 from the phone number
+    let cleanPhone = draft.nomorHp.trim().replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('62')) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.startsWith('0')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+    this.logStep(subject, 3, 'info', `Mengisi nomor ponsel: ${draft.nomorHp}...`);
+    await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
+    await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(cleanPhone);
+    
+    this.logStep(subject, 3, 'info', `Mengisi nama pelaku usaha sesuai KTP: ${draft.namaPemilik}...`);
+    await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).click();
+    await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).fill(draft.namaPemilik);
+    
+    this.logStep(subject, 3, 'info', `Memilih jenis kelamin: ${draft.jenisKelamin}...`);
+    if (draft.jenisKelamin === 'Perempuan') {
+      await page.getByText('Perempuan').click();
+    } else {
+      await page.getByText('Laki-laki').click();
+    }
+    
+    // Reformat birth date from yyyy-mm-dd to dd/mm/yyyy
+    let formattedBirthDate = draft.tanggalLahir.trim();
+    if (formattedBirthDate.includes('-')) {
+      const parts = formattedBirthDate.split('-');
+      if (parts[0].length === 4) {
+        formattedBirthDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    this.logStep(subject, 3, 'info', `Mengisi tanggal lahir: ${formattedBirthDate}...`);
+    await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
+    await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
+    
+    // Fill alamat
+    await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
+    await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatKtp || draft.alamatUsaha);
+    
+    // Search and Select Provinsi
+    const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
+    const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
+    this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
+    
+    let provPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
+    await provPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanProvinsi);
+    await page.waitForTimeout(200);
+
+    // Trim "Kota" / "Kabupaten" and search using partial "like" match
+    const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
+    const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
+    const searchKota = this.getOptimalSearchQuery(cleanKota);
+    this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
+    
+    let kotaPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
+    await kotaPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKota);
+    await page.waitForTimeout(200);
+
+    // Search and Select Kecamatan
+    const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
+    const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
+    this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
+    
+    let kecPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
+    await kecPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKecamatan);
+    await page.waitForTimeout(200);
+
+    // Search and Select Desa / Kelurahan
+    const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
+    const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
+    this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
+    
+    let kelPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
+    await kelPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKelurahan);
+    await page.waitForTimeout(200);
+    
+    this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
+
+    // 10. Mencentang checkbox persetujuan
+    this.logStep(subject, 3, 'info', 'Mencentang checkbox persetujuan...');
+    try {
+      await page.getByRole('checkbox', { name: 'Saya setuju dengan Syarat dan' }).click({ force: true });
+    } catch (e) {
+      await page.getByText('Saya setuju dengan Syarat dan Ketentuan').first().click({ force: true });
+    }
+    
+    // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
+    this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
+    await page.getByRole('button', { name: 'Daftar' }).click();
+
+    // Wait for Dukcapil NIK/Name match checking API
+    this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
+    await page.waitForTimeout(4000);
+    
+    let isKtpMismatch = false;
+    try {
+      const count = await page.getByText('Data tidak sesuai KTP').count();
+      if (count > 0) {
+        isKtpMismatch = await page.getByText('Data tidak sesuai KTP').first().isVisible().catch(() => false);
+      }
+    } catch (e) {
+      isKtpMismatch = false;
+    }
+
+    if (isKtpMismatch) {
+      this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
+      throw new Error('Data tidak sesuai KTP');
+    }
+    
+    this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
+
+    // Keep open for a bit
+    await page.waitForTimeout(10000);
+  }
+
+  private async executeLoginSteps(
+    page: any,
+    draft: any,
+    draftId: string,
+    passwordCode: string,
+    subject: Subject<AutomationEvent>
+  ): Promise<void> {
+    this.logStep(subject, 4, 'info', 'Menjalankan otomatisasi login ke portal OSS...');
+
+    try {
+      await page.goto(`${process.env.OSS_LOGIN_URL}`, { waitUntil: 'networkidle', timeout: 30000 });
+    } catch (e) {
+      this.logStep(subject, 4, 'warn', 'Koneksi ke halaman login OSS lambat. Melanjutkan...');
+    }
+
+    this.logStep(subject, 4, 'info', 'Mencari kolom input login (Username & Password)...');
+    
+    const usernameSelector = 'input[name="username"], input[type="text"], input[placeholder*="Username"], input[placeholder*="Email"], #username';
+    const passwordSelector = 'input[name="password"], input[type="password"], input[placeholder*="Sandi"], input[placeholder*="Password"], #password';
+
+    try {
       await page.waitForSelector(usernameSelector, { timeout: 15000 });
-      await page.fill(usernameSelector, username);
+    } catch (e) {
+      this.logStep(subject, 4, 'error', 'Halaman login tidak dapat dimuat atau input username tidak ditemukan.');
+      throw new Error('Halaman login tidak dapat dimuat.');
+    }
 
-      await page.waitForSelector(passwordSelector, { timeout: 15000 });
-      await page.fill(passwordSelector, password);
+    // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
+    let finalPassword = passwordCode;
+    if (!finalPassword) {
+      this.logStep(subject, 4, 'warn', 'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.');
+      const startTimePass = Date.now();
+      while (Date.now() - startTimePass < 120000) { // Timeout after 120 seconds
+        if (this.activePasswords.has(draftId)) {
+          finalPassword = this.activePasswords.get(draftId)!;
+          this.activePasswords.delete(draftId);
+          break;
+        }
+        await page.waitForTimeout(500);
+      }
+    }
 
-      console.log('Clicking login button...');
-      const loginButtonSelector = 'button[type="button"]';
+    if (!finalPassword) {
+      this.logStep(subject, 4, 'error', 'Batas waktu pengisian kata sandi telah habis.');
+      throw new Error('Batas waktu pengisian kata sandi telah habis.');
+    }
+
+    this.logStep(subject, 4, 'info', `Mengisi kolom Username dengan Email: ${draft.email}...`);
+    await page.fill(usernameSelector, draft.email);
+    await page.waitForTimeout(500);
+
+    this.logStep(subject, 4, 'info', 'Mengisi kata sandi...');
+    await page.fill(passwordSelector, finalPassword);
+    await page.waitForTimeout(1000);
+
+    // Check if captcha is visible on the page
+    const isCaptchaVisible = await page.locator('input[placeholder*="Captcha"], input[name*="captcha"], #captcha').isVisible().catch(() => false);
+    if (isCaptchaVisible) {
+      this.logStep(subject, 4, 'warn', 'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.');
+      // Wait for the user to complete login manually
+      let isLoginConfirmed = false;
+      const startTime = Date.now();
+      while (Date.now() - startTime < 120000) { // Timeout after 120 seconds
+        const currentUrl = page.url();
+        if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
+          isLoginConfirmed = true;
+          break;
+        }
+        if (this.activeOtps.has(draftId)) {
+          const statusVal = this.activeOtps.get(draftId);
+          this.activeOtps.delete(draftId);
+          if (statusVal === 'CONFIRMED') {
+            isLoginConfirmed = true;
+            break;
+          }
+        }
+        await page.waitForTimeout(1000);
+      }
+      if (!isLoginConfirmed) {
+        this.logStep(subject, 4, 'error', 'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).');
+        throw new Error('Batas waktu login habis.');
+      }
+    } else {
+      this.logStep(subject, 4, 'info', 'Mengklik tombol "Masuk"...');
+      const loginButtonSelector = 'button[type="button"], button[type="submit"]';
       await page.click(loginButtonSelector);
 
-      console.log('Waiting for redirection from login page...');
-      let redirectedUrl = page.url();
+      // Wait for redirection
+      this.logStep(subject, 4, 'info', 'Menunggu pengalihan (redirection) setelah masuk...');
+      let isRedirected = false;
       const startTime = Date.now();
       while (Date.now() - startTime < 30000) {
         const currentUrl = page.url();
-        if (currentUrl && !currentUrl.includes('/login')) {
-          redirectedUrl = currentUrl;
-          console.log('Redirected URL detected:', redirectedUrl);
+        if (currentUrl && !currentUrl.includes('/login') && !currentUrl.includes('ui-login.oss.go.id')) {
+          isRedirected = true;
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await page.waitForTimeout(1000);
       }
 
-      redirectedUrl = page.url();
-
-      return {
-        success: !redirectedUrl.includes('/login'),
-        redirectedUrl,
-      };
-
-    } catch (error) {
-      console.error('Playwright automation error:', error);
-      return {
-        success: false,
-        redirectedUrl: '',
-        error: error.message || String(error),
-      };
-    } finally {
-      await browser.close();
+      if (!isRedirected) {
+        // Check for any visible error message on the page related to login failure
+        const isLoginErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).isVisible().catch(() => false);
+        if (isLoginErrorVisible) {
+          const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i).textContent().catch(() => 'Username atau Kata Sandi salah.');
+          this.logStep(subject, 4, 'error', `Login GAGAL di portal OSS: ${errorMsg.trim()}`);
+          throw new Error(`Login gagal: ${errorMsg.trim()}`);
+        }
+        
+        this.logStep(subject, 4, 'error', 'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).');
+        throw new Error('Login ditolak atau butuh penyelesaian CAPTCHA manual.');
+      }
     }
+
+    this.logStep(subject, 4, 'success', 'Login berhasil! Sesi terautentikasi berhasil didirikan.');
+    await page.waitForTimeout(5000);
+    this.logStep(subject, 5, 'success', 'Proses otomatisasi selesai! Akun telah berhasil login to portal OSS.');
   }
 
   private setupNetworkLogging(page: any, txId: string) {

@@ -44,9 +44,4 @@ export class AutomationController {
     this.automationService.submitPassword(draftId, body.password);
     return { success: true };
   }
-
-  @Post('login')
-  async login(@Body() payload: LoginPayload) {
-    return this.automationService.runPlaywrightLogin(payload.username, payload.password);
-  }
 }
