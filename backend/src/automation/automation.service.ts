@@ -222,6 +222,8 @@ export class AutomationService {
         this.logStep(subject, 2, 'warn', 'Koneksi ke oss.go.id lambat. Menjalankan rendering bantuan lokal di browser...');
       }
 
+      await this.logSessionState(page, `automation-${draftId}`, 'Browser Init');
+
       return { browser, context, page };
     } catch (err) {
       await browser.close();
@@ -330,6 +332,8 @@ export class AutomationService {
       throw new Error(`Verifikasi OTP gagal: ${errorMsg}`);
     }
 
+    await this.logSessionState(page, draftId, 'After OTP Verification');
+
     // 8. Setting up password
     await page.waitForTimeout(5000);
     this.logStep(subject, 2, 'warn', 'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.');
@@ -413,6 +417,8 @@ export class AutomationService {
       this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Pembuatan kata sandi ditolak oleh portal OSS (kemungkinan konfirmasi kata sandi tidak cocok).');
       throw new Error('Pembuatan kata sandi ditolak atau konfirmasi tidak cocok.');
     }
+
+    await this.logSessionState(page, draftId, 'After Password Creation');
 
     return passwordCode;
   }
@@ -558,6 +564,8 @@ export class AutomationService {
     
     this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
 
+    await this.logSessionState(page, draft.nik, 'After Detail Profile Submission');
+
     // Keep open for a bit
     await page.waitForTimeout(10000);
   }
@@ -677,24 +685,52 @@ export class AutomationService {
     }
 
     this.logStep(subject, 4, 'success', 'Login berhasil! Sesi terautentikasi berhasil didirikan.');
+
+    await this.logSessionState(page, draftId, 'After Successful Login');
+
     await page.waitForTimeout(5000);
     this.logStep(subject, 5, 'success', 'Proses otomatisasi selesai! Akun telah berhasil login to portal OSS.');
   }
 
   private setupNetworkLogging(page: any, txId: string) {
+    const requestStartTimes = new Map<any, number>();
+
+    // Log page redirections / navigations
+    page.on('framenavigated', (frame: any) => {
+      if (frame === page.mainFrame()) {
+        const url = frame.url();
+        this.logger.log(`[Tx: ${txId}] [Page Redirection/Navigation] Main frame navigated to: ${url}`);
+      }
+    });
+
     page.on('request', (request: any) => {
       const type = request.resourceType();
       if (type !== 'xhr' && type !== 'fetch') {
         return;
       }
+      
+      requestStartTimes.set(request, Date.now());
+
       const url = request.url();
       const method = request.method();
-      this.logger.log(`[Tx: ${txId}] [Network Request] ${method} ${url}`);
       
-      const postData = request.postData();
-      if (postData && (url.includes('/api/') || url.includes('/ref/') || url.includes('oss.go.id'))) {
-        this.logger.log(`[Tx: ${txId}] [Network Request Body] ${postData}`);
+      let logMsg = `[Tx: ${txId}] [Network Request] ${method} ${url}`;
+      
+      try {
+        const parsedUrl = new URL(url);
+        if (parsedUrl.search) {
+          logMsg += ` | Query Params: ${parsedUrl.search}`;
+        }
+      } catch (e) {
+        // Fallback for invalid URLs
       }
+
+      const postData = request.postData();
+      if (postData) {
+        logMsg += ` | Payload: ${postData}`;
+      }
+      
+      this.logger.log(logMsg);
     });
 
     page.on('response', async (response: any) => {
@@ -705,7 +741,12 @@ export class AutomationService {
       }
       const url = response.url();
       const status = response.status();
-      this.logger.log(`[Tx: ${txId}] [Network Response] ${status} ${url}`);
+      
+      const startTime = requestStartTimes.get(request);
+      requestStartTimes.delete(request);
+      const duration = startTime ? `${Date.now() - startTime}ms` : 'unknown';
+
+      this.logger.log(`[Tx: ${txId}] [Network Response] ${status} ${url} (took ${duration})`);
       
       if (url.includes('/ref/') || url.includes('oss.go.id/api') || url.includes('/provinsi') || url.includes('/kota') || url.includes('/kecamatan') || url.includes('/kelurahan')) {
         try {
@@ -725,8 +766,46 @@ export class AutomationService {
       if (type !== 'xhr' && type !== 'fetch') {
         return;
       }
+      requestStartTimes.delete(request);
       this.logger.warn(`[Tx: ${txId}] [Network Request Failed] ${request.method()} ${request.url()} - ${request.failure()?.errorText || 'Unknown error'}`);
     });
+  }
+
+  private async logSessionState(page: any, txId: string, contextMessage: string): Promise<void> {
+    try {
+      if (!page || page.isClosed()) return;
+
+      // 1. Log Cookies safely (truncating values to keep credentials confidential)
+      const cookies = await page.context().cookies().catch(() => []);
+      const cookieNames = cookies.map((c: any) => {
+        const val = c.value || '';
+        const trimmedVal = val.length > 10 ? val.substring(0, 10) + '...' : val;
+        return `${c.name}=${trimmedVal}`;
+      }).join(', ');
+      this.logger.log(`[Tx: ${txId}] [Session State - Cookies] [${contextMessage}] Active Cookies (${cookies.length}): [${cookieNames || 'none'}]`);
+
+      // 2. Log Local Storage summary
+      const localStorageSummary = await page.evaluate(() => {
+        try {
+          const keys = Object.keys(localStorage);
+          const summary: Record<string, string> = {};
+          keys.forEach(k => {
+            const val = localStorage.getItem(k) || '';
+            summary[k] = val.length > 30 ? val.substring(0, 30) + '...' : val;
+          });
+          return summary;
+        } catch (e) {
+          return null;
+        }
+      }).catch(() => null);
+
+      if (localStorageSummary) {
+        const lsStr = Object.entries(localStorageSummary).map(([k, v]) => `${k}: ${v}`).join(', ');
+        this.logger.log(`[Tx: ${txId}] [Session State - LocalStorage] [${contextMessage}] (${Object.keys(localStorageSummary).length} keys): { ${lsStr || 'empty'} }`);
+      }
+    } catch (e) {
+      // Ignore evaluation errors during page unloads or navigation states
+    }
   }
 
   private async selectOptionRobust(page: any, query: string): Promise<boolean> {
