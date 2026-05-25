@@ -348,12 +348,14 @@ export default function AutomationPage() {
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
     { label: "Validasi NIK & OTP", icon: "sms", step: 2 },
     { label: "Detail Profil & Registrasi", icon: "app_registration", step: 3 },
-    { label: "Login & CAPTCHA", icon: "login", step: 4 },
-    { label: "Selesai", icon: "check_circle", step: 5 }
+    { label: "Login", icon: "login", step: 4 },
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
+    { label: "Selesai", icon: "check_circle", step: 6 }
   ] : [
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
-    { label: "Login & CAPTCHA", icon: "login", step: 4 },
-    { label: "Selesai", icon: "check_circle", step: 5 }
+    { label: "Login", icon: "login", step: 4 },
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
+    { label: "Selesai", icon: "check_circle", step: 6 }
   ];
 
   return (

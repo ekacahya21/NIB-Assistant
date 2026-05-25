@@ -91,7 +91,8 @@ export class AutomationService {
             1: 'Inisialisasi Portal',
             2: 'Validasi NIK & OTP',
             3: 'Detail Profil & Registrasi',
-            4: 'Login & CAPTCHA'
+            4: 'Login & CAPTCHA',
+            5: 'Pengelolaan Lokasi Usaha'
           };
           const prevStepName = stepNames[prevStep] || `Langkah ${prevStep}`;
           
@@ -165,7 +166,15 @@ export class AutomationService {
 
       // Step 4: Login & Authentication
       activeStep = 4;
-      await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
+      const jwtToken = await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
+
+      // Step 5: Kelola Lokasi Usaha
+      activeStep = 5;
+      await this.executeManageLocationSteps(page, draft, jwtToken, subject);
+
+      // Step 6: Selesai
+      activeStep = 6;
+      this.logStep(subject, 6, 'success', 'Otomatisasi NIB selesai dengan sukses!');
 
     } catch (error: any) {
       console.error('Playwright execution error inside runPlaywrightAutomation:', error);
@@ -576,7 +585,7 @@ export class AutomationService {
     draftId: string,
     passwordCode: string,
     subject: Subject<AutomationEvent>
-  ): Promise<void> {
+  ): Promise<string> {
     this.logStep(subject, 4, 'info', 'Menjalankan otomatisasi login ke portal OSS...');
 
     try {
@@ -688,14 +697,47 @@ export class AutomationService {
 
     await this.logSessionState(page, draftId, 'After Successful Login');
 
+    this.logStep(subject, 4, 'info', 'Menunggu pemuatan data dashboard perizinan (network idle)...');
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 15000 });
+    } catch (e) {
+      // Ignore timeout if dashboard remains active
+    }
     await page.waitForTimeout(5000);
+
+    const currentUrl = page.url();
+    let jwtToken = '';
+    if (currentUrl) {
+      try {
+        const urlObj = new URL(currentUrl);
+        jwtToken = urlObj.searchParams.get('auth-code') || '';
+        
+        if (!jwtToken && urlObj.hash) {
+          const hashQuery = urlObj.hash.substring(urlObj.hash.indexOf('?'));
+          const hashParams = new URLSearchParams(hashQuery);
+          jwtToken = hashParams.get('auth-code') || '';
+        }
+        
+        if (!jwtToken) {
+          const match = currentUrl.match(/auth-code=([^&]+)/);
+          if (match) {
+            jwtToken = match[1];
+          }
+        }
+      } catch (err) {
+        // Safe fallback
+      }
+    }
+
     this.logStep(subject, 5, 'success', 'Proses otomatisasi selesai! Akun telah berhasil login to portal OSS.');
+    return jwtToken;
   }
 
   private setupNetworkLogging(page: any, txId: string) {
+    const context = page.context();
     const requestStartTimes = new Map<any, number>();
 
-    // Log page redirections / navigations
+    // Log page redirections / navigations for the main page
     page.on('framenavigated', (frame: any) => {
       if (frame === page.mainFrame()) {
         const url = frame.url();
@@ -703,7 +745,18 @@ export class AutomationService {
       }
     });
 
-    page.on('request', (request: any) => {
+    // Capture and log navigation in newly spawned pages/tabs/popups
+    context.on('page', (newPage: any) => {
+      this.logger.log(`[Tx: ${txId}] [New Tab/Popup opened] URL: ${newPage.url()}`);
+      newPage.on('framenavigated', (frame: any) => {
+        if (frame === newPage.mainFrame()) {
+          const url = frame.url();
+          this.logger.log(`[Tx: ${txId}] [Page Redirection/Navigation - Tab] Main frame navigated to: ${url}`);
+        }
+      });
+    });
+
+    context.on('request', (request: any) => {
       const type = request.resourceType();
       if (type !== 'xhr' && type !== 'fetch') {
         return;
@@ -733,7 +786,7 @@ export class AutomationService {
       this.logger.log(logMsg);
     });
 
-    page.on('response', async (response: any) => {
+    context.on('response', async (response: any) => {
       const request = response.request();
       const type = request.resourceType();
       if (type !== 'xhr' && type !== 'fetch') {
@@ -761,7 +814,7 @@ export class AutomationService {
       }
     });
 
-    page.on('requestfailed', (request: any) => {
+    context.on('requestfailed', (request: any) => {
       const type = request.resourceType();
       if (type !== 'xhr' && type !== 'fetch') {
         return;
@@ -919,5 +972,24 @@ export class AutomationService {
       }
     }
     return trimmed;
+  }
+
+  private async executeManageLocationSteps(
+    page: any,
+    draft: any,
+    jwtAccessToken: string,
+    subject: Subject<AutomationEvent>
+  ) {
+    this.logStep(subject, 5, 'info', 'Memulai pengelolaan lokasi usaha (Step 5)...');
+    
+    // 0. Open halaman daftar lokasi usaha
+    await page.goto(`${process.env.OSS_BERANDA_URL}/lokasi-usaha?auth-code=${jwtAccessToken}`, { waitUntil: 'networkidle', timeout: 30000 });
+
+    // 1. Klik Tambah Lokasi
+    await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
+    await page.getByRole('button', { name: 'Tambah Posisi Lokasi' }).click();
+    await page.getByRole('radio', { name: 'Darat' }).check();
+    await page.getByRole('radio', { name: 'Individual' }).check();
+    await page.getByRole('checkbox', { name: 'Permohonan persyaratan dasar' }).check();
   }
 }
