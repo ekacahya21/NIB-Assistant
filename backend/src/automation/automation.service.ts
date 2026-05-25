@@ -19,6 +19,7 @@ export class AutomationService {
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
   private readonly activePasswords = new Map<string, string>();
+  private readonly activeTokens = new Map<string, string>();
   private readonly subjectToDraftId = new Map<Subject<AutomationEvent>, string>();
   private readonly executionTimers = new Map<string, {
     startTime: number;
@@ -192,6 +193,7 @@ export class AutomationService {
           this.logger.error('Gagal mengambil path video rekaman', videoErr);
         }
       }
+      this.activeTokens.delete(draftId);
       this.executionTimers.delete(draftId);
       this.subjectToDraftId.delete(subject);
       if (browser) {
@@ -221,7 +223,7 @@ export class AutomationService {
         },
       });
       const page = await context.newPage();
-      this.setupNetworkLogging(page, `automation-${draftId}`);
+      this.setupNetworkLogging(page, `automation-${draftId}`, draftId);
 
       this.logStep(subject, 1, 'info', `Membuka alamat resmi portal registrasi: ${process.env.OSS_LOGIN_URL}`);
       try {
@@ -706,8 +708,11 @@ export class AutomationService {
     await page.waitForTimeout(5000);
 
     const currentUrl = page.url();
-    let jwtToken = '';
-    if (currentUrl) {
+    let jwtToken = this.activeTokens.get(draftId) || '';
+    if (jwtToken) {
+      this.activeTokens.delete(draftId);
+      this.logger.log(`[Tx: automation-${draftId}] Using captured token from navigation history.`);
+    } else if (currentUrl) {
       try {
         const urlObj = new URL(currentUrl);
         jwtToken = urlObj.searchParams.get('auth-code') || '';
@@ -733,7 +738,7 @@ export class AutomationService {
     return jwtToken;
   }
 
-  private setupNetworkLogging(page: any, txId: string) {
+  private setupNetworkLogging(page: any, txId: string, draftId: string) {
     const context = page.context();
     const requestStartTimes = new Map<any, number>();
 
@@ -742,16 +747,19 @@ export class AutomationService {
       if (frame === page.mainFrame()) {
         const url = frame.url();
         this.logger.log(`[Tx: ${txId}] [Page Redirection/Navigation] Main frame navigated to: ${url}`);
+        this.extractAndStoreToken(draftId, url);
       }
     });
 
     // Capture and log navigation in newly spawned pages/tabs/popups
     context.on('page', (newPage: any) => {
       this.logger.log(`[Tx: ${txId}] [New Tab/Popup opened] URL: ${newPage.url()}`);
+      this.extractAndStoreToken(draftId, newPage.url());
       newPage.on('framenavigated', (frame: any) => {
         if (frame === newPage.mainFrame()) {
           const url = frame.url();
           this.logger.log(`[Tx: ${txId}] [Page Redirection/Navigation - Tab] Main frame navigated to: ${url}`);
+          this.extractAndStoreToken(draftId, url);
         }
       });
     });
@@ -973,6 +981,39 @@ export class AutomationService {
     }
     return trimmed;
   }
+
+  private extractAndStoreToken(draftId: string, url: string) {
+    if (!url) return;
+    try {
+      let jwtToken = '';
+      const urlObj = new URL(url);
+      jwtToken = urlObj.searchParams.get('auth-code') || '';
+      
+      if (!jwtToken && urlObj.hash) {
+        const hashQueryIndex = urlObj.hash.indexOf('?');
+        if (hashQueryIndex !== -1) {
+          const hashQuery = urlObj.hash.substring(hashQueryIndex);
+          const hashParams = new URLSearchParams(hashQuery);
+          jwtToken = hashParams.get('auth-code') || '';
+        }
+      }
+      
+      if (!jwtToken) {
+        const match = url.match(/auth-code=([^&]+)/);
+        if (match) {
+          jwtToken = match[1];
+        }
+      }
+      
+      if (jwtToken) {
+        this.activeTokens.set(draftId, jwtToken);
+        this.logger.log(`[Tx: automation-${draftId}] [Token Capture] Captured auth-code token successfully.`);
+      }
+    } catch (err) {
+      // Safe fallback
+    }
+  }
+
 
   private async executeManageLocationSteps(
     page: any,
