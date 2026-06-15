@@ -27,6 +27,8 @@ export class DraftData {
   kbliCode?: string;
   kbliTitle?: string;
   jenisKelamin?: string;
+  latitude?: string;
+  longitude?: string;
   updatedAt?: string;
 }
 

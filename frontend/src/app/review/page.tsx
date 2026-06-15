@@ -66,7 +66,7 @@ export default function ReviewPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "dokumen_administrasi.pdf";
+      a.download = `dokumen_administrasi_${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -99,7 +99,7 @@ export default function ReviewPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "foto_lokasi.pdf";
+      a.download = `foto_lokasi_${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -198,6 +198,8 @@ export default function ReviewPage() {
         kecamatan: formData.kecamatan,
         kelurahan: formData.kelurahan,
         kodePos: formData.kodePos,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
         namaUsaha: formData.namaUsaha,
         ceritaUsaha: formData.ceritaUsaha,
         modalUsaha: formData.modalUsaha,

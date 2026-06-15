@@ -16,7 +16,7 @@ export class DocumentsController {
       
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename=dokumen_administrasi.pdf',
+        'Content-Disposition': `attachment; filename=dokumen_administrasi_${new Date().toISOString().split('T')[0]}.pdf`,
         'Content-Length': pdfBuffer.length,
       });
 
@@ -47,7 +47,7 @@ export class DocumentsController {
 
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename=foto_lokasi.pdf',
+        'Content-Disposition': `attachment; filename=foto_lokasi_${new Date().toISOString().split('T')[0]}.pdf`,
         'Content-Length': pdfBuffer.length,
       });
 

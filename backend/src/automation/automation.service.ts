@@ -551,12 +551,35 @@ export class AutomationService {
     }
     
     // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
-    this.logStep(subject, 3, 'info', 'Mengklik tombol "Daftar" untuk memproses pendaftaran akun...');
-    await page.getByRole('button', { name: 'Daftar' }).click();
+    const maxRetries = 3;
+    let isDukcapilError = false;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      this.logStep(subject, 3, 'info', `Mengklik tombol "Daftar" untuk memproses pendaftaran akun (Percobaan ${attempt}/${maxRetries})...`);
+      await page.getByRole('button', { name: 'Daftar' }).click();
+
+      // Wait 3 seconds to check for Dukcapil connection error after clicking Daftar
+      await page.waitForTimeout(3000);
+
+      isDukcapilError = await page.getByText('Gagal tersambung ke sistem dukcapil').first().isVisible().catch(() => false);
+      if (isDukcapilError) {
+        this.logStep(subject, 3, 'warn', `Terjadi kesalahan: Gagal tersambung ke sistem dukcapil. Menunggu 3 detik sebelum mencoba lagi...`);
+        if (attempt < maxRetries) {
+          await page.waitForTimeout(3000);
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (isDukcapilError) {
+      this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Gagal tersambung ke sistem dukcapil Kementerian Dalam Negeri setelah 3 kali percobaan. Silakan coba beberapa saat lagi.');
+      throw new Error('Gagal tersambung ke sistem dukcapil');
+    }
 
     // Wait for Dukcapil NIK/Name match checking API
     this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
-    await page.waitForTimeout(4000);
+    await page.waitForTimeout(1000);
     
     let isKtpMismatch = false;
     try {
@@ -946,24 +969,34 @@ export class AutomationService {
 
   private async clickAndFillInputResilient(page: any, selector: string, value: string, timeoutMs = 15000): Promise<boolean> {
     const startTime = Date.now();
-    const locator = page.getByRole('textbox', { name: selector });
     
     while (Date.now() - startTime < timeoutMs) {
+      // Try getByRole locator first
       try {
-        // Wait for element to be attached and visible
-        await locator.waitFor({ state: 'visible', timeout: 2000 });
-        
-        // Check disabled state
-        const isDisabled = await locator.getAttribute('disabled');
+        const roleLocator = page.getByRole('textbox', { name: selector });
+        await roleLocator.waitFor({ state: 'visible', timeout: 1000 });
+        const isDisabled = await roleLocator.getAttribute('disabled');
         if (isDisabled === null || isDisabled === 'false') {
-          // Attempt click and fill
-          await locator.click({ timeout: 2000 });
+          await roleLocator.click({ timeout: 1000 });
           await page.waitForTimeout(200);
-          await locator.fill(value);
+          await roleLocator.fill(value);
           return true;
         }
       } catch (e) {
-        // Click or fill failed, retry
+        // Try fallback to getByPlaceholder locator
+        try {
+          const placeholderLocator = page.getByPlaceholder(selector);
+          await placeholderLocator.waitFor({ state: 'visible', timeout: 1000 });
+          const isDisabled = await placeholderLocator.getAttribute('disabled');
+          if (isDisabled === null || isDisabled === 'false') {
+            await placeholderLocator.click({ timeout: 1000 });
+            await page.waitForTimeout(200);
+            await placeholderLocator.fill(value);
+            return true;
+          }
+        } catch (e2) {
+          // Both failed, retry in next loop iteration
+        }
       }
       await page.waitForTimeout(500);
     }
@@ -1023,14 +1056,143 @@ export class AutomationService {
   ) {
     this.logStep(subject, 5, 'info', 'Memulai pengelolaan lokasi usaha (Step 5)...');
     
-    // 0. Open halaman daftar lokasi usaha
-    await page.goto(`${process.env.OSS_BERANDA_URL}/lokasi-usaha?auth-code=${jwtAccessToken}`, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.getByTestId('top-menus').locator('div').filter({ hasText: 'Perizinan Berusaha' }).click();
+    await page.getByTestId('desktop-dropdown-panel').getByText('Kelola Usaha').click();
+    await page.getByTestId('category-right-panel').getByText('Lokasi Usaha').first().click();
 
-    // 1. Klik Tambah Lokasi
+    // wait for redirected page loaded
+    await page.waitForURL(/.*\/lokasi-usaha.*/, { waitUntil: 'networkidle', timeout: 15000 });
+    
     await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
+    await page.waitForURL(/.*\/lokasi-usaha\/tambah-lokasi.*/, { waitUntil: 'networkidle', timeout: 15000 });
+
     await page.getByRole('button', { name: 'Tambah Posisi Lokasi' }).click();
+    await page.waitForTimeout(2000);
+
+    // wait for matra api
+    await page.waitForResponse((response: any) => 
+      response.url().includes('/options/matra') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+
+    // Choose location type
     await page.getByRole('radio', { name: 'Darat' }).check();
     await page.getByRole('radio', { name: 'Individual' }).check();
     await page.getByRole('checkbox', { name: 'Permohonan persyaratan dasar' }).check();
+
+    // fill coordinate
+    const lat = draft.latitude;
+    const lon = draft.longitude;
+    const coordinate = `${lat}, ${lon}`;
+    this.logStep(subject, 5, 'info', `Mengisi koordinat usaha dari draft: ${coordinate}...`);
+    await page.getByRole('combobox', { name: 'Cari alamat...' }).fill(coordinate);
+
+    // get display name
+    await page.waitForResponse((response: any) => 
+      response.url().includes('nominatim.openstreetmap.org/search') && response.status() === 200 && response.body().includes(lat) && response.body().includes(lon),
+      { timeout: 5000 }
+    ).catch(() => null);
+
+    // select first suggestion
+    await page.getByRole('listbox').getByRole('option').locator('div').first().click();
+
+    await page.getByRole('textbox', { name: 'Luas Lahan' }).fill('50');
+    await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill('jalan jalan');
+    
+    const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
+    const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
+    this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
+    
+    let provPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
+    await provPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanProvinsi);
+    await page.waitForTimeout(200);
+
+    // Trim "Kota" / "Kabupaten" and search using partial "like" match
+    const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
+    const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
+    const searchKota = this.getOptimalSearchQuery(cleanKota);
+    this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
+    
+    let kotaPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
+    await kotaPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKota);
+    await page.waitForTimeout(200);
+
+    // Search and Select Kecamatan
+    const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
+    const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
+    this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
+    
+    let kecPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
+    await kecPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKecamatan);
+    await page.waitForTimeout(200);
+
+    // Search and Select Desa / Kelurahan
+    const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
+    const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
+    this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
+    
+    let kelPromise = page.waitForResponse((response: any) => 
+      response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
+      { timeout: 3000 }
+    ).catch(() => null);
+    await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
+    await kelPromise;
+    await page.waitForTimeout(200);
+    await this.selectOptionRobust(page, cleanKelurahan);
+    await page.waitForTimeout(200);
+
+
+
+    /* 
+    await page.getByRole('radio', { name: 'Darat' }).check();
+    await page.getByRole('radio', { name: 'Individual' }).check();
+    await page.getByRole('checkbox', { name: 'Permohonan persyaratan dasar' }).check();
+    await page.getByRole('combobox', { name: 'Cari alamat...' }).click();
+    await page.getByRole('combobox', { name: 'Cari alamat...' }).fill('-6.269381147627927, 106.87487845640132');
+    await page.getByText('Jalan Masjid Al Munir, RW 03').click();
+    await page.getByRole('textbox', { name: 'Luas Lahan' }).click();
+    await page.getByRole('textbox', { name: 'Luas Lahan' }).fill('50');
+    await page.getByRole('textbox', { name: 'Alamat lengkap' }).click();
+    await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill('jalan jalan');
+    await page.getByRole('combobox', { name: 'Pilih provinsi' }).click();
+    await page.getByRole('combobox', { name: 'Pilih provinsi' }).fill('dk');
+    await page.getByRole('option', { name: 'DKI Jakarta' }).click();
+    await page.locator('#input-v-0-56').click();
+    await page.getByText('Kota Adm. Jakarta Timur').click();
+    await page.locator('#input-v-0-61').click();
+    await page.locator('#input-v-0-61').fill('m');
+    await page.getByText('Makasar').click();
+    await page.locator('#input-v-0-66').click();
+    await page.locator('#menu-v-0-64').getByText('Makasar').click();
+    await page.locator('#wrapper-file-784890087').getByRole('button', { name: 'Pilih Dokumen' }).click();
+    await page.locator('#wrapper-file-784890087').getByRole('button', { name: 'Pilih Dokumen' }).setInputFiles('dokumen_administrasi (2).pdf');
+    await page.getByRole('button', { name: 'Pilih Dokumen' }).click();
+    await page.getByRole('button', { name: 'Pilih Dokumen' }).setInputFiles('dokumen_administrasi (2).pdf');
+    await page.getByRole('radio', { name: 'Tidak' }).check();
+    await page.getByRole('radio', { name: 'Tidak' }).press('F12');
+    await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
+    await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).press('F12');
+    await page.getByText('Kembali Simpan Posisi Lokasi').click({
+      button: 'right'
+    });
+     */
   }
 }
