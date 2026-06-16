@@ -204,6 +204,8 @@ export default function ReviewPage() {
         caraPenjualan: formData.caraPenjualan,
         kbliCode: selectedKbli.code,
         kbliTitle: selectedKbli.title,
+        luasTanah: formData.luasTanah || "0",
+        fotoLokasi: formData.fotoLokasi || "",
       };
 
       const res = await fetch(`${API_URL}/drafts`, {

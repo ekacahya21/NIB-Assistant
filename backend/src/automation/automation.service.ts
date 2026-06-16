@@ -3,6 +3,9 @@ import { Observable, Subject } from 'rxjs';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from '@zorilla/puppeteer-extra-plugin-stealth';
 import { DraftsService } from '../drafts/drafts.service';
+import { DocumentsService } from '../documents/documents.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Configure Playwright Extra with the stealth evasion plugin globally
 chromium.use(stealthPlugin());
@@ -27,7 +30,10 @@ export class AutomationService {
     stepStartTimes: Map<number, number>;
   }>();
 
-  constructor(private readonly draftsService: DraftsService) {}
+  constructor(
+    private readonly draftsService: DraftsService,
+    private readonly documentsService: DocumentsService,
+  ) {}
 
   // Trigger login confirmation or OTP for a specific draft ID
   confirmLogin(draftId: string) {
@@ -1096,103 +1102,154 @@ export class AutomationService {
     // select first suggestion
     await page.getByRole('listbox').getByRole('option').locator('div').first().click();
 
-    await page.getByRole('textbox', { name: 'Luas Lahan' }).fill('50');
-    await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill('jalan jalan');
+    // Fill Luas Lahan and Alamat Lengkap
+    this.logStep(subject, 5, 'info', `Mengisi Luas Lahan: ${draft.luasTanah || '150'} m²...`);
+    await page.getByRole('textbox', { name: 'Luas Lahan' }).click();
+    await page.getByRole('textbox', { name: 'Luas Lahan' }).fill(draft.luasTanah || '150');
     
-    const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
+    this.logStep(subject, 5, 'info', `Mengisi Alamat Lengkap Usaha: ${draft.alamatUsaha}...`);
+    await page.getByRole('textbox', { name: 'Alamat lengkap' }).click();
+    await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill(draft.alamatUsaha);
+
+    // Select Provinsi
+    const cleanProvinsi = (draft.provinsiKtp || draft.provinsi || 'DKI JAKARTA').trim();
     const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
-    this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
+    this.logStep(subject, 5, 'info', `Mencari provinsi usaha: ${cleanProvinsi}...`);
     
     let provPromise = page.waitForResponse((response: any) => 
       response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
-      { timeout: 3000 }
+      { timeout: 5000 }
     ).catch(() => null);
-    await this.clickAndFillInputResilient(page, 'Pilih provinsi', searchProvinsi);
+    await page.getByRole('combobox', { name: 'Pilih provinsi' }).click();
+    await page.getByRole('combobox', { name: 'Pilih provinsi' }).fill(searchProvinsi);
     await provPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanProvinsi);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
-    // Trim "Kota" / "Kabupaten" and search using partial "like" match
-    const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
+    // Select Kota/Kabupaten (combobox index 1)
+    const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten || '';
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.getOptimalSearchQuery(cleanKota);
-    this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
+    this.logStep(subject, 5, 'info', `Mencari kabupaten/kota usaha: ${rawKota}...`);
     
     let kotaPromise = page.waitForResponse((response: any) => 
       response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
-      { timeout: 3000 }
+      { timeout: 5000 }
     ).catch(() => null);
-    await this.clickAndFillInputResilient(page, 'Pilih kabupaten/kota', searchKota);
+    
+    const comboboxes = page.getByRole('combobox');
+    await comboboxes.nth(1).click();
+    await comboboxes.nth(1).fill(searchKota);
     await kotaPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKota);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
-    // Search and Select Kecamatan
-    const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
+    // Select Kecamatan (combobox index 2)
+    const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan || '').trim();
     const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
-    this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
+    this.logStep(subject, 5, 'info', `Mencari kecamatan usaha: ${cleanKecamatan}...`);
     
     let kecPromise = page.waitForResponse((response: any) => 
       response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
-      { timeout: 3000 }
+      { timeout: 5000 }
     ).catch(() => null);
-    await this.clickAndFillInputResilient(page, 'Pilih kecamatan', searchKecamatan);
+    
+    await comboboxes.nth(2).click();
+    await comboboxes.nth(2).fill(searchKecamatan);
     await kecPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKecamatan);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
-    // Search and Select Desa / Kelurahan
-    const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
+    // Select Desa / Kelurahan (combobox index 3)
+    const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan || '').trim();
     const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
-    this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
+    this.logStep(subject, 5, 'info', `Mencari desa/kelurahan usaha: ${cleanKelurahan}...`);
     
     let kelPromise = page.waitForResponse((response: any) => 
       response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
-      { timeout: 3000 }
+      { timeout: 5000 }
     ).catch(() => null);
-    await this.clickAndFillInputResilient(page, 'Pilih desa/kelurahan', searchKelurahan);
+    
+    await comboboxes.nth(3).click();
+    await comboboxes.nth(3).fill(searchKelurahan);
     await kelPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKelurahan);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
+    // Dynamic Document PDF Generation & Upload
+    this.logStep(subject, 5, 'info', 'Menyiapkan dokumen administrasi PDF secara dinamis...');
+    const draftId = draft.id || 'draft';
+    const npsPath = path.join(process.cwd(), `nps_${draftId}.pdf`);
+    const photoPath = path.join(process.cwd(), `foto_lokasi_${draftId}.pdf`);
+    let createdNps = false;
+    let createdPhoto = false;
 
+    try {
+      // 1. Generate NPS PDF
+      const npsBuffer = await this.documentsService.generateAdministrationPdf({
+        alamatUsaha: draft.alamatUsaha || 'Alamat Usaha',
+        latitude: draft.latitude || '-6.2088',
+        longitude: draft.longitude || '106.8456',
+        luasTanah: draft.luasTanah || '150',
+      });
+      fs.writeFileSync(npsPath, npsBuffer);
+      createdNps = true;
+      this.logStep(subject, 5, 'info', 'Dokumen Administrasi PDF berhasil dibuat.');
 
-    /* 
-    await page.getByRole('radio', { name: 'Darat' }).check();
-    await page.getByRole('radio', { name: 'Individual' }).check();
-    await page.getByRole('checkbox', { name: 'Permohonan persyaratan dasar' }).check();
-    await page.getByRole('combobox', { name: 'Cari alamat...' }).click();
-    await page.getByRole('combobox', { name: 'Cari alamat...' }).fill('-6.269381147627927, 106.87487845640132');
-    await page.getByText('Jalan Masjid Al Munir, RW 03').click();
-    await page.getByRole('textbox', { name: 'Luas Lahan' }).click();
-    await page.getByRole('textbox', { name: 'Luas Lahan' }).fill('50');
-    await page.getByRole('textbox', { name: 'Alamat lengkap' }).click();
-    await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill('jalan jalan');
-    await page.getByRole('combobox', { name: 'Pilih provinsi' }).click();
-    await page.getByRole('combobox', { name: 'Pilih provinsi' }).fill('dk');
-    await page.getByRole('option', { name: 'DKI Jakarta' }).click();
-    await page.locator('#input-v-0-56').click();
-    await page.getByText('Kota Adm. Jakarta Timur').click();
-    await page.locator('#input-v-0-61').click();
-    await page.locator('#input-v-0-61').fill('m');
-    await page.getByText('Makasar').click();
-    await page.locator('#input-v-0-66').click();
-    await page.locator('#menu-v-0-64').getByText('Makasar').click();
-    await page.locator('#wrapper-file-784890087').getByRole('button', { name: 'Pilih Dokumen' }).click();
-    await page.locator('#wrapper-file-784890087').getByRole('button', { name: 'Pilih Dokumen' }).setInputFiles('dokumen_administrasi (2).pdf');
-    await page.getByRole('button', { name: 'Pilih Dokumen' }).click();
-    await page.getByRole('button', { name: 'Pilih Dokumen' }).setInputFiles('dokumen_administrasi (2).pdf');
+      // 2. Generate Photo PDF or fallback
+      if (draft.fotoLokasi) {
+        const photoBuffer = await this.documentsService.convertPhotoToPdf(draft.fotoLokasi);
+        fs.writeFileSync(photoPath, photoBuffer);
+        createdPhoto = true;
+        this.logStep(subject, 5, 'info', 'Dokumen Foto Lokasi PDF berhasil dibuat.');
+      } else {
+        // Fallback: Copy NPS PDF to photo path
+        fs.writeFileSync(photoPath, npsBuffer);
+        createdPhoto = true;
+        this.logStep(subject, 5, 'info', 'Foto Lokasi tidak ada, menggunakan fallback dokumen administrasi.');
+      }
+
+      // Upload files
+      this.logStep(subject, 5, 'info', 'Mengunggah dokumen PDF ke portal OSS...');
+      
+      const fileInputs = page.locator('input[type="file"]');
+      await fileInputs.first().setInputFiles(npsPath);
+      await page.waitForTimeout(1000);
+      
+      await fileInputs.last().setInputFiles(photoPath);
+      await page.waitForTimeout(1000);
+      
+      this.logStep(subject, 5, 'success', 'Kedua berkas PDF berhasil diunggah.');
+
+    } catch (pdfErr: any) {
+      this.logger.error('Gagal memproses/mengunggah dokumen PDF:', pdfErr);
+      this.logStep(subject, 5, 'warn', `Peringatan: Gagal memproses berkas PDF otomatis (${pdfErr.message || pdfErr}). Melompati unggah otomatis.`);
+    }
+
+    // Check 'Tidak' radio button
+    this.logStep(subject, 5, 'info', 'Memilih opsi bangunan "Tidak"...');
     await page.getByRole('radio', { name: 'Tidak' }).check();
-    await page.getByRole('radio', { name: 'Tidak' }).press('F12');
+    await page.waitForTimeout(500);
+
+    // Save Position Location
+    this.logStep(subject, 5, 'info', 'Mengklik tombol "Simpan Posisi Lokasi" untuk mendaftarkan lokasi...');
     await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
-    await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).press('F12');
-    await page.getByText('Kembali Simpan Posisi Lokasi').click({
-      button: 'right'
-    });
-     */
+    await page.waitForTimeout(3000);
+
+    // Cleanup temp files
+    try {
+      if (createdNps && fs.existsSync(npsPath)) {
+        fs.unlinkSync(npsPath);
+      }
+      if (createdPhoto && fs.existsSync(photoPath)) {
+        fs.unlinkSync(photoPath);
+      }
+    } catch (cleanupErr) {
+      this.logger.warn('Gagal menghapus file PDF temporer:', cleanupErr);
+    }
   }
 }

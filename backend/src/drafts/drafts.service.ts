@@ -30,6 +30,8 @@ export class DraftData {
   latitude?: string;
   longitude?: string;
   updatedAt?: string;
+  luasTanah?: string;
+  fotoLokasi?: string;
 }
 
 @Injectable()
