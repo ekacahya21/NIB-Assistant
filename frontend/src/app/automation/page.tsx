@@ -534,38 +534,72 @@ export default function AutomationPage() {
                   Langkah Proses Pengisian
                 </h3>
 
-                <div className="space-y-4 relative before:absolute before:inset-y-0 before:left-4 before:-translate-x-px before:w-0.5 before:bg-border-light">
+                <div className={`space-y-4 relative transition-all duration-350 ${
+                  isPromptingOtp || isPromptingPassword 
+                    ? "" 
+                    : "before:absolute before:inset-y-0 before:left-4 before:-translate-x-px before:w-0.5 before:bg-border-light"
+                }`}>
                   {stepLabels.map(({ label, icon, step }) => {
                     const isCompleted = currentStep > step || (step === 5 && currentStep === 5);
                     const isCurrent = currentStep === step;
+                    const isActionRequired = isCurrent && (isPromptingOtp || isPromptingPassword);
+                    const isPromptActive = isPromptingOtp || isPromptingPassword;
+                    const shouldHide = isPromptActive && !isCurrent;
 
                     return (
-                      <div key={step} className="relative flex items-start gap-4">
+                      <div 
+                        key={step} 
+                        className={`relative flex items-start gap-4 transition-all duration-350 ease-in-out origin-top ${
+                          shouldHide 
+                            ? "max-h-0 opacity-0 overflow-hidden pointer-events-none -mt-4 py-0" 
+                            : "max-h-24 opacity-100"
+                        } ${
+                          isActionRequired 
+                            ? "bg-amber-50/70 border border-amber-200/50 p-3 rounded-md shadow-sm -mx-3" 
+                            : ""
+                        }`}
+                      >
                         {/* Dot node */}
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 border transition-all ${
-                          isCompleted 
-                            ? "bg-success text-white border-success" 
-                            : isCurrent 
-                              ? "bg-primary-container text-white border-primary-container animate-pulse" 
-                              : "bg-[#ECEEF0] text-on-surface-variant border-border-light"
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 border transition-all duration-350 ${
+                          isActionRequired
+                            ? "bg-amber-500 text-white border-amber-500 relative"
+                            : isCompleted 
+                              ? "bg-success text-white border-success" 
+                              : isCurrent 
+                                ? "bg-primary-container text-white border-primary-container animate-pulse" 
+                                : "bg-[#ECEEF0] text-on-surface-variant border-border-light"
                         }`}>
+                          {isActionRequired && (
+                            <span className="absolute inset-0 rounded-full bg-amber-500/30 pulse-ring" />
+                          )}
                           {isCompleted ? (
                             <span className="material-symbols-outlined text-sm font-bold">check</span>
                           ) : (
-                            <span className="material-symbols-outlined text-sm">{icon}</span>
+                            <span className="material-symbols-outlined text-sm">{isActionRequired ? "priority_high" : icon}</span>
                           )}
                         </div>
 
                         {/* Text labels */}
                         <div className="pt-1.5 flex-1">
-                          <h4 className={`text-xs font-bold uppercase tracking-wide ${
-                            isCompleted ? "text-on-surface" : isCurrent ? "text-primary-container font-extrabold" : "text-outline"
+                          <h4 className={`text-xs font-bold uppercase tracking-wide transition-colors duration-350 ${
+                            isActionRequired 
+                              ? "text-amber-700 font-extrabold" 
+                              : isCompleted 
+                                ? "text-on-surface" 
+                                : isCurrent 
+                                  ? "text-primary-container font-extrabold" 
+                                  : "text-outline"
                           }`}>
                             {label}
                           </h4>
                           {isCurrent && (
-                            <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mt-0.5">
-                              Sedang diproses...
+                            <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 transition-colors duration-350 ${
+                              isActionRequired ? "text-amber-600 animate-pulse" : "text-on-surface-variant"
+                            }`}>
+                              {isActionRequired 
+                                ? (isPromptingOtp ? "⚠️ Tindakan Diperlukan: Masukkan OTP" : "⚠️ Tindakan Diperlukan: Atur Kata Sandi")
+                                : "Sedang diproses..."
+                              }
                             </p>
                           )}
                         </div>
