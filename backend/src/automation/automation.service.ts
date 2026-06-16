@@ -165,17 +165,16 @@ export class AutomationService {
         // Step 2: Registration & Verification
         activeStep = 2;
         passwordCode = await this.executeRegistrationSteps(page, draft, draftId, subject);
+      
+        // Step 3: Fill Detailed Profile Information (first login triggers the detailed profile form)
+        activeStep = 3;
+        await this.executeDetailProfileSteps(page, draft, subject);
       }
 
       // Step 4: Login & Authentication (required before detailed profile can be filled)
       activeStep = 4;
       const jwtToken = await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
 
-      if (isRegister) {
-        // Step 3: Fill Detailed Profile Information (first login triggers the detailed profile form)
-        activeStep = 3;
-        await this.executeDetailProfileSteps(page, draft, subject);
-      }
 
       // Step 5: Kelola Lokasi Usaha
       activeStep = 5;
