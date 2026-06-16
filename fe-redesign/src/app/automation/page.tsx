@@ -152,7 +152,11 @@ export default function AutomationPage() {
                 setStatusText("Membuka Portal OSS");
               }
             }
-            if (payload.step === 3 && failedStepRef.current === null) setStatusText("Mengisi detail akun & mendaftar...");
+            if (payload.step === 3 && failedStepRef.current === null) {
+              setStatusText("Mengisi detail akun & mendaftar...");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+            }
             if (payload.step === 4 && failedStepRef.current === null) {
               if (payload.text.includes("Silakan masukkan kata sandi")) {
                 setStatusText("Menunggu Anda memasukkan Kata Sandi...");
@@ -170,8 +174,15 @@ export default function AutomationPage() {
                 setStatusText("Autentikasi & Login OSS...");
               }
             }
+            if (payload.step === 5 && failedStepRef.current === null) {
+              setStatusText("Mengelola Lokasi Usaha...");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+            }
             if (payload.step === 6 && failedStepRef.current === null) {
               setStatusText("Proses Otomatisasi Selesai!");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
               // Redirect to result page after 2 seconds
               setTimeout(() => {
                 router.push("/result?state=success");
