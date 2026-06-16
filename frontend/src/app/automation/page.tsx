@@ -663,7 +663,7 @@ export default function AutomationPage() {
                       <div className="w-2.5 h-2.5 rounded-full bg-warning" />
                       <div className="w-2.5 h-2.5 rounded-full bg-success" />
                     </div>
-                    <div className="flex-1 max-w-sm bg-white border border-border-light rounded px-2.5 py-1 text-[10px] font-bold text-on-surface-variant flex items-center gap-1.5 truncate">
+                    <div className="flex-1 bg-white border border-border-light rounded px-2.5 py-1 text-[10px] font-bold text-on-surface-variant flex items-center gap-1.5 truncate">
                       <span className="material-symbols-outlined text-xs text-success">lock</span>
                       <span>
                         {isPromptingOtp 
