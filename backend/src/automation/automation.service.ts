@@ -165,15 +165,17 @@ export class AutomationService {
         // Step 2: Registration & Verification
         activeStep = 2;
         passwordCode = await this.executeRegistrationSteps(page, draft, draftId, subject);
+      }
 
-        // Step 3: Fill Detailed Profile Information
+      // Step 4: Login & Authentication (required before detailed profile can be filled)
+      activeStep = 4;
+      const jwtToken = await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
+
+      if (isRegister) {
+        // Step 3: Fill Detailed Profile Information (first login triggers the detailed profile form)
         activeStep = 3;
         await this.executeDetailProfileSteps(page, draft, subject);
       }
-
-      // Step 4: Login & Authentication
-      activeStep = 4;
-      const jwtToken = await this.executeLoginSteps(page, draft, draftId, passwordCode, subject);
 
       // Step 5: Kelola Lokasi Usaha
       activeStep = 5;
@@ -1137,10 +1139,7 @@ export class AutomationService {
       response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
       { timeout: 5000 }
     ).catch(() => null);
-    
-    const comboboxes = page.getByRole('combobox');
-    await comboboxes.nth(1).click();
-    await comboboxes.nth(1).fill(searchKota);
+    await page.getByPlaceholder('Kabupaten').locator('input').fill(searchKota);
     await kotaPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKota);
@@ -1156,8 +1155,7 @@ export class AutomationService {
       { timeout: 5000 }
     ).catch(() => null);
     
-    await comboboxes.nth(2).click();
-    await comboboxes.nth(2).fill(searchKecamatan);
+    await page.getByPlaceholder('Kecamatan').locator('input').fill(searchKecamatan);
     await kecPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKecamatan);
@@ -1173,12 +1171,14 @@ export class AutomationService {
       { timeout: 5000 }
     ).catch(() => null);
     
-    await comboboxes.nth(3).click();
-    await comboboxes.nth(3).fill(searchKelurahan);
+    await page.getByPlaceholder('Kelurahan').locator('input').fill(searchKelurahan);
     await kelPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKelurahan);
     await page.waitForTimeout(500);
+
+    // input kode pos
+    await page.getByRole('textbox', { name: 'Kode Pos' }).fill(draft.kodePosKtp || draft.kodePos || '');
 
     // Dynamic Document PDF Generation & Upload
     this.logStep(subject, 5, 'info', 'Menyiapkan dokumen administrasi PDF secara dinamis...');
@@ -1217,11 +1217,35 @@ export class AutomationService {
       this.logStep(subject, 5, 'info', 'Mengunggah dokumen PDF ke portal OSS...');
       
       const fileInputs = page.locator('input[type="file"]');
+      
+      // Setup promises to wait for upload network responses
+      const upload1Promise = page.waitForResponse((response: any) => 
+        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) && 
+        response.status() === 200,
+        { timeout: 25000 }
+      ).catch(() => null);
+      
+      this.logStep(subject, 5, 'info', 'Mengunggah Dokumen Pernyataan Mandiri...');
       await fileInputs.first().setInputFiles(npsPath);
+      await upload1Promise;
       await page.waitForTimeout(1000);
       
+      const upload2Promise = page.waitForResponse((response: any) => 
+        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) && 
+        response.status() === 200,
+        { timeout: 25000 }
+      ).catch(() => null);
+      
+      this.logStep(subject, 5, 'info', 'Mengunggah Foto Lokasi...');
       await fileInputs.last().setInputFiles(photoPath);
+      await upload2Promise;
       await page.waitForTimeout(1000);
+      
+      // Wait for any loading/progressbar indicator to detach
+      this.logStep(subject, 5, 'info', 'Menunggu proses unggah selesai di portal...');
+      await page.locator('.v-progress-linear, .v-progress-circular, [role="progressbar"]').waitFor({ state: 'detached', timeout: 10000 }).catch(() => null);
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(1500);
       
       this.logStep(subject, 5, 'success', 'Kedua berkas PDF berhasil diunggah.');
 
