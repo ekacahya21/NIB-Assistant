@@ -39,6 +39,10 @@ export default function AutomationPage() {
   const [updatedNik, setUpdatedNik] = useState<string>("");
   const [updatedNama, setUpdatedNama] = useState<string>("");
   const [isUpdatingDraft, setIsUpdatingDraft] = useState<boolean>(false);
+  
+  // Accordion open state for technical logs
+  const [isLogsOpen, setIsLogsOpen] = useState<boolean>(false);
+  
   const streamRef = useRef<EventSource | null>(null);
   const failedStepRef = useRef<number | null>(null);
   
@@ -124,7 +128,6 @@ export default function AutomationPage() {
               }
               setStatusText("Otomatisasi Gagal");
             } else {
-              // Only advance currentStep if no step has failed
               if (failedStepRef.current === null) {
                 setCurrentStep(payload.step);
               }
@@ -149,7 +152,11 @@ export default function AutomationPage() {
                 setStatusText("Membuka Portal OSS");
               }
             }
-            if (payload.step === 3 && failedStepRef.current === null) setStatusText("Mengisi detail akun & mendaftar...");
+            if (payload.step === 3 && failedStepRef.current === null) {
+              setStatusText("Mengisi detail akun & mendaftar...");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+            }
             if (payload.step === 4 && failedStepRef.current === null) {
               if (payload.text.includes("Silakan masukkan kata sandi")) {
                 setStatusText("Menunggu Anda memasukkan Kata Sandi...");
@@ -167,7 +174,20 @@ export default function AutomationPage() {
                 setStatusText("Autentikasi & Login OSS...");
               }
             }
-            if (payload.step === 5 && failedStepRef.current === null) setStatusText("Proses Otomatisasi Selesai!");
+            if (payload.step === 5 && failedStepRef.current === null) {
+              setStatusText("Mengelola Lokasi Usaha...");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+            }
+            if (payload.step === 6 && failedStepRef.current === null) {
+              setStatusText("Proses Otomatisasi Selesai!");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+              // Redirect to result page after 2 seconds
+              setTimeout(() => {
+                router.push("/result?state=success");
+              }, 2000);
+            }
           }
         } catch (err) {
           console.error("Error parsing EventSource data", err);
@@ -178,7 +198,6 @@ export default function AutomationPage() {
         if (eventSource) {
           eventSource.close();
         }
-        // Only log warning if not a planned verification error
         if (failedStepRef.current === null) {
           addLog("Koneksi backend tidak terdeteksi.", "warn");
         }
@@ -238,7 +257,6 @@ export default function AutomationPage() {
         addLog("[Sistem] Memulai ulang otomatisasi...", "info");
       }
       
-      // Reset States
       failedStepRef.current = null;
       setFailedStep(null);
       setErrorType(null);
@@ -256,7 +274,6 @@ export default function AutomationPage() {
         streamRef.current.close();
       }
       
-      // Connect stream again to restart
       connectStream();
     } catch (err: any) {
       console.error(err);
@@ -266,32 +283,20 @@ export default function AutomationPage() {
     }
   };
 
-  // Resume after user clicks "Saya sudah login"
   const handleUserLoggedIn = () => {
-    if (currentStep !== 2) return;
+    if (currentStep !== 2 && currentStep !== 4) return;
 
-    // Optional: ping backend that login was confirmed
     const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
     fetch(`${API_URL}/automation/confirm/${draftId}`, { method: "POST" })
       .then(() => console.log("Login confirmed to backend"))
       .catch((err) => console.log("Offline or connection error: using simulated progression", err));
 
-    addLog("Persetujuan diterima: User melaporkan login berhasil.", "success");
+    addLog("Persetujuan diterima: User melaporkan login/CAPTCHA selesai.", "success");
     addLog("Melakukan sinkronisasi session state browser...", "info");
+    setIsPromptingOtp(false);
+    setIsPromptingPassword(false);
   };
 
-  // Reset and restart the entire registration wizard from scratch
-  const handleResetAndRestartWizard = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("draft_form_data");
-      sessionStorage.removeItem("wizard_step");
-      sessionStorage.removeItem("skala_usaha");
-      sessionStorage.removeItem("draft_id");
-    }
-    router.push("/wizard");
-  };
-
-  // Submit OTP
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!otp.trim()) return;
@@ -304,19 +309,22 @@ export default function AutomationPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ otp })
     })
-      .then(() => console.log("OTP sent to backend"))
-      .catch((err) => console.log("Offline or connection error: using simulated progression", err))
+      .then(() => {
+        addLog(`Kode OTP (${otp}) terkirim ke backend.`, "success");
+      })
+      .catch((err) => console.log("Offline or connection error", err))
       .finally(() => {
         setIsSubmittingOtp(false);
+        setIsPromptingOtp(false);
+        setOtp("");
       });
   };
 
-  // Submit Password
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword.trim()) return;
 
-    if (newPassword !== confirmPassword) {
+    if (newPassword !== confirmPassword && isBelumAkun()) {
       setPasswordError("Kata sandi dan konfirmasi kata sandi tidak cocok.");
       return;
     }
@@ -335,306 +343,430 @@ export default function AutomationPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: newPassword })
     })
-      .then(() => console.log("Password sent to backend"))
-      .catch((err) => console.log("Offline or connection error: using simulated progression", err))
+      .then(() => {
+        addLog("Kata sandi berhasil dikirim ke backend.", "success");
+      })
+      .catch((err) => console.log("Offline or connection error", err))
       .finally(() => {
         setIsSubmittingPassword(false);
         setIsPromptingPassword(false);
-        addLog("Kata sandi baru berhasil dikirim ke backend.", "success");
+        setNewPassword("");
+        setConfirmPassword("");
       });
   };
-  // Step label data
-  const stepLabels = akunOss === "belum" ? [
+
+  const handleManualRedirect = () => {
+    router.push("/result?state=failed");
+  };
+
+  const isBelumAkun = () => akunOss === "belum";
+
+  const stepLabels = isBelumAkun() ? [
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
     { label: "Validasi NIK & OTP", icon: "sms", step: 2 },
     { label: "Detail Profil & Registrasi", icon: "app_registration", step: 3 },
-    { label: "Login", icon: "login", step: 4 },
-    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
-    { label: "Selesai", icon: "check_circle", step: 6 }
+    { label: "Login & Otentikasi", icon: "login", step: 4 },
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 }
   ] : [
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
-    { label: "Login", icon: "login", step: 4 },
-    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
-    { label: "Selesai", icon: "check_circle", step: 6 }
+    { label: "Login & Otentikasi", icon: "login", step: 4 },
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 }
   ];
 
   return (
-    <div className="flex flex-col bg-background min-h-screen h-screen overflow-hidden">
-      {/* Top AppBar */}
-      <header className="flex-none flex items-center justify-between px-4 h-14 w-full bg-background border-b border-border-light z-50">
+    <div className="flex-grow flex flex-col bg-background min-h-screen font-sans">
+      
+      {/* ── Top Flat AppBar ── */}
+      <header className="sticky top-0 z-50 flex items-center justify-between px-4 md:px-8 h-16 w-full bg-white border-b border-border-light">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => router.push("/review")}
-            className="text-primary hover:bg-primary/10 transition-all p-2 rounded-xl flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary/30"
-            aria-label="Kembali"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
+          <button onClick={() => router.push("/review")} className="p-2 hover:bg-surface-container transition-all rounded text-on-surface-variant flex items-center justify-center" aria-label="Kembali">
+            <span className="material-symbols-outlined text-xl">arrow_back</span>
           </button>
-          <h1 className="text-xl font-bold text-primary">NIB Assistant</h1>
+          <div className="flex flex-col">
+            <span className="text-sm font-extrabold text-primary-container leading-none uppercase">NIB Assistant</span>
+            <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-widest mt-0.5">Automator Monitor</span>
+          </div>
         </div>
-        <button
-          onClick={() => router.push("/")}
-          className="p-2 text-on-surface-variant hover:opacity-80 transition-opacity rounded-full hover:bg-surface-container-high active:scale-95"
-          aria-label="Bantuan"
-        >
-          <span className="material-symbols-outlined text-[24px]">help</span>
+        <button onClick={handleManualRedirect} className="text-[10px] font-bold uppercase tracking-wider text-error border border-error/30 hover:bg-error/5 px-3 py-1.5 rounded transition-all">
+          Hentikan Bot
         </button>
       </header>
 
-      {/* Main Split Layout */}
-      <main className="flex-1 w-full grid grid-cols-1 lg:grid-cols-12 h-[calc(100vh-56px)] overflow-hidden">
-        
-        {/* Left Column: Progress Timeline */}
-        <section className="lg:col-span-3 bg-surface-card flex flex-col h-full border-r border-border-light overflow-y-auto">
-          <div className="p-6">
-            <h2 className="text-xl font-semibold text-primary mb-2">Progress Otomatisasi</h2>
-            <p className="text-base text-on-surface-variant mb-8">Sistem sedang memproses data Anda ke portal OSS.</p>
-
-            {/* Vertical Stepper */}
-            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-4 before:-translate-x-px before:h-full before:w-0.5 before:bg-border-light">
-              {stepLabels.map(({ label, icon, step }) => {
-                const isCompleted = failedStep === null ? (currentStep > step || (step === 5 && currentStep === 5)) : (step < failedStep);
-                const isCurrent = failedStep === null && currentStep === step && step !== 5;
-                const isFailed = failedStep === step;
-                const isWaiting = step === currentStep && isCurrent && failedStep === null;
-
-                return (
-                  <div key={step} className="relative flex items-start gap-4 group">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 relative ${
-                      isFailed ? "bg-rose-500 text-white border border-rose-500"
-                      : isCompleted ? "bg-primary text-on-primary border border-primary"
-                      : isCurrent ? "border-2 border-primary bg-surface-card text-primary"
-                      : "border border-outline-variant bg-surface-card text-outline-variant"
-                    }`}>
-                      {isCurrent && !isFailed && <div className="absolute inset-0 rounded-full bg-primary/20 pulse-ring" />}
-                      {isFailed ? <span className="material-symbols-outlined text-[18px]">close</span>
-                      : isCompleted ? <span className="material-symbols-outlined text-[18px]" style={{fontVariationSettings: "'FILL' 1"}}>check</span>
-                      : isCurrent ? <span className="material-symbols-outlined text-[18px] animate-spin">sync</span>
-                      : <span className="material-symbols-outlined text-[18px]">{icon}</span>}
-                    </div>
-                    <div className={`flex-1 ${step < stepLabels.length ? "pb-4" : ""}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className={`text-sm font-semibold ${isFailed ? "text-rose-600" : isCurrent ? "text-primary font-bold" : isCompleted ? "text-on-surface" : "text-outline"}`}>{label}</h3>
-                        {isCurrent && !isFailed && <span className="text-xs text-primary font-medium">Sedang Proses</span>}
-                        {isCompleted && step === 5 && <span className="text-xs text-primary font-semibold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Sukses</span>}
-                      </div>
-                      {isCurrent && !isFailed && <p className="text-xs text-on-surface-variant">{statusText}</p>}
-                      {isFailed && <p className="text-xs text-rose-600">{errorText}</p>}
-                      {isCompleted && step === 1 && <p className="text-xs text-on-surface-variant">Semua data valid.</p>}
-                      {isCompleted && step === 5 && <p className="text-xs text-on-surface-variant">Proses otomatisasi selesai dengan sukses!</p>}
-
-                      {/* Interactive inputs based on active step */}
-                      {isWaiting && (
-                        <div className="mt-3 space-y-3">
-                          {currentStep === 2 && (
-                            <>
-                              {isPromptingPassword ? (
-                                <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-1">
-                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
-                                    <span>Buat Kata Sandi Baru:</span>
-                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
-                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
-                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Kata Sandi Baru</label>
-                                    <input type="password" placeholder="Minimal 8 karakter" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={timeLeft === 0}
-                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Konfirmasi</label>
-                                    <input type="password" placeholder="Ulangi" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={timeLeft === 0}
-                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
-                                  </div>
-                                  {passwordError && <p className="text-[10px] text-error font-semibold">{passwordError}</p>}
-                                  <button type="submit" disabled={isSubmittingPassword || !newPassword || !confirmPassword || timeLeft === 0}
-                                    className="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                    {isSubmittingPassword ? "Mengonfigurasi..." : "Buat Kata Sandi"}
-                                  </button>
-                                </form>
-                              ) : isPromptingOtp ? (
-                                <div className="space-y-2 mt-1">
-                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
-                                    <span>Masukkan Kode OTP:</span>
-                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
-                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
-                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
-                                    </span>
-                                  </div>
-                                  <form onSubmit={handleOtpSubmit} className="flex items-center gap-2">
-                                    <input type="text" placeholder="Kode OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} disabled={timeLeft === 0}
-                                      className="flex-1 bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs font-bold font-mono tracking-widest text-center focus:outline-none focus:border-primary disabled:opacity-50" />
-                                    <button type="submit" disabled={isSubmittingOtp || !otp || timeLeft === 0}
-                                      className="bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs disabled:opacity-50 shrink-0">
-                                      {isSubmittingOtp ? "..." : "Kirim"}
-                                    </button>
-                                  </form>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
-                                  <span className="material-symbols-outlined text-base animate-spin">sync</span>
-                                  <span>Menunggu form dimuat...</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          {currentStep === 4 && (
-                            <>
-                              {isPromptingPassword ? (
-                                <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-1">
-                                  <div className="flex items-center justify-between text-[11px] font-semibold text-on-surface-variant">
-                                    <span>Masukkan Kata Sandi:</span>
-                                    <span className={`flex items-center gap-1 font-mono ${timeLeft < 20 ? "text-error animate-pulse" : "text-primary"}`}>
-                                      <span className="material-symbols-outlined text-[12px]">schedule</span>
-                                      {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <input type="password" placeholder="Kata Sandi Akun OSS" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={timeLeft === 0}
-                                      className="w-full bg-surface-container border border-border-light rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-primary disabled:opacity-50" required />
-                                  </div>
-                                  {passwordError && <p className="text-[10px] text-error font-semibold">{passwordError}</p>}
-                                  <button type="submit" disabled={isSubmittingPassword || !newPassword || timeLeft === 0}
-                                    className="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                    {isSubmittingPassword ? "Mengirim..." : "Kirim Kata Sandi"}
-                                  </button>
-                                </form>
-                              ) : isPromptingOtp ? (
-                                <div className="space-y-2 mt-1">
-                                  <div className="text-[11px] font-semibold text-on-surface-variant leading-relaxed">
-                                    Silakan selesaikan CAPTCHA di jendela browser Chrome, lalu klik tombol di bawah untuk melanjutkan:
-                                  </div>
-                                  <button onClick={handleUserLoggedIn} className="w-full bg-primary text-on-primary font-bold py-2.5 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 mt-1 hover:opacity-90 active:scale-95 transition-all shadow-sm">
-                                    Saya sudah menyelesaikan CAPTCHA & Masuk <span className="material-symbols-outlined text-sm">check_circle</span>
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 py-1.5 text-xs text-on-surface-variant font-semibold animate-pulse">
-                                  <span className="material-symbols-outlined text-base animate-spin">sync</span>
-                                  <span>Menjalankan otomatisasi login...</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Error Recovery Panel */}
-          {failedStep !== null && (
-            <div className="mt-auto p-4 bg-rose-50 border-t border-rose-200">
-              <form onSubmit={handleRestartAutomation} className="space-y-3">
-                <div className="flex gap-3 mb-2">
-                  <span className="material-symbols-outlined text-rose-500 text-xl shrink-0">warning</span>
-                  <div>
-                    <h4 className="text-sm font-bold text-rose-800">{errorType === "ktp_mismatch" ? "Verifikasi KTP Gagal" : errorType === "generic" ? "Kegagalan Sistem" : "Verifikasi Gagal"}</h4>
-                    <p className="text-xs text-rose-700 mt-0.5">{errorText}</p>
-                  </div>
+      {/* ── Main Container (max 640px) ── */}
+      <main className="flex-grow flex justify-center w-full px-4 py-8 pb-32 md:pb-12">
+        <div className="w-full max-w-[640px] flex flex-col gap-6">
+          
+          {/* ── FULL SCREEN STATE SHIFT OVERLAY: RECOVERABLE VERIFICATION ERROR ── */}
+          {failedStep !== null && errorType !== "generic" && (
+            <div className="bento-card border border-error/30 bg-error/5 p-8 space-y-6 animate-fadeIn">
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded bg-error/10 text-error flex items-center justify-center mx-auto">
+                  <span className="material-symbols-outlined text-2xl">warning</span>
                 </div>
+                <h2 className="text-base font-extrabold uppercase tracking-wider text-error">Verifikasi Data Gagal</h2>
+                <p className="text-xs text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+                  {errorText || "Data NIK tidak terdaftar atau tidak cocok dengan sistem Dukcapil di portal OSS."}
+                </p>
+              </div>
+
+              <form onSubmit={handleRestartAutomation} className="space-y-4 max-w-xs mx-auto">
                 {errorType === "ktp_mismatch" ? (
-                  <div className="space-y-2">
-                    <input type="text" placeholder="Nama Pemilik Baru" value={updatedNama} onChange={(e) => setUpdatedNama(e.target.value)} className="w-full bg-white border border-rose-300 rounded-lg py-2 px-3 text-xs text-rose-900 placeholder:text-rose-300" />
-                    <input type="text" maxLength={16} placeholder="NIK Baru (16 Digit)" value={updatedNik} onChange={(e) => setUpdatedNik(e.target.value)} className="w-full bg-white border border-rose-300 rounded-lg py-2 px-3 text-xs text-rose-900 placeholder:text-rose-300" />
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-on-surface-variant uppercase">Nama Lengkap (Sesuai KTP)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Nama Pemilik Baru" 
+                        value={updatedNama} 
+                        onChange={(e) => setUpdatedNama(e.target.value)} 
+                        className="w-full min-h-[44px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                        required 
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-on-surface-variant uppercase">NIK Baru (16-Digit)</label>
+                      <input 
+                        type="text" 
+                        maxLength={16} 
+                        placeholder="NIK Baru" 
+                        value={updatedNik} 
+                        onChange={(e) => setUpdatedNik(e.target.value.replace(/\D/g, ""))} 
+                        className="w-full min-h-[44px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-mono tracking-wider focus:border-primary-container focus:outline-none"
+                        required 
+                      />
+                    </div>
                   </div>
-                ) : errorType !== "generic" ? (
-                  <input type={errorType === "nik" ? "text" : "email"} maxLength={errorType === "nik" ? 16 : 100} placeholder={errorType === "nik" ? "NIK Baru" : "Email Baru"} value={updatedValue} onChange={(e) => setUpdatedValue(e.target.value)}
-                    className="w-full bg-white border border-rose-300 rounded-lg py-2 px-3 text-xs text-rose-900 placeholder:text-rose-300" required />
-                ) : null}
-                <button type="submit" disabled={isUpdatingDraft || (errorType !== "ktp_mismatch" && errorType !== "generic" && !updatedValue.trim()) || (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim())}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase">
+                      {errorType === "nik" ? "Nomor NIK Baru" : "Alamat Email Baru"}
+                    </label>
+                    <input 
+                      type={errorType === "nik" ? "text" : "email"} 
+                      maxLength={errorType === "nik" ? 16 : 100} 
+                      placeholder={errorType === "nik" ? "NIK Baru" : "Email Baru"} 
+                      value={updatedValue} 
+                      onChange={(e) => setUpdatedValue(e.target.value)}
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-semibold focus:border-primary-container focus:outline-none" 
+                      required 
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isUpdatingDraft || (errorType !== "ktp_mismatch" && !updatedValue.trim()) || (errorType === "ktp_mismatch" && !updatedNik.trim() && !updatedNama.trim())}
+                  className="w-full bg-primary-container hover:bg-primary text-white font-bold py-3 px-6 rounded text-xs uppercase tracking-wider min-h-[44px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                >
                   <span className="material-symbols-outlined text-sm">{isUpdatingDraft ? "sync" : "refresh"}</span>
-                  {isUpdatingDraft ? "Memproses..." : errorType === "generic" ? "Mulai Ulang" : "Perbarui & Mulai Ulang"}
+                  {isUpdatingDraft ? "Memperbarui..." : "Perbarui & Mulai Ulang"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualRedirect}
+                  className="w-full border border-border-light text-on-surface-variant font-bold py-2 px-4 rounded text-[10px] uppercase tracking-wider hover:bg-surface-container"
+                >
+                  Lanjutkan Secara Manual
                 </button>
               </form>
             </div>
           )}
-        </section>
 
-        {/* Right Column: Browser Session + Terminal */}
-        <section className="lg:col-span-9 bg-surface-container-low flex flex-col h-full overflow-hidden">
-          {/* Mock Browser Header */}
-          <div className="bg-surface-container-high px-4 py-3 flex items-center gap-4 border-b border-border-light flex-none">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-error" />
-              <div className="w-3 h-3 rounded-full bg-amber-400" />
-              <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            </div>
-            <div className="flex-1 max-w-2xl bg-surface rounded-md px-3 py-1.5 flex items-center gap-2 border border-border-light text-sm text-on-surface-variant">
-              <span className="material-symbols-outlined text-[16px]">lock</span>
-              <span className="text-xs truncate">https://oss.go.id/auth/login</span>
-            </div>
-          </div>
+          {/* ── STANDALONE STATE: UNRECOVERABLE / GENERIC SYSTEM FAILURE ── */}
+          {failedStep !== null && errorType === "generic" && (
+            <div className="bento-card border border-error/30 bg-error/5 p-8 space-y-6 animate-fadeIn text-center">
+              <div className="w-12 h-12 rounded bg-error/10 text-error flex items-center justify-center mx-auto">
+                <span className="material-symbols-outlined text-2xl">error_outline</span>
+              </div>
+              <h2 className="text-base font-extrabold uppercase tracking-wider text-error">Otomatisasi Terhenti</h2>
+              <p className="text-xs text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+                {errorText || "Terjadi kesalahan internal. Struktur halaman portal OSS BKPM mengalami perubahan."}
+              </p>
 
-          {/* Browser Content Area */}
-          <div className="flex-1 relative flex items-center justify-center p-8 overflow-y-auto">
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-              <span className="material-symbols-outlined text-[300px]">smart_toy</span>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-xs mx-auto pt-2">
+                <button
+                  onClick={() => handleRestartAutomation()}
+                  className="flex-1 bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-4 rounded text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">refresh</span> Coba Lagi
+                </button>
+                <button
+                  onClick={handleManualRedirect}
+                  className="flex-1 border border-border-light text-on-surface font-bold py-2.5 px-4 rounded text-xs uppercase tracking-wider hover:bg-surface-container"
+                >
+                  Isi Manual
+                </button>
+              </div>
             </div>
-            <div className="w-full max-w-lg bg-surface-card rounded-xl shadow-lg border border-border-light p-10 text-center space-y-6 z-10 relative">
-              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-md ${failedStep !== null ? "bg-rose-100" : currentStep === 5 ? "bg-emerald-100" : "bg-primary-container"}`}>
-                <span className={`material-symbols-outlined text-[40px] ${failedStep !== null ? "text-rose-600" : currentStep === 5 ? "text-emerald-600" : "text-on-primary-container animate-pulse"}`}>
-                  {failedStep !== null ? "error" : currentStep === 5 ? "verified" : "speed"}
-                </span>
-              </div>
-              <div>
-                <h3 className={`text-xl font-semibold mb-3 ${failedStep !== null ? "text-rose-700" : currentStep === 5 ? "text-emerald-700" : "text-primary"}`}>
-                  {failedStep !== null ? "Otomatisasi Terhenti" : currentStep === 5 ? "NIB Draft Berhasil!" : "Mengamankan Sesi"}
-                </h3>
-                <p className="text-base text-on-surface-variant px-4">
-                  {failedStep !== null ? "Terjadi masalah. Periksa panel kiri untuk detail." : currentStep === 5 ? "Draft NIB Anda telah berhasil dibuat di portal OSS." : "NIB Assistant sedang membangun jalur aman untuk mengirimkan data Anda. Harap jangan menutup jendela ini."}
-                </p>
-              </div>
-              {failedStep === null && currentStep < 5 && (
-                <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden mt-4">
-                  <div className="bg-primary h-2.5 rounded-full transition-all duration-1000 ease-in-out relative overflow-hidden" style={{ width: `${(currentStep / 5) * 100}%` }}>
-                    <div className="absolute inset-0 bg-white/20 -skew-x-12 animate-shimmer" />
+          )}
+
+          {/* ── STANDARD MONITORING VIEW (Timeline + Mock Browser) ── */}
+          {failedStep === null && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Status Header */}
+              <div className="bento-card flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded bg-primary-container/10 text-primary-container flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-xl animate-spin">sync</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold text-on-surface uppercase tracking-wide">
+                      {statusText}
+                    </h3>
+                    <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mt-0.5">
+                      Bot sedang bekerja di portal OSS
+                    </p>
                   </div>
                 </div>
-              )}
-              {currentStep === 5 && (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
-                  <button onClick={() => router.push("/")} className="px-8 py-3 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 shadow-md">
-                    Kembali ke Beranda <span className="material-symbols-outlined text-[18px]">home</span>
-                  </button>
-                  <button onClick={handleResetAndRestartWizard} className="px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 shadow-md">
-                    Isi Ulang Form <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                  </button>
+                <div className="w-24 bg-surface-container rounded-full h-2 overflow-hidden shrink-0">
+                  <div 
+                    className="bg-primary-container h-2 rounded-full transition-all duration-1000 ease-in-out" 
+                    style={{ width: `${(currentStep / 5) * 100}%` }}
+                  />
                 </div>
-              )}
-              {failedStep !== null && (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
-                  <button onClick={() => handleRestartAutomation()} className="px-8 py-3 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 shadow-md">
-                    Mulai Kembali <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-                  </button>
-                  <button onClick={handleResetAndRestartWizard} className="px-8 py-3 rounded-full bg-surface-container border border-border-light text-on-surface font-semibold text-sm hover:bg-surface-container-high flex items-center justify-center gap-2 shadow-md">
-                    Isi Ulang Form <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                  </button>
+              </div>
+
+              {/* Steps timeline list */}
+              <div className="bento-card space-y-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wide text-on-surface-variant border-b border-border-light pb-2 mb-2">
+                  Langkah Proses Pengisian
+                </h3>
+
+                <div className="space-y-4 relative before:absolute before:inset-y-0 before:left-4 before:-translate-x-px before:w-0.5 before:bg-border-light">
+                  {stepLabels.map(({ label, icon, step }) => {
+                    const isCompleted = currentStep > step || (step === 5 && currentStep === 5);
+                    const isCurrent = currentStep === step;
+
+                    return (
+                      <div key={step} className="relative flex items-start gap-4">
+                        {/* Dot node */}
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 border transition-all ${
+                          isCompleted 
+                            ? "bg-success text-white border-success" 
+                            : isCurrent 
+                              ? "bg-primary-container text-white border-primary-container animate-pulse" 
+                              : "bg-[#ECEEF0] text-on-surface-variant border-border-light"
+                        }`}>
+                          {isCompleted ? (
+                            <span className="material-symbols-outlined text-sm font-bold">check</span>
+                          ) : (
+                            <span className="material-symbols-outlined text-sm">{icon}</span>
+                          )}
+                        </div>
+
+                        {/* Text labels */}
+                        <div className="pt-1.5 flex-1">
+                          <h4 className={`text-xs font-bold uppercase tracking-wide ${
+                            isCompleted ? "text-on-surface" : isCurrent ? "text-primary-container font-extrabold" : "text-outline"
+                          }`}>
+                            {label}
+                          </h4>
+                          {isCurrent && (
+                            <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mt-0.5">
+                              Sedang diproses...
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+
+              {/* Mock browser session */}
+              <div className="bg-white border border-border-light rounded-xl overflow-hidden">
+                <div className="bg-[#ECEEF0] border-b border-border-light px-3 py-2 flex items-center gap-3">
+                  <div className="flex gap-1 shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-error" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-warning" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-success" />
+                  </div>
+                  <div className="flex-1 max-w-sm bg-white border border-border-light rounded px-2.5 py-1 text-[10px] font-bold text-on-surface-variant flex items-center gap-1.5 truncate">
+                    <span className="material-symbols-outlined text-xs text-success">lock</span>
+                    <span>
+                      {isPromptingOtp 
+                        ? (currentStep === 4 ? "https://oss.go.id/login/captcha" : "https://oss.go.id/register/otp")
+                        : isPromptingPassword 
+                          ? (isBelumAkun() ? "https://oss.go.id/register/setup-password" : "https://oss.go.id/login/auth")
+                          : "https://oss.go.id/register"
+                      }
+                    </span>
+                  </div>
+                </div>
+                
+                {isPromptingOtp ? (
+                  <div className="p-8 bg-white space-y-6 animate-fadeIn">
+                    <div className="text-center space-y-2">
+                      <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto">
+                        <span className="material-symbols-outlined text-2xl animate-bounce">sms</span>
+                      </div>
+                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">Masukkan Kode OTP</h3>
+                      <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+                        Masukkan kode OTP yang dikirimkan ke WhatsApp/SMS nomor HP Anda untuk memvalidasi pendaftaran di portal OSS.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleOtpSubmit} className="space-y-4 max-w-xs mx-auto">
+                      <div className="flex flex-col gap-1.5 text-left">
+                        <div className="flex justify-between items-center text-[9px] font-extrabold uppercase tracking-wider text-on-surface-variant">
+                          <span>Kode Verifikasi</span>
+                          <span className={`flex items-center gap-1 font-mono font-bold ${timeLeft < 25 ? "text-error animate-pulse" : "text-primary-container"}`}>
+                            <span className="material-symbols-outlined text-[10px]">schedule</span>
+                            {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="------"
+                          maxLength={6}
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          className="w-full min-h-[44px] px-3.5 py-2.5 rounded border border-border-light bg-white text-center font-mono text-lg tracking-widest font-extrabold focus:border-primary-container focus:outline-none"
+                          disabled={timeLeft === 0}
+                          required
+                          autoFocus
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingOtp || otp.length < 4 || timeLeft === 0}
+                        className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                      >
+                        {isSubmittingOtp ? "Memverifikasi..." : "Verifikasi & Lanjutkan"}
+                      </button>
+
+                      {currentStep === 4 && (
+                        <button
+                          type="button"
+                          onClick={handleUserLoggedIn}
+                          className="w-full border border-border-light text-on-surface-variant font-bold py-2 px-4 rounded text-[9px] uppercase tracking-wider hover:bg-surface-container"
+                        >
+                          Saya Sudah Selesaikan CAPTCHA di Chrome
+                        </button>
+                      )}
+                    </form>
+                  </div>
+                ) : isPromptingPassword ? (
+                  <div className="p-8 bg-white space-y-6 animate-fadeIn">
+                    <div className="text-center space-y-2">
+                      <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto">
+                        <span className="material-symbols-outlined text-2xl">lock</span>
+                      </div>
+                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">
+                        {isBelumAkun() ? "Buat Sandi Akun OSS Baru" : "Masukkan Kata Sandi OSS Anda"}
+                      </h3>
+                      <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+                        {isBelumAkun() 
+                          ? "Konfigurasikan kata sandi baru untuk akun portal OSS BKPM yang sedang didaftarkan." 
+                          : "Bot membutuhkan sandi OSS Anda untuk melanjutkan proses login otomatis."}
+                      </p>
+                    </div>
+
+                    <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-xs mx-auto">
+                      <div className="flex flex-col gap-3 text-left">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kata Sandi Baru</label>
+                          <input
+                            type="password"
+                            placeholder="Minimal 8 karakter"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                            required
+                          />
+                        </div>
+
+                        {isBelumAkun() && (
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">Konfirmasi Kata Sandi</label>
+                            <input
+                              type="password"
+                              placeholder="Ulangi kata sandi"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                              required
+                            />
+                          </div>
+                        )}
+
+                        {passwordError && (
+                          <p className="text-[9px] text-error font-semibold leading-normal">{passwordError}</p>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingPassword || !newPassword}
+                        className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                      >
+                        {isSubmittingPassword ? "Menyimpan..." : "Kirim & Lanjutkan"}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-white space-y-4">
+                    <div className="w-14 h-14 bg-primary-container/10 text-primary-container rounded-full flex items-center justify-center mx-auto">
+                      <span className="material-symbols-outlined text-3xl animate-pulse">smart_toy</span>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-on-surface">Proses Latar Belakang Aktif</h4>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xs mx-auto mt-1">
+                        NIB Assistant sedang mengisi data formulir secara otomatis di browser Chrome terenkripsi. Tolong jangan tutup halaman ini.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
+          )}
+
+          {/* ── TECHNICAL LOGS COLLAPSIBLE DRAWER (ACCORDION) ── */}
+          <div className="border border-border-light rounded-lg overflow-hidden bg-white">
+            <button
+              onClick={() => setIsLogsOpen(!isLogsOpen)}
+              className="w-full px-4 py-3 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container transition-all"
+            >
+              <span>[ Developer Mode ] Log Teknis Bot</span>
+              <span className="material-symbols-outlined text-lg transition-transform duration-200" style={{ transform: isLogsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                expand_more
+              </span>
+            </button>
+            
+            {isLogsOpen && (
+              <div className="bg-[#1E1E1E] text-[#D4D4D4] font-mono text-[11px] p-4 h-48 overflow-y-auto border-t border-[#333] scrollbar-thin">
+                {logs.length === 0 ? (
+                  <div className="text-outline italic">Mendengarkan output terminal...</div>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className="flex gap-2 mb-1">
+                      <span className="text-[#569CD6]">[{log.time}]</span>
+                      <span className={
+                        log.type === "success" 
+                          ? "text-[#4EC9B0]" 
+                          : log.type === "warn" 
+                            ? "text-[#DCDCAA]" 
+                            : log.type === "error" 
+                              ? "text-[#F48771]" 
+                              : ""
+                      }>
+                        {log.text}
+                      </span>
+                    </div>
+                  ))
+                )}
+                <div ref={consoleEndRef} />
+              </div>
+            )}
           </div>
 
-          {/* Terminal Console */}
-          <div className="bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] p-4 h-40 overflow-y-auto border-t border-[#333] flex-none scrollbar-thin">
-            {logs.map((log, index) => (
-              <div key={index} className="flex gap-2 mb-1.5">
-                <span className="text-[#569cd6]">[{log.time}]</span>
-                <span className={log.type === "success" ? "text-[#4ec9b0]" : log.type === "warn" ? "text-[#dcdcaa]" : log.type === "error" ? "text-[#f48771]" : ""}>
-                  {log.type !== "info" ? `${log.type.toUpperCase()}: ` : ""}{log.text}
-                </span>
-              </div>
-            ))}
-            <div ref={consoleEndRef} />
-          </div>
-        </section>
+        </div>
       </main>
+
     </div>
   );
 }
-

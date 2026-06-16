@@ -2,89 +2,60 @@
 @import "tailwindcss";
 
 @theme {
-  /* ─── Primary Teal (richer, more vibrant) ─── */
-  --color-primary: #00796B;
-  --color-primary-container: #B2DFDB;
-  --color-primary-fixed: #E0F2F1;
-  --color-primary-fixed-dim: #80CBC4;
+  /* ─── Primary Corporate Blue ─── */
+  --color-primary: #002c66;
+  --color-primary-container: #1a4384;
   --color-on-primary: #ffffff;
-  --color-on-primary-container: #004D40;
 
-  /* ─── Secondary Warm Amber ─── */
-  --color-secondary: #F57F17;
-  --color-secondary-container: #FFF8E1;
+  /* ─── Secondary Terracotta ─── */
+  --color-secondary: #7c2d12;
   --color-on-secondary: #ffffff;
-  --color-on-secondary-container: #E65100;
 
-  /* ─── Tertiary Fresh Green ─── */
-  --color-tertiary: #2E7D32;
-  --color-tertiary-container: #C8E6C9;
-  --color-tertiary-fixed: #E8F5E9;
+  /* ─── Dark Neutral ─── */
+  --color-tertiary: #454545;
+  --color-tertiary-container: #2f2f2f;
   --color-on-tertiary: #ffffff;
-  --color-on-tertiary-container: #1B5E20;
 
-  /* ─── Neutral Surfaces (warmer, layered) ─── */
-  --color-background: #F5F7F6;
-  --color-on-background: #1A1C1B;
+  /* ─── Neutral Surfaces (Administrative Flat UI) ─── */
+  --color-background: #f7f9fb;
+  --color-on-background: #191c1e;
 
-  --color-surface: #F5F7F6;
+  --color-surface: #f7f9fb;
   --color-surface-card: #ffffff;
-  --color-surface-container: #F1F3F2;
-  --color-surface-container-low: #F6F8F7;
-  --color-surface-container-high: #EAEDEC;
-  --color-surface-container-highest: #E4E7E6;
-  --color-on-surface: #1A1C1B;
-  --color-on-surface-variant: #40504D;
+  --color-surface-container: #eceef0;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #434750;
 
   /* ─── Borders & Outlines ─── */
-  --color-border-light: #DEE4E2;
-  --color-outline: #6F7977;
-  --color-outline-variant: #BFC9C6;
+  --color-border-light: #E5E7EB;
+  --color-outline: #747781;
+  --color-outline-variant: #c3c6d2;
+  --color-index-bg: #E2E8F0;
 
   /* ─── Semantic Colors ─── */
-  --color-error: #D32F2F;
-  --color-on-error: #ffffff;
-  --color-error-container: #FFEBEE;
-  --color-on-error-container: #B71C1C;
-
-  --color-status-error: #C62828;
-  --color-status-info: #0277BD;
-  --color-status-success: #2E7D32;
-
-  /* ─── Accent Gradients ─── */
-  --color-gradient-start: #00796B;
-  --color-gradient-end: #4DB6AC;
-  --color-gradient-warm-start: #FF8F00;
-  --color-gradient-warm-end: #FFD54F;
-
-  /* ─── Secondary Fixed ─── */
-  --color-secondary-fixed: #FFF3E0;
+  --color-error: #DC2626;
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
 
   /* Font Families */
-  --font-sans: var(--font-hanken-grotesk), system-ui, sans-serif;
-  --font-hanken: var(--font-hanken-grotesk), system-ui, sans-serif;
+  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  --font-plus-jakarta: var(--font-plus-jakarta-sans), system-ui, sans-serif;
 
-  /* Border Radius — slightly larger for modern feel */
-  --radius-DEFAULT: 0.25rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
-
-  /* Spacing and Dimensions — matches Stitch design reference */
-  --width-max-form: 800px;
-  --spacing-stack-sm: 12px;
-  --spacing-stack-md: 24px;
-  --spacing-stack-lg: 40px;
-  --spacing-container-padding-mobile: 16px;
-  --spacing-container-padding-desktop: 40px;
+  /* Border Radius (Stitch Theme) */
+  --radius-sm: 0.25rem; /* 4px */
+  --radius-DEFAULT: 0.5rem; /* 8px */
+  --radius-md: 0.75rem; /* 12px */
+  --radius-lg: 1rem; /* 16px */
+  --radius-xl: 1.5rem; /* 24px */
 
   /* ─── Custom Animations ─── */
   --animate-fadeIn: fadeIn 0.4s ease-out both;
   --animate-slideDown: slideDown 0.3s ease-out both;
   --animate-slideUp: slideUp 0.3s ease-out both;
   --animate-shimmer: shimmer 2s infinite linear;
-  --animate-float: float 3s ease-in-out infinite;
-  --animate-glow-ring: glow-ring 2s ease-in-out infinite;
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
 }
 
@@ -96,7 +67,7 @@
 
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-12px); max-height: 0; }
-  to   { opacity: 1; transform: translateY(0); max-height: 500px; }
+  to   { opacity: 1; transform: translateY(0); max-height: 1000px; }
 }
 
 @keyframes slideUp {
@@ -109,30 +80,20 @@
   100% { background-position: 200% 0; }
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-6px); }
-}
-
-@keyframes glow-ring {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 121, 107, 0.3); }
-  50%      { box-shadow: 0 0 0 8px rgba(0, 121, 107, 0); }
-}
-
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }
 }
 
 :root {
-  --background: #F5F7F6;
-  --foreground: #1A1C1B;
+  --background: #f7f9fb;
+  --foreground: #191c1e;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -159,16 +120,15 @@ body {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* ─── Bento Card (Stitch Design Reference) ─── */
+/* ─── Bento Card (Flat UI style, no shadows) ─── */
 .bento-card {
   background-color: #FFFFFF;
-  border: 1px solid #E0E0E0;
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  padding: 24px;
+  border: 1px solid #E5E7EB;
+  border-radius: 0.75rem; /* rounded-md (12px) */
+  padding: 16px 20px;
 }
 
-/* ─── Pulse Ring Animation (Stitch automation) ─── */
+/* ─── Pulse Ring Animation ─── */
 .pulse-ring {
   animation: pulse-ring-anim 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
@@ -177,62 +137,11 @@ body {
   80%, 100% { transform: scale(2.5); opacity: 0; }
 }
 
-/* ─── Desktop Background Spotlight ─── */
-@media (min-width: 768px) {
-  body::before {
-    content: '';
-    position: fixed;
-    top: -20%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 1200px;
-    height: 800px;
-    background: radial-gradient(ellipse at center, rgba(0, 121, 107, 0.04) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-  }
-}
-
 /* ─── Glassmorphism Utility ─── */
 .glass-bar {
-  background: rgba(245, 247, 246, 0.9);
+  background: rgba(247, 249, 251, 0.9);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-
-/* ─── Gradient Header ─── */
-.gradient-header {
-  background: linear-gradient(145deg, #004D40 0%, #00796B 50%, #4DB6AC 100%);
-}
-
-/* ─── Premium Card Hover ─── */
-.card-hover {
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-.card-hover:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    0 4px 6px rgba(0, 121, 107, 0.04),
-    0 12px 28px rgba(0, 121, 107, 0.08),
-    0 2px 8px rgba(0, 0, 0, 0.03);
-}
-
-/* ─── Desktop Container Card ─── */
-@media (min-width: 768px) {
-  .desktop-container {
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.06),
-      0 24px 48px rgba(0, 121, 107, 0.05);
-    border: 1px solid rgba(222, 228, 226, 0.7);
-  }
-}
-
-/* ─── Terminal Inner Glow ─── */
-.terminal-glow {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 /* ─── Custom Scrollbar ─── */
@@ -250,9 +159,10 @@ body {
 /* ─── Select Styling Reset ─── */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236F7977' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.5rem center;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23747781' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.75rem center;
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
   padding-right: 2.5rem;
 }
+

@@ -14,9 +14,6 @@ export default function OnboardingPage() {
   const [skalaUsaha, setSkalaUsaha] = useState<string>("mikro");
   const [akunOss, setAkunOss] = useState<string>("belum");
 
-  // Warnings / helpers state
-  const [showScaleHelper, setShowScaleHelper] = useState(false);
-
   const handleStartDraft = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -30,182 +27,255 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="flex-grow flex flex-col bg-background min-h-screen">
+    <div className="flex-grow flex flex-col bg-background min-h-screen font-sans">
       
-      {/* Centered Container Wrapper (Matches Step 1-5 Layout) */}
-      <main className="flex-grow flex justify-center w-full px-4 md:px-10 py-8 md:py-10 pb-32 md:pb-10">
-        <div className="w-full max-w-[800px] flex flex-col gap-8 md:gap-10">
+      {/* ── Header Navigation (Flat White, Dual Logo) ── */}
+      <header className="sticky top-0 bg-white border-b border-border-light h-16 px-4 md:px-8 flex items-center justify-between z-50">
+        {/* Left Section: Logo & National Crest Icon */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded bg-[#E5E7EB] text-[#7C2D12] font-extrabold text-sm shadow-inner shrink-0" title="Lambang Garuda">
+            🇮🇩
+          </div>
+          <div className="flex flex-col">
+            <span className="font-extrabold text-sm tracking-wider text-primary-container uppercase leading-none">
+              NIB Assistant
+            </span>
+            <span className="text-[9px] font-bold text-tertiary uppercase tracking-widest leading-none mt-1">
+              UMKM Partner
+            </span>
+          </div>
+        </div>
+
+        {/* Center Section: Navigation (Underline Indicator) */}
+        <nav className="hidden md:flex items-center gap-6 h-full">
+          <button
+            onClick={() => setActiveTab("eligibility")}
+            className={`font-extrabold text-xs uppercase tracking-wider h-full flex items-center border-b-4 transition-all ${
+              activeTab === "eligibility"
+                ? "border-primary-container text-primary-container"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Mulai Registrasi
+          </button>
+          <button
+            onClick={() => setActiveTab("requirements")}
+            className={`font-extrabold text-xs uppercase tracking-wider h-full flex items-center border-b-4 transition-all ${
+              activeTab === "requirements"
+                ? "border-primary-container text-primary-container"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Persyaratan NIB
+          </button>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="font-extrabold text-xs uppercase tracking-wider h-full flex items-center border-b-4 border-transparent text-on-surface-variant hover:text-on-surface"
+          >
+            Dashboard
+          </button>
+        </nav>
+
+        {/* Right Section: Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-1.5 rounded text-xs font-bold border border-primary-container text-primary-container hover:bg-surface-container transition-all">
+            Daftar
+          </button>
+          <button 
+            onClick={() => router.push("/dashboard")}
+            className="px-3 py-1.5 rounded text-xs font-bold bg-primary-container text-white hover:bg-primary transition-all"
+          >
+            Masuk
+          </button>
+        </div>
+      </header>
+
+      {/* ── Main Container (Centered wizard grid, max 640px) ── */}
+      <main className="flex-grow flex justify-center w-full px-4 py-8 pb-32 md:pb-12">
+        <div className="w-full max-w-[640px] flex flex-col gap-6">
           
-          {/* ── Premium Gradient Header Card (Bento Style) ── */}
-          <header className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/95 to-secondary p-6 md:p-10 rounded-3xl text-white shadow-xl">
-            {/* Decorative organic blurs */}
-            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10 blur-xl" />
-            <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-lg" />
-            <div className="absolute top-1/2 right-1/4 w-72 h-72 rounded-full bg-white/[0.04] blur-3xl pointer-events-none" />
-            
-            <div className="relative z-10 flex items-center gap-2.5 mb-6">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm shadow-inner">
-                <span className="material-symbols-outlined text-white text-xl font-bold">
-                  shield_person
-                </span>
-              </div>
-              <span className="font-sans text-xs uppercase tracking-wider font-extrabold text-white/80 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
-                NIB Assistant
-              </span>
-            </div>
-
-            <h1 className="relative z-10 text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4 drop-shadow-sm">
-              Mulai Perjalanan <br className="hidden sm:inline" />NIB Anda
+          {/* Page Title & Tagline */}
+          <div className="text-center md:text-left">
+            <h1 className="text-xl md:text-2xl font-extrabold uppercase tracking-wide text-on-surface">
+              Mulai Perjalanan NIB Anda
             </h1>
-            <p className="relative z-10 text-white/90 text-sm md:text-base leading-relaxed max-w-xl drop-shadow-sm font-medium">
-              Cukup ceritakan usaha Anda — kami bantu siapkan draft NIB lengkap dengan rekomendasi KBLI yang tepat dengan bantuan teknologi AI.
+            <p className="text-xs md:text-sm text-on-surface-variant mt-2 leading-relaxed">
+              Cukup deskripsikan usaha Anda secara kasual. Kami bantu menyiapkan draft pendaftaran NIB lengkap dengan rekomendasi kode KBLI 2020 otomatis via kecerdasan buatan.
             </p>
-          </header>
-
-          {/* ── Tab Selector Segment ── */}
-          <div className="w-full">
-            <div className="flex bg-surface-container-low rounded-2xl p-1.5 border border-border-light shadow-md">
-              <button
-                onClick={() => setActiveTab("eligibility")}
-                className={`flex-1 py-3.5 px-4 rounded-xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
-                  activeTab === "eligibility"
-                    ? "bg-primary text-on-primary shadow-sm"
-                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
-                }`}
-              >
-                <span className="material-symbols-outlined text-lg">check_circle</span>
-                Mulai Sekarang
-              </button>
-              <button
-                onClick={() => setActiveTab("requirements")}
-                className={`flex-1 py-3.5 px-4 rounded-xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
-                  activeTab === "requirements"
-                    ? "bg-primary text-on-primary shadow-sm"
-                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
-                }`}
-              >
-                <span className="material-symbols-outlined text-lg">assignment</span>
-                Apa yang Perlu Disiapkan
-              </button>
-            </div>
           </div>
 
-          {/* ── Dynamic View Content ── */}
+          {/* ── Segmented Category Selector (Joined Segments) ── */}
+          <div className="flex w-full rounded-lg overflow-hidden border border-border-light">
+            <button
+              onClick={() => setActiveTab("eligibility")}
+              className={`flex-1 py-3 px-4 font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                activeTab === "eligibility"
+                  ? "bg-secondary text-white"
+                  : "bg-tertiary text-white hover:bg-opacity-90"
+              }`}
+              style={{ borderRadius: "0px" }}
+            >
+              Mulai Draft NIB
+            </button>
+            <button
+              onClick={() => setActiveTab("requirements")}
+              className={`flex-1 py-3 px-4 font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                activeTab === "requirements"
+                  ? "bg-secondary text-white"
+                  : "bg-tertiary text-white hover:bg-opacity-90"
+              }`}
+              style={{ borderRadius: "0px" }}
+            >
+              Dokumen Persyaratan
+            </button>
+          </div>
+
+          {/* ── Dynamic Tab View Content ── */}
           <div className="flex-grow">
             {activeTab === "eligibility" ? (
               <div className="animate-fadeIn">
-                <form id="onboarding-form" onSubmit={handleStartDraft} className="space-y-8">
+                <form id="onboarding-form" onSubmit={handleStartDraft} className="space-y-6">
                   
-                  {/* Two-Column Bento Grid for Eligibility Form inputs */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Flat Bento Panel for Eligibility */}
+                  <div className="bento-card space-y-6">
                     
-                    {/* Bento Card 1: Tipe Usaha */}
-                    <div className="bento-card p-6 flex flex-col gap-5 justify-between">
-                      <div>
-                        <div className="text-sm font-bold text-on-surface mb-4 flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-primary text-lg">
-                              corporate_fare
-                            </span>
+                    {/* Tipe Usaha Selector */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+                        <span className="material-symbols-outlined text-base text-primary-container">
+                          corporate_fare
+                        </span>
+                        Tipe Usaha Anda
+                      </label>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="tipe_usaha"
+                            value="perorangan"
+                            checked={tipeUsaha === "perorangan"}
+                            onChange={(e) => setTipeUsaha(e.target.value)}
+                            className="peer sr-only"
+                          />
+                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
+                            <span className="material-symbols-outlined text-lg">person</span>
+                            Perorangan (UMKM)
                           </div>
-                          Tipe Usaha Anda
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="cursor-pointer">
-                            <input
-                              type="radio"
-                              name="tipe_usaha"
-                              value="perorangan"
-                              checked={tipeUsaha === "perorangan"}
-                              onChange={(e) => setTipeUsaha(e.target.value)}
-                              className="peer sr-only"
-                            />
-                            <div className="px-3 py-4 rounded-xl border-2 border-outline-variant/60 peer-checked:border-primary peer-checked:bg-primary-fixed peer-checked:text-on-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
-                              <span className="material-symbols-outlined text-lg">person</span>
-                              Perorangan
-                            </div>
-                          </label>
-                          <label className="cursor-pointer">
-                            <input
-                              type="radio"
-                              name="tipe_usaha"
-                              value="badan_usaha"
-                              checked={tipeUsaha === "badan_usaha"}
-                              onChange={(e) => setTipeUsaha(e.target.value)}
-                              className="peer sr-only"
-                            />
-                            <div className="px-3 py-4 rounded-xl border-2 border-outline-variant/60 peer-checked:border-primary peer-checked:bg-primary-fixed peer-checked:text-on-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
-                              <span className="material-symbols-outlined text-lg">domain</span>
-                              Badan Usaha
-                            </div>
-                          </label>
-                        </div>
+                        </label>
+                        <label className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="tipe_usaha"
+                            value="badan_usaha"
+                            checked={tipeUsaha === "badan_usaha"}
+                            onChange={(e) => setTipeUsaha(e.target.value)}
+                            className="peer sr-only"
+                          />
+                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
+                            <span className="material-symbols-outlined text-lg">domain</span>
+                            Badan Usaha
+                          </div>
+                        </label>
                       </div>
 
                       {tipeUsaha === "badan_usaha" && (
-                        <div className="mt-4 p-3.5 bg-secondary-container border border-secondary/30 rounded-xl flex items-start gap-2.5 animate-slideDown">
-                          <span className="material-symbols-outlined text-secondary text-lg shrink-0 mt-0.5">
-                            info
+                        <div className="p-3 bg-error/5 border border-error/20 rounded flex items-start gap-2.5 animate-slideDown">
+                          <span className="material-symbols-outlined text-error text-base shrink-0 mt-0.5">
+                            error
                           </span>
-                          <p className="text-[11px] text-on-secondary-container leading-relaxed">
-                            <strong>Perhatian:</strong> Saat ini NIB Assistant baru mendukung pendaftaran untuk{" "}
-                            <strong>Usaha Perorangan</strong>. Dukungan Badan Usaha akan segera hadir.
+                          <p className="text-[11px] text-error font-medium leading-relaxed">
+                            <strong>Perhatian:</strong> Saat ini otomatisasi NIB Assistant baru mendukung pendaftaran untuk <strong>Usaha Perorangan</strong>. Layanan Badan Usaha (PT/CV) akan segera hadir.
                           </p>
                         </div>
                       )}
                     </div>
 
-                    {/* Bento Card 2: Status Akun OSS */}
-                    <div className="bento-card p-6 flex flex-col justify-between">
-                      <div>
-                        <div className="text-sm font-bold text-on-surface mb-4 flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-primary text-lg">
-                              account_circle
-                            </span>
+                    {/* Skala Usaha Selector */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+                        <span className="material-symbols-outlined text-base text-primary-container">
+                          bar_chart
+                        </span>
+                        Skala Modal Usaha
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="skala_usaha"
+                            value="mikro"
+                            checked={skalaUsaha === "mikro"}
+                            onChange={(e) => setSkalaUsaha(e.target.value)}
+                            className="peer sr-only"
+                          />
+                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
+                            Mikro / Kecil (&lt; Rp 5 Miliar)
                           </div>
-                          Sudah punya akun OSS?
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { label: "Sudah", val: "sudah", icon: "check_circle" },
-                            { label: "Belum", val: "belum", icon: "add_circle" },
-                            { label: "Ragu", val: "belum_yakin", icon: "help" },
-                          ].map((item) => (
-                            <label key={item.val} className="cursor-pointer">
-                              <input
-                                type="radio"
-                                name="akun_oss"
-                                value={item.val}
-                                checked={akunOss === item.val}
-                                onChange={(e) => setAkunOss(e.target.value)}
-                                disabled={tipeUsaha === "badan_usaha"}
-                                className="peer sr-only"
-                              />
-                              <div className="px-1 py-4 rounded-xl border-2 border-outline-variant/60 peer-checked:border-primary peer-checked:bg-primary-fixed peer-checked:text-on-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-[11px] min-h-[56px] flex flex-col items-center justify-center gap-1.5 disabled:opacity-50">
-                                <span className="material-symbols-outlined text-base">{item.icon}</span>
-                                {item.label}
-                              </div>
-                            </label>
-                          ))}
-                        </div>
+                        </label>
+                        <label className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="skala_usaha"
+                            value="menengah"
+                            checked={skalaUsaha === "menengah"}
+                            onChange={(e) => setSkalaUsaha(e.target.value)}
+                            className="peer sr-only"
+                          />
+                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
+                            Menengah / Besar (&gt; Rp 5 Miliar)
+                          </div>
+                        </label>
                       </div>
-                      <div className="mt-4 pt-1 text-[11px] text-on-surface-variant font-medium">
-                        Akun OSS digunakan untuk menerbitkan nomor izin resmi. Jika belum punya, kami bantu buatkan.
+                    </div>
+
+                    {/* Akun OSS Selector */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+                        <span className="material-symbols-outlined text-base text-primary-container">
+                          account_circle
+                        </span>
+                        Kepemilikan Akun OSS
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: "Sudah Punya", val: "sudah", icon: "check_circle" },
+                          { label: "Belum Punya", val: "belum", icon: "add_circle" },
+                          { label: "Ragu-Ragu", val: "belum_yakin", icon: "help" },
+                        ].map((item) => (
+                          <label key={item.val} className="cursor-pointer">
+                            <input
+                              type="radio"
+                              name="akun_oss"
+                              value={item.val}
+                              checked={akunOss === item.val}
+                              onChange={(e) => setAkunOss(e.target.value)}
+                              disabled={tipeUsaha === "badan_usaha"}
+                              className="peer sr-only"
+                            />
+                            <div className="px-1 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-[11px] min-h-[56px] flex flex-col items-center justify-center gap-1.5 disabled:opacity-50">
+                              <span className="material-symbols-outlined text-sm">{item.icon}</span>
+                              {item.label}
+                            </div>
+                          </label>
+                        ))}
                       </div>
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Akun OSS resmi diterbitkan oleh BKPM RI. Jika Anda memilih "Belum Punya", kami akan memandu Anda membuat akun baru secara otomatis melalui WhatsApp/SMS OTP.
+                      </p>
                     </div>
 
                   </div>
 
-                  {/* Desktop Bottom Action inside Centered Container */}
-                  <div className="hidden md:flex justify-end pt-6 border-t border-border-light">
+                  {/* Actions (Desktop) */}
+                  <div className="hidden md:flex justify-end pt-4 border-t border-border-light">
                     <button
                       type="submit"
                       disabled={tipeUsaha === "badan_usaha"}
-                      className="px-8 py-3.5 rounded-full bg-primary text-on-primary font-bold text-sm min-h-[48px] flex items-center gap-2 shadow-md hover:opacity-90 hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+                      className="px-6 py-3 rounded bg-primary-container text-white font-bold text-xs uppercase tracking-wider min-h-[44px] flex items-center gap-2 shadow-sm hover:bg-primary transition-all disabled:opacity-50 cursor-pointer"
                     >
                       Mulai Buat Draft NIB
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
                     </button>
                   </div>
 
@@ -215,124 +285,67 @@ export default function OnboardingPage() {
               // Requirements Tab Bento View
               <div className="animate-fadeIn flex flex-col gap-6">
                 
-                <div className="mb-2">
-                  <h2 className="text-xl font-extrabold text-on-surface mb-2 leading-tight">
-                    Siapkan Data Berikut
-                  </h2>
-                  <p className="text-on-surface-variant text-sm leading-relaxed font-medium">
-                    Agar proses berjalan lancar, pastikan Anda memiliki data-data ini sebelum memulai registrasi.
-                  </p>
+                <div className="bento-card space-y-6">
+                  <div>
+                    <h3 className="font-extrabold text-sm uppercase tracking-wider text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-lg text-[#7C2D12]">assignment</span>
+                      Data Yang Perlu Disiapkan
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant mt-1">
+                      Siapkan dokumen dan informasi berikut sebelum mulai agar pengisian berjalan tanpa hambatan.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Identitas */}
+                    <div className="flex gap-3 items-start pb-4 border-b border-border-light">
+                      <div className="w-8 h-8 rounded bg-border-light text-primary-container flex items-center justify-center shrink-0 font-bold text-xs">
+                        01
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-on-surface uppercase tracking-wide">Data Pemilik (KTP)</h4>
+                        <p className="text-[11px] text-on-surface-variant leading-relaxed mt-1">
+                          Nomor Induk Kependudukan (NIK) 16-digit, Nama Lengkap sesuai KTP, dan Tanggal Lahir Anda.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Kontak */}
+                    <div className="flex gap-3 items-start pb-4 border-b border-border-light">
+                      <div className="w-8 h-8 rounded bg-border-light text-primary-container flex items-center justify-center shrink-0 font-bold text-xs">
+                        02
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-on-surface uppercase tracking-wide">Kontak Aktif</h4>
+                        <p className="text-[11px] text-on-surface-variant leading-relaxed mt-1">
+                          Nomor WhatsApp aktif untuk menerima kode OTP verifikasi resmi dari sistem OSS BKPM, serta Email aktif.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Usaha */}
+                    <div className="flex gap-3 items-start">
+                      <div className="w-8 h-8 rounded bg-border-light text-primary-container flex items-center justify-center shrink-0 font-bold text-xs">
+                        03
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-on-surface uppercase tracking-wide">Detail Operasional & Lokasi</h4>
+                        <p className="text-[11px] text-on-surface-variant leading-relaxed mt-1">
+                          Alamat lengkap lokasi usaha, perkiraan jumlah karyawan, modal awal usaha, dan penjelasan aktivitas usaha Anda.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* 3-Card Bento Grid layout for Requirements */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  
-                  {/* Card 1: Data Pribadi (col-span-6) */}
-                  <div className="md:col-span-6 bento-card p-6 flex flex-col gap-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full pointer-events-none" />
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-xl">person</span>
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-base text-on-surface">Data Pribadi</h3>
-                        <p className="text-[10px] text-on-surface-variant font-bold">Sesuai NIK KTP Indonesia</p>
-                      </div>
-                    </div>
-
-                    <ul className="space-y-3.5 mt-2 flex-grow">
-                      {[
-                        "Nomor Induk Kependudukan (NIK KTP)",
-                        "Tanggal Lahir (Valid sesuai KTP)",
-                        "Nomor WhatsApp aktif untuk kode OTP",
-                        "Alamat Email aktif & dapat diakses",
-                      ].map((text, idx) => (
-                        <li key={idx} className="flex items-start gap-2.5">
-                          <span className="material-symbols-outlined text-primary text-base shrink-0 mt-0.5">
-                            check_circle
-                          </span>
-                          <span className="text-xs text-on-surface-variant leading-relaxed font-semibold">
-                            {text}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Card 2: Data Usaha (col-span-6) */}
-                  <div className="md:col-span-6 bento-card p-6 flex flex-col gap-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-tertiary/10 to-transparent rounded-bl-full pointer-events-none" />
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-tertiary/10 text-tertiary flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-xl">storefront</span>
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-base text-on-surface">Data Usaha</h3>
-                        <p className="text-[10px] text-on-surface-variant font-bold">Informasi operasional & lokasi</p>
-                      </div>
-                    </div>
-
-                    <ul className="space-y-3.5 mt-2 flex-grow">
-                      {[
-                        "Nama Usaha, warung, atau toko Anda",
-                        "Alamat fisik tempat kegiatan usaha",
-                        "Provinsi, Kota/Kabupaten, Kecamatan",
-                        "Cerita deskriptif aktivitas usaha Anda",
-                      ].map((text, idx) => (
-                        <li key={idx} className="flex items-start gap-2.5">
-                          <span className="material-symbols-outlined text-tertiary text-base shrink-0 mt-0.5">
-                            check_circle
-                          </span>
-                          <span className="text-xs text-on-surface-variant leading-relaxed font-semibold">
-                            {text}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Card 3: Parameter Tambahan (col-span-12 full-width) */}
-                  <div className="md:col-span-12 bento-card p-6 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-secondary/10 to-transparent rounded-bl-full pointer-events-none" />
-                    
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-xl">monitoring</span>
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-base text-on-surface">Parameter Tambahan & Skala</h3>
-                        <p className="text-[10px] text-on-surface-variant font-bold">Untuk mengkalkulasi tingkat risiko usaha secara otomatis</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {[
-                        { title: "Estimasi Modal Usaha", desc: "Besaran modal bersih (tidak termasuk nilai tanah dan bangunan usaha) untuk operasional." },
-                        { title: "Tenaga Kerja Usaha", desc: "Jumlah karyawan laki-laki dan perempuan yang membantu operasional sehari-hari." },
-                      ].map((item, idx) => (
-                        <div key={idx} className="bg-surface-container-low rounded-xl p-3.5 border border-border-light">
-                          <div className="flex gap-2 items-center mb-1.5">
-                            <span className="material-symbols-outlined text-secondary text-base shrink-0">check_circle</span>
-                            <h4 className="text-xs font-bold text-on-surface">{item.title}</h4>
-                          </div>
-                          <p className="text-[11px] text-on-surface-variant leading-relaxed font-semibold">{item.desc}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Desktop: Inline Pill back-navigation */}
-                <div className="hidden md:flex justify-end pt-6 border-t border-border-light">
+                {/* Actions (Desktop) */}
+                <div className="hidden md:flex justify-end pt-4 border-t border-border-light">
                   <button
                     onClick={() => setActiveTab("eligibility")}
-                    className="px-8 py-3.5 rounded-full bg-primary text-on-primary font-bold text-sm min-h-[48px] flex items-center gap-2 shadow-md hover:opacity-90 hover:shadow-lg transition-all cursor-pointer"
+                    className="px-6 py-3 rounded bg-primary-container text-white font-bold text-xs uppercase tracking-wider min-h-[44px] flex items-center gap-2 shadow-sm hover:bg-primary transition-all cursor-pointer"
                   >
                     Saya Siap, Mulai Sekarang
-                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
                   </button>
                 </div>
 
@@ -343,14 +356,14 @@ export default function OnboardingPage() {
         </div>
       </main>
 
-      {/* ── Mobile Sticky bottom bar CTAs at Root Level ── */}
+      {/* ── Mobile Sticky bottom bar CTAs ── */}
       {activeTab === "eligibility" && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 glass-bar border-t border-border-light px-5 py-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] z-40">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 glass-bar border-t border-border-light px-5 py-4 shadow-sm z-40">
           <button
             type="submit"
             form="onboarding-form"
             disabled={tipeUsaha === "badan_usaha"}
-            className="w-full bg-primary text-on-primary font-bold py-3.5 px-6 rounded-full flex items-center justify-center gap-2.5 shadow-md min-h-[52px] disabled:opacity-50"
+            className="w-full bg-primary-container text-white font-bold py-3 px-6 rounded flex items-center justify-center gap-2 shadow-sm text-xs uppercase tracking-wider min-h-[48px] disabled:opacity-50"
           >
             Mulai Buat Draft NIB
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
@@ -359,10 +372,10 @@ export default function OnboardingPage() {
       )}
 
       {activeTab === "requirements" && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 glass-bar border-t border-border-light px-5 py-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] z-40">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 glass-bar border-t border-border-light px-5 py-4 shadow-sm z-40">
           <button
             onClick={() => setActiveTab("eligibility")}
-            className="w-full bg-primary text-on-primary font-bold py-3.5 px-6 rounded-full flex items-center justify-center gap-2.5 shadow-md min-h-[52px]"
+            className="w-full bg-primary-container text-white font-bold py-3 px-6 rounded flex items-center justify-center gap-2 shadow-sm text-xs uppercase tracking-wider min-h-[48px]"
           >
             Saya Siap, Mulai Sekarang
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
