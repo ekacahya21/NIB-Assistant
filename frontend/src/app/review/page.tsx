@@ -316,6 +316,14 @@ export default function ReviewPage() {
                   <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Jenis Kelamin</span>
                   <span className="block font-semibold text-on-surface mt-0.5">{formData.jenisKelamin}</span>
                 </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Nomor WhatsApp</span>
+                  <span className="block font-semibold text-on-surface mt-0.5">{formData.nomorHp}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Alamat Email</span>
+                  <span className="block font-semibold text-on-surface mt-0.5">{formData.email}</span>
+                </div>
               </div>
             </div>
 

@@ -55,7 +55,7 @@ export class AutomationService {
   getStream(draftId: string, akunOss?: string): Observable<AutomationEvent> {
     const subject = new Subject<AutomationEvent>();
     this.subjectToDraftId.set(subject, draftId);
-    
+
     // Launch the background automation process asynchronously
     this.runPlaywrightAutomation(draftId, akunOss, subject).catch((err) => {
       console.error('Playwright execution error:', err);
@@ -76,12 +76,12 @@ export class AutomationService {
     const draftId = this.subjectToDraftId.get(subject) || 'unknown';
     const timers = this.executionTimers.get(draftId);
     let timeSuffix = '';
-    
+
     if (timers) {
       const now = Date.now();
       const totalElapsed = ((now - timers.startTime) / 1000).toFixed(2);
       const diffFromLast = ((now - timers.lastLogTime) / 1000).toFixed(2);
-      
+
       if (!timers.stepStartTimes.has(step)) {
         // Step transition! The previous step just completed.
         let prevStep = -1;
@@ -93,7 +93,7 @@ export class AutomationService {
         if (prevStep !== -1) {
           const prevStartTime = timers.stepStartTimes.get(prevStep)!;
           const prevStepElapsed = ((now - prevStartTime) / 1000).toFixed(2);
-          
+
           const stepNames: Record<number, string> = {
             1: 'Inisialisasi Portal',
             2: 'Validasi NIK & OTP',
@@ -102,24 +102,24 @@ export class AutomationService {
             5: 'Pengelolaan Lokasi Usaha'
           };
           const prevStepName = stepNames[prevStep] || `Langkah ${prevStep}`;
-          
+
           const completionMsg = `✨ [Selesai] ${prevStepName} berhasil diselesaikan dalam ${prevStepElapsed} detik.`;
           subject.next({ step: prevStep, status: 'success', text: completionMsg });
           this.logger.log(`[Tx: ${draftId}] ${completionMsg}`);
         }
         timers.stepStartTimes.set(step, now);
       }
-      
+
       const stepStartTime = timers.stepStartTimes.get(step) || now;
       const stepElapsed = ((now - stepStartTime) / 1000).toFixed(2);
-      
+
       timers.lastLogTime = now;
       timeSuffix = ` (+${diffFromLast}s, Step: ${stepElapsed}s, Total: ${totalElapsed}s)`;
     }
 
     const richText = `${text}${timeSuffix}`;
     subject.next({ step, status, text: richText });
-    
+
     const formattedText = `[Tx: ${draftId}] [Step ${step}] [${status.toUpperCase()}] ${richText}`;
     if (status === 'error') {
       this.logger.error(formattedText);
@@ -165,7 +165,7 @@ export class AutomationService {
         // Step 2: Registration & Verification
         activeStep = 2;
         passwordCode = await this.executeRegistrationSteps(page, draft, draftId, subject);
-      
+
         // Step 3: Fill Detailed Profile Information (first login triggers the detailed profile form)
         activeStep = 3;
         await this.executeDetailProfileSteps(page, draft, subject);
@@ -257,13 +257,13 @@ export class AutomationService {
   ): Promise<string> {
     // 0. Open Register Page
     await page.goto(`${process.env.OSS_LOGIN_URL}/register`, { waitUntil: 'networkidle', timeout: 30000 });
-    
+
     // 1. Fill pelaku usaha dropdown
     await page.waitForTimeout(1000);
     this.logStep(subject, 2, 'info', 'Mengklik tombol "Pilih jenis pelaku usaha" dan memilih "Orang Perseorangan"...');
     await page.getByRole('textbox', { name: 'Pilih jenis pelaku usaha' }).click();
     await page.getByText('Orang Perseorangan').click();
-    
+
     // 2. Fill NIK
     await page.waitForTimeout(1000);
     this.logStep(subject, 2, 'info', `Mengisi NIK Pemilik: ${draft.nik}...`);
@@ -284,7 +284,7 @@ export class AutomationService {
     while (Date.now() - startPollTime < maxPollMs) {
       isNikRegistered = await page.getByText('NIK sudah terdaftar').isVisible();
       isEmailRegistered = await page.getByText('Email sudah terdaftar').isVisible();
-      
+
       if (isNikRegistered || isEmailRegistered) {
         break;
       }
@@ -307,11 +307,11 @@ export class AutomationService {
       this.logStep(subject, 2, 'error', 'Pendaftaran GAGAL: Email sudah terdaftar di portal OSS. Silakan gunakan email lain atau masuk dengan email terdaftar.');
       throw new Error('Email sudah terdaftar di portal OSS.');
     }
-    
+
     // 4. Click Verifikasi
     this.logStep(subject, 2, 'info', 'Mengklik tombol "Verifikasi"...');
     await page.getByRole('button', { name: 'Verifikasi' }).click();
-    
+
     // 5. Prompt OTP
     await page.waitForTimeout(5000);
     this.logStep(subject, 2, 'warn', 'PENTING: Silakan buka email Anda, salin kode OTP, dan masukkan kode OTP di halaman aplikasi.');
@@ -334,7 +334,7 @@ export class AutomationService {
     }
 
     this.logStep(subject, 2, 'success', `OTP diterima: ${otpCode}. Memverifikasi kode OTP... [SUKSES]`);
-    
+
     // 7. Fill OTP
     await page.locator('.otp-input2').first().fill(otpCode[0] || '');
     await page.locator('div:nth-child(2) > .otp-input2').fill(otpCode[1] || '');
@@ -342,7 +342,7 @@ export class AutomationService {
     await page.locator('div:nth-child(4) > .otp-input2').fill(otpCode[3] || '');
     await page.locator('div:nth-child(5) > .otp-input2').fill(otpCode[4] || '');
     await page.locator('div:nth-child(6) > .otp-input2').fill(otpCode[5] || '');
-    
+
     const isOtpErrorVisible = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).isVisible().catch(() => false);
     if (isOtpErrorVisible) {
       const errorMsg = await page.getByText(/salah|tidak valid|expired|tidak berlaku|otp/i).textContent().catch(() => 'Kode OTP tidak valid.');
@@ -419,7 +419,7 @@ export class AutomationService {
 
           const hasRed = html.includes('red') || html.includes('danger') || html.includes('error') || html.includes('cross') || html.includes('close');
           const hasGreen = html.includes('green') || html.includes('success') || html.includes('check');
-          
+
           if (hasRed || !hasGreen) {
             failedReqs.push(req.text);
           }
@@ -447,7 +447,7 @@ export class AutomationService {
     subject: Subject<AutomationEvent>
   ): Promise<void> {
     this.logStep(subject, 3, 'info', 'Mengisi detail pelaku usaha...');
-    
+
     // Trim leading 0, 62 or +62 from the phone number
     let cleanPhone = draft.nomorHp.trim().replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('62')) {
@@ -458,18 +458,18 @@ export class AutomationService {
     this.logStep(subject, 3, 'info', `Mengisi nomor ponsel: ${draft.nomorHp}...`);
     await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
     await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).fill(cleanPhone);
-    
+
     this.logStep(subject, 3, 'info', `Mengisi nama pelaku usaha sesuai KTP: ${draft.namaPemilik}...`);
     await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).click();
     await page.getByRole('textbox', { name: 'Masukkan nama sesuai KTP' }).fill(draft.namaPemilik);
-    
+
     this.logStep(subject, 3, 'info', `Memilih jenis kelamin: ${draft.jenisKelamin}...`);
     if (draft.jenisKelamin === 'Perempuan') {
       await page.getByText('Perempuan').click();
     } else {
       await page.getByText('Laki-laki').click();
     }
-    
+
     // Reformat birth date from yyyy-mm-dd to dd/mm/yyyy
     let formattedBirthDate = draft.tanggalLahir.trim();
     if (formattedBirthDate.includes('-')) {
@@ -481,17 +481,17 @@ export class AutomationService {
     this.logStep(subject, 3, 'info', `Mengisi tanggal lahir: ${formattedBirthDate}...`);
     await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).click();
     await page.getByRole('textbox', { name: 'dd/mm/yyyy' }).fill(formattedBirthDate);
-    
+
     // Fill alamat
     await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).click();
     await page.getByRole('textbox', { name: 'Contoh: Jl. RUSA' }).fill(draft.alamatKtp || draft.alamatUsaha);
-    
+
     // Search and Select Provinsi
     const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
     const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
     this.logStep(subject, 3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
-    
-    let provPromise = page.waitForResponse((response: any) => 
+
+    let provPromise = page.waitForResponse((response: any) =>
       response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
       { timeout: 3000 }
     ).catch(() => null);
@@ -506,8 +506,8 @@ export class AutomationService {
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.getOptimalSearchQuery(cleanKota);
     this.logStep(subject, 3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
-    
-    let kotaPromise = page.waitForResponse((response: any) => 
+
+    let kotaPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
       { timeout: 3000 }
     ).catch(() => null);
@@ -521,8 +521,8 @@ export class AutomationService {
     const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
     const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
     this.logStep(subject, 3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
-    
-    let kecPromise = page.waitForResponse((response: any) => 
+
+    let kecPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
       { timeout: 3000 }
     ).catch(() => null);
@@ -536,8 +536,8 @@ export class AutomationService {
     const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
     const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
     this.logStep(subject, 3, 'info', `Mencari desa/kelurahan KTP: ${cleanKelurahan}...`);
-    
-    let kelPromise = page.waitForResponse((response: any) => 
+
+    let kelPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
       { timeout: 3000 }
     ).catch(() => null);
@@ -546,7 +546,7 @@ export class AutomationService {
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKelurahan);
     await page.waitForTimeout(200);
-    
+
     this.logStep(subject, 3, 'success', 'Semua data detail pelaku usaha dan lokasi berhasil diisi.');
 
     // 10. Mencentang checkbox persetujuan
@@ -556,7 +556,7 @@ export class AutomationService {
     } catch (e) {
       await page.getByText('Saya setuju dengan Syarat dan Ketentuan').first().click({ force: true });
     }
-    
+
     // 11. Mengklik tombol "Daftar" untuk memproses pendaftaran akun...
     const maxRetries = 3;
     let isDukcapilError = false;
@@ -587,7 +587,7 @@ export class AutomationService {
     // Wait for Dukcapil NIK/Name match checking API
     this.logStep(subject, 3, 'info', 'Menunggu verifikasi NIK dan Nama Pemilik dengan Dukcapil...');
     await page.waitForTimeout(1000);
-    
+
     let isKtpMismatch = false;
     try {
       const count = await page.getByText('Data tidak sesuai KTP').count();
@@ -602,7 +602,7 @@ export class AutomationService {
       this.logStep(subject, 3, 'error', 'Pendaftaran GAGAL: Data nama pelaku usaha atau NIK tidak sesuai KTP Dukcapil. Silakan periksa kembali ketikan Anda.');
       throw new Error('Data tidak sesuai KTP');
     }
-    
+
     this.logStep(subject, 3, 'success', 'Selamat! Registrasi akun OSS Pelaku Usaha telah BERHASIL diselesaikan.');
 
     await this.logSessionState(page, draft.nik, 'After Detail Profile Submission');
@@ -627,7 +627,7 @@ export class AutomationService {
     }
 
     this.logStep(subject, 4, 'info', 'Mencari kolom input login (Username & Password)...');
-    
+
     const usernameSelector = 'input[name="username"], input[type="text"], input[placeholder*="Username"], input[placeholder*="Email"], #username';
     const passwordSelector = 'input[name="password"], input[type="password"], input[placeholder*="Sandi"], input[placeholder*="Password"], #password';
 
@@ -719,7 +719,7 @@ export class AutomationService {
           this.logStep(subject, 4, 'error', `Login GAGAL di portal OSS: ${errorMsg.trim()}`);
           throw new Error(`Login gagal: ${errorMsg.trim()}`);
         }
-        
+
         this.logStep(subject, 4, 'error', 'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).');
         throw new Error('Login ditolak atau butuh penyelesaian CAPTCHA manual.');
       }
@@ -746,13 +746,13 @@ export class AutomationService {
       try {
         const urlObj = new URL(currentUrl);
         jwtToken = urlObj.searchParams.get('auth-code') || '';
-        
+
         if (!jwtToken && urlObj.hash) {
           const hashQuery = urlObj.hash.substring(urlObj.hash.indexOf('?'));
           const hashParams = new URLSearchParams(hashQuery);
           jwtToken = hashParams.get('auth-code') || '';
         }
-        
+
         if (!jwtToken) {
           const match = currentUrl.match(/auth-code=([^&]+)/);
           if (match) {
@@ -799,14 +799,14 @@ export class AutomationService {
       if (type !== 'xhr' && type !== 'fetch') {
         return;
       }
-      
+
       requestStartTimes.set(request, Date.now());
 
       const url = request.url();
       const method = request.method();
-      
+
       let logMsg = `[Tx: ${txId}] [Network Request] ${method} ${url}`;
-      
+
       try {
         const parsedUrl = new URL(url);
         if (parsedUrl.search) {
@@ -820,7 +820,7 @@ export class AutomationService {
       if (postData) {
         logMsg += ` | Payload: ${postData}`;
       }
-      
+
       this.logger.log(logMsg);
     });
 
@@ -832,13 +832,13 @@ export class AutomationService {
       }
       const url = response.url();
       const status = response.status();
-      
+
       const startTime = requestStartTimes.get(request);
       requestStartTimes.delete(request);
       const duration = startTime ? `${Date.now() - startTime}ms` : 'unknown';
 
       this.logger.log(`[Tx: ${txId}] [Network Response] ${status} ${url} (took ${duration})`);
-      
+
       if (url.includes('/ref/') || url.includes('oss.go.id/api') || url.includes('/provinsi') || url.includes('/kota') || url.includes('/kecamatan') || url.includes('/kelurahan')) {
         try {
           if (status >= 200 && status < 300) {
@@ -901,19 +901,19 @@ export class AutomationService {
 
   private async selectOptionRobust(page: any, query: string): Promise<boolean> {
     const normalQuery = query.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    
+
     // Dynamic wait for option elements to load rather than a forced delay
     try {
       await page.getByRole('option').first().waitFor({ state: 'attached', timeout: 3000 });
     } catch (e) {
       // Gracefully continue and let page.getByRole('option') retry dynamically
     }
-    
+
     const optionElements = page.getByRole('option');
-    
+
     // Blistering fast single round-trip fetch of all inner texts instead of a sequential loop
     const texts = await optionElements.allInnerTexts().catch(() => []);
-    
+
     const matchedIndex = texts.findIndex((text: string) => {
       const normalText = text.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       return normalText.includes(normalQuery) || normalQuery.includes(normalText);
@@ -931,7 +931,7 @@ export class AutomationService {
         // Fallback to sequential search if element became detached
       }
     }
-    
+
     // Fallback: Click first visible option
     if (texts.length > 0) {
       try {
@@ -943,7 +943,7 @@ export class AutomationService {
         return true;
       } catch (e) {}
     }
-    
+
     // Ultimate Keyboard fallback: Press ArrowDown and Enter
     try {
       await page.keyboard.press('ArrowDown');
@@ -953,7 +953,7 @@ export class AutomationService {
       await page.keyboard.press('Escape');
       return true;
     } catch (e) {}
-    
+
     return false;
   }
 
@@ -976,7 +976,7 @@ export class AutomationService {
 
   private async clickAndFillInputResilient(page: any, selector: string, value: string, timeoutMs = 15000): Promise<boolean> {
     const startTime = Date.now();
-    
+
     while (Date.now() - startTime < timeoutMs) {
       // Try getByRole locator first
       try {
@@ -1028,7 +1028,7 @@ export class AutomationService {
       let jwtToken = '';
       const urlObj = new URL(url);
       jwtToken = urlObj.searchParams.get('auth-code') || '';
-      
+
       if (!jwtToken && urlObj.hash) {
         const hashQueryIndex = urlObj.hash.indexOf('?');
         if (hashQueryIndex !== -1) {
@@ -1037,14 +1037,14 @@ export class AutomationService {
           jwtToken = hashParams.get('auth-code') || '';
         }
       }
-      
+
       if (!jwtToken) {
         const match = url.match(/auth-code=([^&]+)/);
         if (match) {
           jwtToken = match[1];
         }
       }
-      
+
       if (jwtToken) {
         this.activeTokens.set(draftId, jwtToken);
         this.logger.log(`[Tx: automation-${draftId}] [Token Capture] Captured auth-code token successfully.`);
@@ -1062,14 +1062,14 @@ export class AutomationService {
     subject: Subject<AutomationEvent>
   ) {
     this.logStep(subject, 5, 'info', 'Memulai pengelolaan lokasi usaha (Step 5)...');
-    
+
     await page.getByTestId('top-menus').locator('div').filter({ hasText: 'Perizinan Berusaha' }).click();
     await page.getByTestId('desktop-dropdown-panel').getByText('Kelola Usaha').click();
     await page.getByTestId('category-right-panel').getByText('Lokasi Usaha').first().click();
 
     // wait for redirected page loaded
     await page.waitForURL(/.*\/lokasi-usaha.*/, { waitUntil: 'networkidle', timeout: 15000 });
-    
+
     await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
     await page.waitForURL(/.*\/lokasi-usaha\/tambah-lokasi.*/, { waitUntil: 'networkidle', timeout: 15000 });
 
@@ -1077,7 +1077,7 @@ export class AutomationService {
     await page.waitForTimeout(2000);
 
     // wait for matra api
-    await page.waitForResponse((response: any) => 
+    await page.waitForResponse((response: any) =>
       response.url().includes('/options/matra') && (response.status() === 200 || response.status() === 304),
       { timeout: 3000 }
     ).catch(() => null);
@@ -1095,7 +1095,7 @@ export class AutomationService {
     await page.getByRole('combobox', { name: 'Cari alamat...' }).fill(coordinate);
 
     // get display name
-    await page.waitForResponse((response: any) => 
+    await page.waitForResponse((response: any) =>
       response.url().includes('nominatim.openstreetmap.org/search') && response.status() === 200 && response.body().includes(lat) && response.body().includes(lon),
       { timeout: 5000 }
     ).catch(() => null);
@@ -1107,7 +1107,7 @@ export class AutomationService {
     this.logStep(subject, 5, 'info', `Mengisi Luas Lahan: ${draft.luasTanah || '150'} m²...`);
     await page.getByRole('textbox', { name: 'Luas Lahan' }).click();
     await page.getByRole('textbox', { name: 'Luas Lahan' }).fill(draft.luasTanah || '150');
-    
+
     this.logStep(subject, 5, 'info', `Mengisi Alamat Lengkap Usaha: ${draft.alamatUsaha}...`);
     await page.getByRole('textbox', { name: 'Alamat lengkap' }).click();
     await page.getByRole('textbox', { name: 'Alamat lengkap' }).fill(draft.alamatUsaha);
@@ -1116,8 +1116,8 @@ export class AutomationService {
     const cleanProvinsi = (draft.provinsiKtp || draft.provinsi || 'DKI JAKARTA').trim();
     const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
     this.logStep(subject, 5, 'info', `Mencari provinsi usaha: ${cleanProvinsi}...`);
-    
-    let provPromise = page.waitForResponse((response: any) => 
+
+    let provPromise = page.waitForResponse((response: any) =>
       response.url().includes('/provinsi') && (response.status() === 200 || response.status() === 304),
       { timeout: 5000 }
     ).catch(() => null);
@@ -1133,8 +1133,8 @@ export class AutomationService {
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.getOptimalSearchQuery(cleanKota);
     this.logStep(subject, 5, 'info', `Mencari kabupaten/kota usaha: ${rawKota}...`);
-    
-    let kotaPromise = page.waitForResponse((response: any) => 
+
+    let kotaPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kota') && (response.status() === 200 || response.status() === 304),
       { timeout: 5000 }
     ).catch(() => null);
@@ -1148,12 +1148,12 @@ export class AutomationService {
     const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan || '').trim();
     const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
     this.logStep(subject, 5, 'info', `Mencari kecamatan usaha: ${cleanKecamatan}...`);
-    
-    let kecPromise = page.waitForResponse((response: any) => 
+
+    let kecPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kecamatan') && (response.status() === 200 || response.status() === 304),
       { timeout: 5000 }
     ).catch(() => null);
-    
+
     await page.getByPlaceholder('Kecamatan').locator('input').fill(searchKecamatan);
     await kecPromise;
     await page.waitForTimeout(200);
@@ -1164,12 +1164,12 @@ export class AutomationService {
     const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan || '').trim();
     const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
     this.logStep(subject, 5, 'info', `Mencari desa/kelurahan usaha: ${cleanKelurahan}...`);
-    
-    let kelPromise = page.waitForResponse((response: any) => 
+
+    let kelPromise = page.waitForResponse((response: any) =>
       response.url().includes('/kelurahan') && (response.status() === 200 || response.status() === 304),
       { timeout: 5000 }
     ).catch(() => null);
-    
+
     await page.getByPlaceholder('Kelurahan').locator('input').fill(searchKelurahan);
     await kelPromise;
     await page.waitForTimeout(200);
@@ -1214,38 +1214,38 @@ export class AutomationService {
 
       // Upload files
       this.logStep(subject, 5, 'info', 'Mengunggah dokumen PDF ke portal OSS...');
-      
+
       const fileInputs = page.locator('input[type="file"]');
-      
+
       // Setup promises to wait for upload network responses
-      const upload1Promise = page.waitForResponse((response: any) => 
-        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) && 
+      const upload1Promise = page.waitForResponse((response: any) =>
+        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) &&
         response.status() === 200,
         { timeout: 25000 }
       ).catch(() => null);
-      
+
       this.logStep(subject, 5, 'info', 'Mengunggah Dokumen Pernyataan Mandiri...');
       await fileInputs.first().setInputFiles(npsPath);
       await upload1Promise;
       await page.waitForTimeout(1000);
-      
-      const upload2Promise = page.waitForResponse((response: any) => 
-        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) && 
+
+      const upload2Promise = page.waitForResponse((response: any) =>
+        (response.url().includes('/dokumen') || response.url().includes('/file') || response.url().includes('/upload')) &&
         response.status() === 200,
         { timeout: 25000 }
       ).catch(() => null);
-      
+
       this.logStep(subject, 5, 'info', 'Mengunggah Foto Lokasi...');
       await fileInputs.last().setInputFiles(photoPath);
       await upload2Promise;
       await page.waitForTimeout(1000);
-      
+
       // Wait for any loading/progressbar indicator to detach
       this.logStep(subject, 5, 'info', 'Menunggu proses unggah selesai di portal...');
       await page.locator('.v-progress-linear, .v-progress-circular, [role="progressbar"]').waitFor({ state: 'detached', timeout: 10000 }).catch(() => null);
       await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
       await page.waitForTimeout(1500);
-      
+
       this.logStep(subject, 5, 'success', 'Kedua berkas PDF berhasil diunggah.');
 
     } catch (pdfErr: any) {
