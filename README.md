@@ -34,6 +34,12 @@ PLAYWRIGHT_SLOW_MO=500
 
 # URL Target portal OSS
 OSS_PORTAL_URL=https://oss.go.id
+
+# Playwright Concurrency Limit
+PLAYWRIGHT_MAX_CONCURRENT_SESSIONS=3
+
+# Database Connection (PostgreSQL)
+DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5432/nib_assistant?schema=public
 ```
 
 ### 2. Frontend (`frontend/.env`)
@@ -50,6 +56,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 ### Prasyarat
 - **Node.js** v18+ atau v20+ terpasang di sistem Anda.
 - **npm** (Package Manager).
+- **Docker** terpasang untuk menjalankan database PostgreSQL secara lokal.
 
 ### Langkah 1: Kloning & Pemasangan Dependensi
 Buka terminal dan pasang semua dependensi pada masing-masing folder:
@@ -64,14 +71,26 @@ cd ../backend
 npm install
 ```
 
-### Langkah 2: Pemasangan Browser Playwright
-Backend NestJS menggunakan Playwright untuk memicu otomasi browser. Pasang browser engine bawaannya:
+### Langkah 2: Menjalankan Database PostgreSQL
+Gunakan Docker Compose untuk mengaktifkan database PostgreSQL lokal:
+```bash
+# Jalankan perintah ini dari folder root proyek (tempat file docker-compose.yml berada)
+docker compose up -d
+```
+
+### Langkah 3: Sinkronisasi Skema Database & Browser Engine
+Di dalam folder `backend/`, sinkronkan skema database menggunakan Prisma dan pasang browser engine Playwright:
 ```bash
 cd backend
+
+# Sinkronisasi skema ke database PostgreSQL
+npx prisma db push
+
+# Pemasangan browser engine Playwright
 npx playwright install chromium
 ```
 
-### Langkah 3: Menjalankan Aplikasi
+### Langkah 4: Menjalankan Aplikasi
 
 Jalankan server backend dan frontend secara bersamaan di terminal terpisah:
 
@@ -118,9 +137,13 @@ pm2 start "npm run start" --name "nib-frontend"
 
 ---
 
-### B. Deploy Backend (NestJS + Playwright)
+### B. Deploy Backend (NestJS + Playwright + PostgreSQL)
 
 Karena backend menjalankan Playwright (yang membutuhkan dependensi browser engine seperti Chromium), deployment menggunakan **Docker** sangat direkomendasikan agar sistem operasi memiliki semua library GUI/headful yang dibutuhkan.
+
+> [!IMPORTANT]
+> **Migrasi Database saat Deployment**:
+> Anda harus menyediakan instance PostgreSQL production (misalnya AWS RDS, GCP Cloud SQL, atau container terpisah). Jalankan perintah `npx prisma db push` atau `npx prisma migrate deploy` di lingkungan hosting Anda sebelum aplikasi NestJS dinyalakan agar skema database selalu mutakhir.
 
 #### Menggunakan Docker (Rekomendasi)
 Buat file `Dockerfile` di dalam folder `backend/`:
@@ -140,6 +163,9 @@ RUN npm ci
 # Copy all source files
 COPY . .
 
+# Generate Prisma Client
+RUN npx prisma generate
+
 # Build NestJS
 RUN npm run build
 
@@ -154,21 +180,23 @@ Build dan jalankan Docker Image:
 ```bash
 cd backend
 docker build -t nib-backend .
-docker run -p 3001:3001 --name nib-backend-runner nib-backend
+docker run -p 3001:3001 --name nib-backend-runner -e DATABASE_URL="url_database_prod_anda" nib-backend
 ```
 
 #### Menggunakan VPS (Ubuntu) Tanpa Docker
 Jika Anda mendeploy langsung ke VPS Linux, jalankan perintah berikut untuk menginstal dependensi system library Linux yang dibutuhkan oleh browser Chromium:
 
-1. **Install System Dependencies:**
+1. **Install System Dependencies & Client Generation:**
    ```bash
    cd backend
    npm ci
+   npx prisma generate
    npx playwright install-deps chromium
    npx playwright install chromium
    ```
-2. **Jalankan Backend menggunakan PM2:**
+2. **Jalankan Sinkronisasi Database & PM2:**
    ```bash
+   npx prisma db push
    npm run build
    pm2 start dist/main.js --name "nib-backend"
    ```

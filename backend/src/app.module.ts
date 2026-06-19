@@ -9,6 +9,7 @@ import { KbliService } from './kbli/kbli.service';
 import { AutomationController } from './automation/automation.controller';
 import { AutomationService } from './automation/automation.service';
 import { DocumentsModule } from './documents/documents.module';
+import { PrismaService } from './prisma.service';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { DocumentsModule } from './documents/documents.module';
     DraftsService,
     KbliService,
     AutomationService,
+    PrismaService,
   ],
 })
 export class AppModule {}

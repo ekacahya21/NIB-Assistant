@@ -30,6 +30,19 @@ export class AutomationService {
     stepStartTimes: Map<number, number>;
   }>();
 
+  // Queue and browser management
+  private activeSessionsCount = 0;
+  private readonly activeBrowsers = new Map<string, any>();
+  private readonly activeSubjects = new Map<string, Subject<AutomationEvent>>();
+  private readonly queue: Array<{
+    draftId: string;
+    akunOss: string | undefined;
+    subject: Subject<AutomationEvent>;
+    resolve: () => void;
+    reject: (err: any) => void;
+    isCancelled: boolean;
+  }> = [];
+
   constructor(
     private readonly draftsService: DraftsService,
     private readonly documentsService: DocumentsService,
@@ -53,18 +66,118 @@ export class AutomationService {
 
   // Observable SSE stream for automation status
   getStream(draftId: string, akunOss?: string): Observable<AutomationEvent> {
-    const subject = new Subject<AutomationEvent>();
-    this.subjectToDraftId.set(subject, draftId);
+    return new Observable<AutomationEvent>((subscriber) => {
+      const subject = new Subject<AutomationEvent>();
+      this.subjectToDraftId.set(subject, draftId);
+      this.activeSubjects.set(draftId, subject);
 
-    // Launch the background automation process asynchronously
-    this.runPlaywrightAutomation(draftId, akunOss, subject).catch((err) => {
-      console.error('Playwright execution error:', err);
-      const errMsg = `Terjadi kesalahan kritis: ${err.message || err}`;
-      this.logStep(subject, 5, 'error', errMsg);
-      subject.complete();
+      this.enqueueRequest(draftId, akunOss, subject);
+
+      const subscription = subject.subscribe({
+        next: (val) => subscriber.next(val),
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        this.logger.log(`Client disconnected from SSE stream for draft: ${draftId}`);
+        subscription.unsubscribe();
+        this.cancelStream(draftId);
+      };
     });
+  }
 
-    return subject.asObservable();
+  cancelStream(draftId: string) {
+    this.logger.log(`Received cancellation request for draft ID: ${draftId}`);
+    
+    // 1. If in queue, cancel it and reject the promise
+    const queuedIndex = this.queue.findIndex(item => item.draftId === draftId);
+    if (queuedIndex !== -1) {
+      const item = this.queue[queuedIndex];
+      item.isCancelled = true;
+      item.reject(new Error('Sesi dibatalkan oleh pengguna.'));
+      this.queue.splice(queuedIndex, 1);
+      this.logger.log(`Draft ID ${draftId} removed from queue.`);
+    }
+
+    // 2. Close active browser if running
+    const activeBrowser = this.activeBrowsers.get(draftId);
+    if (activeBrowser) {
+      this.logger.log(`Closing active browser for draft ID: ${draftId}`);
+      activeBrowser.close().catch((err: any) => {
+        this.logger.error(`Error closing browser on cancellation: ${err}`);
+      });
+      this.activeBrowsers.delete(draftId);
+    }
+
+    // Complete the subject
+    const subject = this.activeSubjects.get(draftId);
+    if (subject) {
+      subject.complete();
+      this.activeSubjects.delete(draftId);
+    }
+  }
+
+  private enqueueRequest(
+    draftId: string,
+    akunOss: string | undefined,
+    subject: Subject<AutomationEvent>
+  ) {
+    const maxSessions = parseInt(process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3', 10);
+
+    if (this.activeSessionsCount < maxSessions) {
+      this.activeSessionsCount++;
+      this.runPlaywrightAutomation(draftId, akunOss, subject)
+        .catch((err) => {
+          this.logger.error(`Error running playwright automation for draft ${draftId}: ${err.message}`);
+        })
+        .finally(() => {
+          this.activeSessionsCount--;
+          this.processQueue();
+        });
+    } else {
+      this.logStep(
+        subject,
+        1,
+        'info',
+        'Permintaan Anda sedang diproses. Mohon tunggu beberapa saat, kami sedang menyiapkan sesi pendaftaran yang aman untuk Anda...'
+      );
+
+      new Promise<void>((resolve, reject) => {
+        this.queue.push({
+          draftId,
+          akunOss,
+          subject,
+          resolve,
+          reject,
+          isCancelled: false,
+        });
+      })
+        .then(() => {
+          return this.runPlaywrightAutomation(draftId, akunOss, subject);
+        })
+        .catch((err) => {
+          this.logger.error(`Error running queued automation for draft ${draftId}: ${err.message}`);
+        })
+        .finally(() => {
+          this.activeSessionsCount--;
+          this.processQueue();
+        });
+    }
+  }
+
+  private processQueue() {
+    const maxSessions = parseInt(process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3', 10);
+    while (this.activeSessionsCount < maxSessions && this.queue.length > 0) {
+      const nextTask = this.queue.shift();
+      if (nextTask) {
+        if (nextTask.isCancelled) {
+          continue;
+        }
+        this.activeSessionsCount++;
+        nextTask.resolve();
+      }
+    }
   }
 
   private logStep(
@@ -135,7 +248,7 @@ export class AutomationService {
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>
   ): Promise<void> {
-    const draft = this.draftsService.findOne(draftId);
+    const draft = await this.draftsService.findOne(draftId);
     if (!draft) {
       throw new Error(`Data draft dengan ID ${draftId} tidak ditemukan. Silakan isi form wizard terlebih dahulu.`);
     }
@@ -203,8 +316,10 @@ export class AutomationService {
       this.activeTokens.delete(draftId);
       this.executionTimers.delete(draftId);
       this.subjectToDraftId.delete(subject);
+      this.activeBrowsers.delete(draftId);
+      this.activeSubjects.delete(draftId);
       if (browser) {
-        await browser.close();
+        await browser.close().catch(() => {});
       }
       subject.complete();
     }
@@ -219,6 +334,7 @@ export class AutomationService {
       headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
       slowMo: 1000,
     });
+    this.activeBrowsers.set(draftId, browser);
 
     try {
       this.logStep(subject, 1, 'success', 'Browser Chromium headful berhasil diluncurkan.');

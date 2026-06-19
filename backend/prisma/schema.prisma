@@ -1,0 +1,42 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Draft {
+  id                String   @id
+  namaPemilik       String
+  nik               String
+  tanggalLahir      String
+  nomorHp           String
+  email             String
+  alamatUsaha       String
+  alamatKtp         String?
+  provinsiKtp       String?
+  kotaKabupatenKtp  String?
+  kecamatanKtp      String?
+  kelurahanKtp      String?
+  kodePosKtp        String?
+  provinsi          String
+  kotaKabupaten     String
+  kecamatan         String
+  kelurahan         String
+  kodePos           String
+  namaUsaha         String
+  ceritaUsaha       String
+  modalUsaha        String
+  jumlahPekerja     String
+  caraPenjualan     String
+  kbliCode          String?
+  kbliTitle         String?
+  jenisKelamin      String?
+  latitude          String?
+  longitude         String?
+  luasTanah         String?
+  fotoLokasi        String?
+  updatedAt         DateTime @default(now()) @updatedAt
+}
