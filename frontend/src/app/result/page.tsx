@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+const getTimestampSeconds = () => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+};
+
 // Simple fallback for Suspense boundary
 function ResultLoading() {
   return (
@@ -116,7 +122,7 @@ function ResultPageContent() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `dokumen_administrasi_nib_${draftId || "draft"}.pdf`;
+      a.download = `dokumen_administrasi_nib_${draftId || "draft"}_${getTimestampSeconds()}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

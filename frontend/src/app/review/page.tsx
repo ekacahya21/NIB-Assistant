@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+const getTimestampSeconds = () => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+};
+
 export default function ReviewPage() {
   const router = useRouter();
   
@@ -66,7 +72,7 @@ export default function ReviewPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `dokumen_administrasi_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `dokumen_administrasi_${getTimestampSeconds()}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -99,7 +105,7 @@ export default function ReviewPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `foto_lokasi_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `foto_lokasi_${getTimestampSeconds()}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
