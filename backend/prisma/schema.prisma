@@ -9,34 +9,37 @@ generator client {
 
 model Draft {
   id                String   @id
-  namaPemilik       String
+  namaPemilik       String   @map("nama_pemilik")
   nik               String
-  tanggalLahir      String
-  nomorHp           String
+  tanggalLahir      String   @map("tanggal_lahir")
+  nomorHp           String   @map("nomor_hp")
   email             String
-  alamatUsaha       String
-  alamatKtp         String?
-  provinsiKtp       String?
-  kotaKabupatenKtp  String?
-  kecamatanKtp      String?
-  kelurahanKtp      String?
-  kodePosKtp        String?
+  alamatUsaha       String   @map("alamat_usaha")
+  alamatKtp         String?  @map("alamat_ktp")
+  provinsiKtp       String?  @map("provinsi_ktp")
+  kotaKabupatenKtp  String?  @map("kota_kabupaten_ktp")
+  kecamatanKtp      String?  @map("kecamatan_ktp")
+  kelurahanKtp      String?  @map("kelurahan_ktp")
+  kodePosKtp        String?  @map("kode_pos_ktp")
   provinsi          String
-  kotaKabupaten     String
+  kotaKabupaten     String   @map("kota_kabupaten")
   kecamatan         String
   kelurahan         String
-  kodePos           String
-  namaUsaha         String
-  ceritaUsaha       String
-  modalUsaha        String
-  jumlahPekerja     String
-  caraPenjualan     String
-  kbliCode          String?
-  kbliTitle         String?
-  jenisKelamin      String?
+  kodePos           String   @map("kode_pos")
+  namaUsaha         String   @map("nama_usaha")
+  ceritaUsaha       String   @map("cerita_usaha")
+  modalUsaha        String   @map("modal_usaha")
+  jumlahPekerja     String   @map("jumlah_pekerja")
+  caraPenjualan     String   @map("cara_penjualan")
+  kbliCode          String?  @map("kbli_code")
+  kbliTitle         String?  @map("kbli_title")
+  jenisKelamin      String?  @map("jenis_kelamin")
   latitude          String?
   longitude         String?
-  luasTanah         String?
-  fotoLokasi        String?
-  updatedAt         DateTime @default(now()) @updatedAt
+  luasTanah         String?  @map("luas_tanah")
+  fotoLokasi        String?  @map("foto_lokasi")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("drafts")
 }
+
