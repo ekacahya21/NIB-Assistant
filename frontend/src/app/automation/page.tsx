@@ -199,11 +199,21 @@ export default function AutomationPage() {
           eventSource.close();
         }
         if (failedStepRef.current === null) {
-          addLog("Koneksi backend tidak terdeteksi.", "warn");
+          addLog("Koneksi backend terputus atau tidak terdeteksi.", "error");
+          failedStepRef.current = 999;
+          setFailedStep(999);
+          setErrorType("generic");
+          setErrorText("Koneksi ke server backend NIB Assistant terputus. Pastikan server backend Anda menyala, kemudian klik tombol 'Coba Lagi' di bawah untuk menghubungkan kembali dan mengulangi otomatisasi.");
+          setStatusText("Koneksi Terputus");
         }
       };
     } catch (e) {
-      addLog("Koneksi backend tidak terdeteksi.", "warn");
+      addLog("Koneksi backend tidak terdeteksi.", "error");
+      failedStepRef.current = 999;
+      setFailedStep(999);
+      setErrorType("generic");
+      setErrorText("Gagal mendirikan koneksi ke server backend NIB Assistant.");
+      setStatusText("Koneksi Gagal");
     }
   };
 

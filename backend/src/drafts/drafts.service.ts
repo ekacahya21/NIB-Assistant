@@ -40,6 +40,15 @@ export class DraftsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: DraftData): Promise<DraftData> {
+    // Check if a draft with the same NIK already exists
+    const existingDraft = await this.prisma.draft.findFirst({
+      where: { nik: data.nik },
+    });
+
+    if (existingDraft) {
+      return this.update(existingDraft.id, data);
+    }
+
     const id = Math.random().toString(36).substring(2, 11).toUpperCase();
     const newDraft = await this.prisma.draft.create({
       data: {
