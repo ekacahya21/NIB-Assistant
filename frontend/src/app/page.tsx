@@ -191,44 +191,6 @@ export default function OnboardingPage() {
                       )}
                     </div>
 
-                    {/* Skala Usaha Selector */}
-                    <div className="space-y-3">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
-                        <span className="material-symbols-outlined text-base text-primary-container">
-                          bar_chart
-                        </span>
-                        Skala Modal Usaha
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="cursor-pointer">
-                          <input
-                            type="radio"
-                            name="skala_usaha"
-                            value="mikro"
-                            checked={skalaUsaha === "mikro"}
-                            onChange={(e) => setSkalaUsaha(e.target.value)}
-                            className="peer sr-only"
-                          />
-                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
-                            Mikro / Kecil (&lt; Rp 5 Miliar)
-                          </div>
-                        </label>
-                        <label className="cursor-pointer">
-                          <input
-                            type="radio"
-                            name="skala_usaha"
-                            value="menengah"
-                            checked={skalaUsaha === "menengah"}
-                            onChange={(e) => setSkalaUsaha(e.target.value)}
-                            className="peer sr-only"
-                          />
-                          <div className="px-3 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[56px] flex flex-col items-center justify-center gap-1.5">
-                            Menengah / Besar (&gt; Rp 5 Miliar)
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
                     {/* Akun OSS Selector */}
                     <div className="space-y-3">
                       <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
