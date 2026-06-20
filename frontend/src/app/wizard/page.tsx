@@ -3,6 +3,69 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
+interface KBLIRecommendation {
+  code: string;
+  title: string;
+  description: string;
+  confidence: "sangat_cocok" | "alternatif";
+  suitableFor: string[];
+}
+
+interface KBLIUIDetails {
+  summary: string;
+  suitable: string[];
+  unsuitable: string[];
+}
+
+const KBLI_DETAILS_MAP: Record<string, KBLIUIDetails> = {
+  "56103": {
+    summary: "Usaha warung makan, kedai makanan menetap atau restoran kecil siap saji.",
+    suitable: ["Warung makan / warteg", "Kedai bakso & mie ayam", "Outlet ayam geprek", "Rumah makan Padang kecil"],
+    unsuitable: ["Katering borongan pesta besar", "Jasa jualan keliling gerobak", "Pabrik pengolahan makanan beku"]
+  },
+  "56210": {
+    summary: "Penyediaan makanan dan catering berdasarkan kontrak/pesanan untuk acara.",
+    suitable: ["Katering syukuran & pernikahan", "Nasi kotak kantoran", "Pesanan kue basah & snack box"],
+    unsuitable: ["Warung makan menetap di ruko", "Pedagang asongan keliling", "Restoran cepat saji fisik"]
+  },
+  "56104": {
+    summary: "Penyediaan makanan keliling memakai gerobak, pikulan, atau mobil food truck.",
+    suitable: ["Gerobak bakso keliling warga", "Food truck minuman keliling", "Pedagang kaki lima bongkar pasang"],
+    unsuitable: ["Restoran fisik permanen", "Katering pabrik industri besar"]
+  },
+  "47711": {
+    summary: "Perdagangan eceran baju, hijab, pakaian jadi, dan aksesori sandang fisik/online.",
+    suitable: ["Butik baju & toko busana", "Jualan hijab & gamis online", "Reseller pakaian anak jadi", "Toko daster"],
+    unsuitable: ["Jasa jahit pakaian kustom", "Pabrik konveksi & tenun kain", "Grosir kontainer pakaian mentah"]
+  },
+  "47911": {
+    summary: "Perdagangan eceran aneka jenis barang khusus via toko online/marketplace/medsos.",
+    suitable: ["Online shop Instagram/TikTok", "Reseller e-commerce", "Dropshipper aksesoris & perabotan"],
+    unsuitable: ["Toko kelontong fisik di pasar", "Pedagang grosir offline pergudangan"]
+  },
+  "96200": {
+    summary: "Jasa pencucian, setrika, laundry pakaian jadi, selimut, karpet, helm, sepatu.",
+    suitable: ["Laundry kiloan & satuan", "Jasa cuci sepatu & tas", "Dry cleaning jas", "Jasa setrika rumahan"],
+    unsuitable: ["Laundry industri skala pabrik", "Jasa bersih-bersih rumah panggilan"]
+  },
+  "96999": {
+    summary: "Aktivitas jasa perorangan lainnya yang belum tercakup di tempat lain.",
+    suitable: ["Jasa potong rambut rumahan", "Jasa setrika keliling", "Jasa asisten rumah tangga harian"],
+    unsuitable: ["Klinik kecantikan medis", "Pabrik kosmetik & salon besar"]
+  }
+};
+
+const getKBLIDetails = (code: string, fallbackDesc: string, fallbackSuitable: string[]): KBLIUIDetails => {
+  if (KBLI_DETAILS_MAP[code]) {
+    return KBLI_DETAILS_MAP[code];
+  }
+  return {
+    summary: fallbackDesc,
+    suitable: fallbackSuitable.length > 0 ? fallbackSuitable : ["Aktivitas perdagangan eceran", "Jasa perorangan mikro"],
+    unsuitable: ["Usaha skala industri menengah/besar", "Ekspor-impor skala besar (Kargo kontainer)"]
+  };
+};
+
 export default function WizardPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -59,6 +122,13 @@ export default function WizardPage() {
   // Validation Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // AI KBLI States
+  const [recommendations, setRecommendations] = useState<KBLIRecommendation[]>([]);
+  const [selectedKbliCode, setSelectedKbliCode] = useState<string>("");
+  const [loadingKbli, setLoadingKbli] = useState<boolean>(false);
+  const [expandedKbliCard, setExpandedKbliCard] = useState<string | null>(null);
+  const [kbliError, setKbliError] = useState<string>("");
+
   // Fetch initial preferences from onboarding page on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -66,6 +136,18 @@ export default function WizardPage() {
       const savedStep = sessionStorage.getItem("wizard_step");
       const scale = sessionStorage.getItem("skala_usaha") || "";
       const modalDefault = scale === "mikro" ? "50000000" : "";
+
+      const storedKbli = sessionStorage.getItem("selected_kbli");
+      if (storedKbli) {
+        try {
+          const parsed = JSON.parse(storedKbli);
+          setSelectedKbliCode(parsed.code);
+          setRecommendations([parsed]);
+          setExpandedKbliCard(parsed.code);
+        } catch (e) {
+          console.error("Gagal memuat KBLI terpilih dari session:", e);
+        }
+      }
       
       if (savedStep) {
         const parsedStep = parseInt(savedStep, 10);
@@ -701,6 +783,9 @@ export default function WizardPage() {
       if (formData.ceritaUsaha.trim().length < 15) {
         newErrors.ceritaUsaha = "Ceritakan usaha Anda minimal 15 karakter.";
       }
+      if (!selectedKbliCode) {
+        newErrors.kbli = "Silakan pilih salah satu KBLI di bawah.";
+      }
     }
 
     if (step === 4) {
@@ -742,10 +827,66 @@ export default function WizardPage() {
         if (typeof window !== "undefined") {
           sessionStorage.setItem("wizard_step", "4");
         }
-        router.push("/kbli");
+        router.push("/review");
       }
     }
   };
+
+  const fetchRecommendations = async (queryText: string) => {
+    const q = (queryText || "").trim();
+    if (!q) return;
+    setLoadingKbli(true);
+    setKbliError("");
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const res = await fetch(`${apiUrl}/kbli/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setRecommendations(data);
+          
+          // Load previous selection if any, otherwise default to first recommendation
+          const stored = sessionStorage.getItem("selected_kbli");
+          let loaded = false;
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              const found = data.find((r: any) => r.code === parsed.code);
+              if (found) {
+                setSelectedKbliCode(found.code);
+                setExpandedKbliCard(found.code);
+                loaded = true;
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          
+          if (!loaded) {
+            setSelectedKbliCode(data[0].code);
+            setExpandedKbliCard(data[0].code);
+            sessionStorage.setItem("selected_kbli", JSON.stringify(data[0]));
+          }
+        } else {
+          setKbliError("Tidak ditemukan rekomendasi KBLI yang cocok. Silakan sesuaikan deskripsi usaha Anda.");
+        }
+      } else {
+        setKbliError("Gagal mengambil rekomendasi KBLI. Silakan coba lagi.");
+      }
+    } catch (e) {
+      console.error("Error fetching KBLI recommendations:", e);
+      setKbliError("Terjadi kesalahan koneksi saat mencari KBLI.");
+    } finally {
+      setLoadingKbli(false);
+    }
+  };
+
+  // Automatically trigger KBLI recommendation if Step 3 is entered with enough text and no recommendations yet
+  useEffect(() => {
+    if (currentStep === 3 && formData.ceritaUsaha.trim().length >= 15 && recommendations.length <= 1) {
+      fetchRecommendations(formData.ceritaUsaha);
+    }
+  }, [currentStep]);
 
   const handleBack = () => {
     if (currentStep > 1) {
@@ -1525,37 +1666,214 @@ export default function WizardPage() {
                         {errors.ceritaUsaha}
                       </p>
                     )}
-                  </div>
 
-                  {/* Cara Penjualan */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold text-on-surface-variant">
-                      CARA PENJUALAN / OPERASIONAL
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { val: "offline", label: "Toko Fisik" },
-                        { val: "online", label: "Hanya Online" },
-                        { val: "keduanya", label: "Keduanya" }
-                      ].map((mode) => (
-                        <label key={mode.val} className="cursor-pointer">
-                          <input
-                            type="radio"
-                            name="caraPenjualan"
-                            value={mode.val}
-                            checked={formData.caraPenjualan === mode.val}
-                            onChange={(e) => handleInputChange("caraPenjualan", e.target.value)}
-                            className="peer sr-only"
-                          />
-                          <div className="px-1 py-4 rounded border border-border-light peer-checked:border-primary-container peer-checked:bg-primary-container/5 peer-checked:text-primary-container hover:bg-surface-container-low transition-all text-center font-bold text-xs min-h-[50px] flex flex-col items-center justify-center gap-1">
-                            {mode.label}
-                          </div>
-                        </label>
-                      ))}
+                    {/* AI Recommendation Trigger Button */}
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        disabled={loadingKbli || formData.ceritaUsaha.trim().length < 15}
+                        onClick={() => fetchRecommendations(formData.ceritaUsaha)}
+                        className="bg-primary-container hover:bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-2 px-3.5 rounded flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-xs animate-pulse">auto_awesome</span>
+                        {loadingKbli ? "Menganalisis..." : "Cari Rekomendasi KBLI (AI)"}
+                      </button>
                     </div>
+
+                    {errors.kbli && (
+                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">error</span>
+                        {errors.kbli}
+                      </p>
+                    )}
                   </div>
 
                 </div>
+
+                {/* KBLI Recommendations Card */}
+                {(recommendations.length > 0 || loadingKbli || kbliError) && (
+                  <div className="bento-card space-y-4 animate-fadeIn">
+                    
+                    {/* Header */}
+                    <div className="flex justify-between items-center border-b border-border-light pb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-primary-container text-sm">list_alt</span>
+                        Hasil Rekomendasi KBLI (AI)
+                      </span>
+                      {!loadingKbli && recommendations.length > 0 && (
+                        <span className="text-[9px] text-outline font-bold bg-[#F3F4F6] border border-border-light px-2 py-0.5 rounded uppercase">
+                          {recommendations.length} Rekomendasi
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Shimmer loading */}
+                    {loadingKbli ? (
+                      <div className="space-y-4 animate-pulse pt-2">
+                        {[1, 2].map((i) => (
+                          <div key={i} className="border border-border-light rounded-lg p-4 space-y-3">
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <div className="w-12 h-8 rounded bg-[#ECEEF0] animate-pulse" />
+                                <div className="w-24 h-4 rounded bg-[#ECEEF0] animate-pulse" />
+                              </div>
+                              <div className="w-16 h-4 rounded bg-[#ECEEF0] animate-pulse" />
+                            </div>
+                            <div className="w-full h-4 rounded bg-[#ECEEF0] animate-pulse" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : kbliError ? (
+                      <div className="p-4 bg-error/5 border border-error/15 rounded text-center text-xs text-error font-semibold">
+                        {kbliError}
+                      </div>
+                    ) : (
+                      <div className="space-y-4 pt-2">
+                        
+                        {/* Segmented Risk Tag */}
+                        <div className="flex rounded overflow-hidden border border-border-light w-fit">
+                          <span className="bg-[#7C2D12] text-white font-extrabold text-[9px] px-2.5 py-1.5 uppercase tracking-wider">
+                            KBLI 2020
+                          </span>
+                          <span className="bg-[#1A4384] text-white font-extrabold text-[9px] px-2.5 py-1.5 uppercase tracking-wider border-l border-border-light">
+                            Tingkat Risiko Rendah
+                          </span>
+                        </div>
+
+                        {/* List */}
+                        <div className="space-y-3">
+                          {recommendations.map((kbli) => {
+                            const isSelected = selectedKbliCode === kbli.code;
+                            const isExpanded = expandedKbliCard === kbli.code;
+                            const details = getKBLIDetails(kbli.code, kbli.description, kbli.suitableFor);
+
+                            return (
+                              <div 
+                                key={kbli.code} 
+                                className={`bg-white border rounded-lg transition-all ${
+                                  isSelected ? "border-primary-container bg-primary-container/5" : "border-border-light"
+                                }`}
+                              >
+                                
+                                {/* Card Header (Collapsible trigger) */}
+                                <div 
+                                  onClick={() => setExpandedKbliCard(isExpanded ? null : kbli.code)}
+                                  className="p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    {/* Index Badge */}
+                                    <div className="w-12 h-9 rounded bg-[#F3F4F6] text-primary-container font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                                      {kbli.code}
+                                    </div>
+
+                                    {/* Title & Confidence */}
+                                    <div className="min-w-0">
+                                      <h3 className="font-bold text-xs md:text-sm text-on-surface truncate pr-2">
+                                        {kbli.title}
+                                      </h3>
+                                      <span className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold uppercase tracking-wider mt-1 ${
+                                        kbli.confidence === "sangat_cocok"
+                                          ? "text-success"
+                                          : "text-warning"
+                                      }`}>
+                                        <span className="material-symbols-outlined text-[10px] fill-current">
+                                          {kbli.confidence === "sangat_cocok" ? "verified" : "info"}
+                                        </span>
+                                        {kbli.confidence === "sangat_cocok" ? "Sangat Cocok" : "Alternatif"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Chevron */}
+                                  <span className="material-symbols-outlined text-outline text-lg transition-transform duration-200" style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                    expand_more
+                                  </span>
+                                </div>
+
+                                {/* Collapsible Body */}
+                                {isExpanded && (
+                                  <div className="px-3.5 pb-3.5 border-t border-border-light pt-3.5 space-y-3.5 animate-slideDown">
+                                    
+                                    {/* Summary */}
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-outline">
+                                        Ringkasan Awam
+                                      </span>
+                                      <p className="text-xs font-semibold text-on-surface leading-relaxed">
+                                        {details.summary}
+                                      </p>
+                                    </div>
+
+                                    {/* Suitable */}
+                                    <div className="space-y-1.5">
+                                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-outline block">
+                                        Cocok Untuk Jenis Usaha:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {details.suitable.map((tag) => (
+                                          <span 
+                                            key={tag}
+                                            className="bg-success/5 text-success border border-success/20 font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-0.5"
+                                          >
+                                            <span className="material-symbols-outlined text-[10px]">check</span>
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Unsuitable */}
+                                    <div className="space-y-1.5">
+                                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-outline block">
+                                        Tidak Cocok Untuk:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {details.unsuitable.map((tag) => (
+                                          <span 
+                                            key={tag}
+                                            className="bg-error/5 text-error border border-error/20 font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-0.5"
+                                          >
+                                            <span className="material-symbols-outlined text-[10px]">close</span>
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Select Button */}
+                                    <div className="pt-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedKbliCode(kbli.code);
+                                          sessionStorage.setItem("selected_kbli", JSON.stringify(kbli));
+                                          if (errors.kbli) setErrors((prev) => ({ ...prev, kbli: "" }));
+                                        }}
+                                        className={`w-full py-2 rounded text-xs font-bold uppercase tracking-wider border flex items-center justify-center gap-2 transition-all ${
+                                          isSelected
+                                            ? "bg-primary-container text-white border-primary-container"
+                                            : "border-primary-container text-primary-container hover:bg-primary-container/5"
+                                        }`}
+                                      >
+                                        <span className="material-symbols-outlined text-sm">
+                                          {isSelected ? "check_circle" : "check"}
+                                        </span>
+                                        {isSelected ? "KBLI Ini Terpilih" : "Pilih KBLI Ini"}
+                                      </button>
+                                    </div>
+
+                                  </div>
+                                )}
+
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             )}

@@ -151,7 +151,7 @@ Email: ${formData.email || "-"}
 Alamat Usaha: ${formData.alamatUsaha || "-"}
 Modal Usaha: Rp ${formData.modalUsaha || "0"}
 Jumlah Pekerja: ${formData.jumlahPekerja || "0"} orang
-Cara Penjualan: ${formData.caraPenjualan || "Lainnya"}
+Cara Penjualan: ${formData.caraPenjualan || "offline"}
 ${kbliText}
 ============================`;
     

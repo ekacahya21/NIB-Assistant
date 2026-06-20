@@ -252,7 +252,16 @@ export default function ReviewPage() {
       {/* ── Top AppBar ── */}
       <header className="sticky top-0 z-50 flex items-center justify-between px-4 md:px-8 h-16 w-full bg-white border-b border-border-light">
         <div className="flex items-center gap-2">
-          <button onClick={() => router.push("/kbli")} className="p-2 hover:bg-surface-container transition-all rounded text-on-surface-variant flex items-center justify-center" aria-label="Kembali">
+          <button 
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("wizard_step", "4");
+              }
+              router.push("/wizard");
+            }} 
+            className="p-2 hover:bg-surface-container transition-all rounded text-on-surface-variant flex items-center justify-center" 
+            aria-label="Kembali"
+          >
             <span className="material-symbols-outlined text-xl">arrow_back</span>
           </button>
           <div className="flex flex-col">
@@ -444,7 +453,7 @@ export default function ReviewPage() {
                   05. KBLI TERPILIH
                 </span>
                 <button 
-                  onClick={() => router.push("/kbli")} 
+                  onClick={() => handleEditSection(3)} 
                   className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-xs">edit</span> Ubah
