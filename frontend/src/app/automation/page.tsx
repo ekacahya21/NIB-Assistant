@@ -53,6 +53,19 @@ export default function AutomationPage() {
     return `${name.slice(0, 2)}***${name.slice(-1)}@${domain}`;
   };
 
+  const getFriendlyErrorMessage = (rawError: string) => {
+    if (!rawError) {
+      return "Terjadi kendala koneksi atau waktu tunggu habis (timeout) saat berinteraksi dengan portal OSS BKPM. Silakan klik 'Coba Lagi' di bawah untuk mengulangi otomatisasi, atau pilih 'Isi Manual' untuk melanjutkan pengisian secara mandiri.";
+    }
+    const isSystemError = 
+      /locator|timeout|exceeded|waiting\s+for|page\.|selector|element|unexpected|failed|error|network/i.test(rawError);
+
+    if (isSystemError) {
+      return "Terjadi kendala koneksi atau waktu tunggu habis (timeout) saat berinteraksi dengan portal OSS BKPM. Silakan klik 'Coba Lagi' di bawah untuk mengulangi otomatisasi, atau pilih 'Isi Manual' untuk melanjutkan pengisian secara mandiri.";
+    }
+    return rawError;
+  };
+
   const handleOtpDigitChange = (value: string, idx: number) => {
     const cleanVal = value.replace(/\D/g, "").slice(0, 1);
     const newDigits = [...otpDigits];
@@ -375,6 +388,11 @@ export default function AutomationPage() {
       setUpdatedValue("");
       setUpdatedNik("");
       setUpdatedNama("");
+      setOtp("");
+      setOtpDigits(Array(6).fill(""));
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordError("");
       setCurrentStep(1);
       setStatusText("Memulai ulang otomatisasi...");
       setLogs([]);
@@ -633,7 +651,7 @@ export default function AutomationPage() {
               </div>
               <h2 className="text-base font-extrabold uppercase tracking-wider text-error">Otomatisasi Terhenti</h2>
               <p className="text-xs text-on-surface-variant max-w-sm mx-auto leading-relaxed">
-                {errorText || "Terjadi kesalahan internal. Struktur halaman portal OSS BKPM mengalami perubahan."}
+                {getFriendlyErrorMessage(errorText)}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-xs mx-auto pt-2">
