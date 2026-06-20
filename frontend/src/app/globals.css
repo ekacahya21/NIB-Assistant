@@ -57,9 +57,15 @@
   --animate-slideUp: slideUp 0.3s ease-out both;
   --animate-shimmer: shimmer 2s infinite linear;
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+  --animate-spin-slow: spin-slow 4s linear infinite;
 }
 
 /* ─── Keyframe Definitions ─── */
+@keyframes spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

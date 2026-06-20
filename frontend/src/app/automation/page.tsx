@@ -474,7 +474,7 @@ export default function AutomationPage() {
 
   const stepLabels = isBelumAkun() ? [
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
-    { label: "Validasi NIK & OTP", icon: "sms", step: 2 },
+    { label: "Validasi NIK & OTP", icon: "mail", step: 2 },
     { label: "Detail Profil & Registrasi", icon: "app_registration", step: 3 },
     { label: "Login & Otentikasi", icon: "login", step: 4 },
     { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 }
@@ -688,17 +688,18 @@ export default function AutomationPage() {
                     Langkah Proses Pengisian
                   </h3>
 
-                  <div className={`space-y-4 relative transition-all duration-350 ${
-                    isPromptingOtp || isPromptingPassword 
-                      ? "" 
-                      : "before:absolute before:inset-y-0 before:left-4 before:-translate-x-px before:w-0.5 before:bg-border-light"
-                  }`}>
-                    {stepLabels.map(({ label, icon, step }) => {
+                  <div className="space-y-4 relative transition-all duration-350">
+                    {stepLabels.map(({ label, icon, step }, idx) => {
                       const isCompleted = currentStep > step || (step === 5 && currentStep === 5);
                       const isCurrent = currentStep === step;
                       const isActionRequired = isCurrent && (isPromptingOtp || isPromptingPassword);
                       const isPromptActive = isPromptingOtp || isPromptingPassword;
                       const shouldHide = isPromptActive && !isCurrent;
+                      const isLastStep = idx === stepLabels.length - 1;
+                      
+                      // For line rendering: find if next step is hidden
+                      const nextStepLabel = stepLabels[idx + 1];
+                      const nextShouldHide = isPromptActive && nextStepLabel && nextStepLabel.step !== currentStep;
 
                       return (
                         <div 
@@ -709,22 +710,43 @@ export default function AutomationPage() {
                               : "max-h-24 opacity-100"
                           } ${
                             isActionRequired 
-                              ? "bg-amber-50/70 border border-amber-200/50 p-3 rounded-md shadow-sm -mx-3" 
+                              ? "bg-warning/5 border border-warning/10 p-3 rounded-lg shadow-sm -mx-3" 
                               : ""
                           }`}
                         >
+                          {/* Dynamic Line Connector Segment */}
+                          {!isLastStep && !shouldHide && !nextShouldHide && (
+                            <div 
+                              className={`absolute left-4 -translate-x-1/2 top-8 bottom-[-16px] w-0.5 transition-all duration-350 ${
+                                currentStep >= stepLabels[idx + 1].step || (stepLabels[idx + 1].step === 5 && currentStep === 5)
+                                  ? "bg-success"
+                                  : isActionRequired
+                                    ? "bg-warning/30 border-dashed border-l border-warning/50"
+                                    : isCurrent
+                                      ? "bg-primary-container"
+                                      : "border-dashed border-l border-outline-variant bg-transparent w-0"
+                              }`}
+                            />
+                          )}
+
                           {/* Dot node */}
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 border transition-all duration-350 ${
+                          <div className={`relative flex items-center justify-center w-8 h-8 rounded-full shrink-0 z-10 border transition-all duration-350 hover:scale-105 shadow-sm ${
                             isActionRequired
-                              ? "bg-amber-500 text-white border-amber-500 relative"
+                              ? "bg-warning/10 text-warning border-warning/40"
                               : isCompleted 
-                                ? "bg-success text-white border-success" 
+                                ? "bg-success/10 text-success border-success/30" 
                                 : isCurrent 
-                                  ? "bg-primary-container text-white border-primary-container animate-pulse" 
-                                  : "bg-[#ECEEF0] text-on-surface-variant border-border-light"
+                                  ? "bg-gradient-to-tr from-primary-container to-primary text-white border-primary-container" 
+                                  : "bg-[#ECEEF0] text-outline border-border-light"
                           }`}>
                             {isActionRequired && (
-                              <span className="absolute inset-0 rounded-full bg-amber-500/30 pulse-ring" />
+                              <>
+                                <span className="absolute inset-0 rounded-full bg-warning/20 pulse-ring" />
+                                <span className="absolute inset-0 rounded-full bg-warning/10 animate-ping" />
+                              </>
+                            )}
+                            {isCurrent && !isActionRequired && (
+                              <span className="absolute -inset-0.5 rounded-full border border-primary-container border-t-transparent animate-spin" />
                             )}
                             {isCompleted ? (
                               <span className="material-symbols-outlined text-sm font-bold">check</span>
@@ -734,24 +756,47 @@ export default function AutomationPage() {
                           </div>
 
                           {/* Text labels */}
-                          <div className="pt-1.5 flex-1">
-                            <h4 className={`text-xs font-bold uppercase tracking-wide transition-colors duration-350 ${
-                              isActionRequired 
-                                ? "text-amber-700 font-extrabold" 
-                                : isCompleted 
-                                  ? "text-on-surface" 
-                                  : isCurrent 
-                                    ? "text-primary-container font-extrabold" 
-                                    : "text-outline"
-                            }`}>
-                              {label}
-                            </h4>
-                            {isCurrent && (
-                              <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 transition-colors duration-350 ${
-                                isActionRequired ? "text-amber-600 animate-pulse" : "text-on-surface-variant"
+                          <div className="pt-1 flex-1">
+                            <div className="flex items-center flex-wrap">
+                              <h4 className={`text-xs font-bold uppercase tracking-wide transition-colors duration-350 ${
+                                isActionRequired 
+                                  ? "text-warning font-extrabold" 
+                                  : isCompleted 
+                                    ? "text-on-surface/50 font-medium" 
+                                    : isCurrent 
+                                      ? "text-primary-container font-extrabold" 
+                                      : "text-outline"
                               }`}>
+                                {label}
+                              </h4>
+                              
+                              {/* Pill Badges */}
+                              {isCompleted && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-success/10 text-success uppercase tracking-wider border border-success/10">
+                                  Selesai
+                                </span>
+                              )}
+                              {isActionRequired && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-warning/15 text-warning uppercase tracking-wider animate-pulse border border-warning/20">
+                                  Butuh OTP
+                                </span>
+                              )}
+                              {isCurrent && !isActionRequired && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-primary-container/10 text-primary-container uppercase tracking-wider animate-pulse border border-primary-container/10">
+                                  Proses
+                                </span>
+                              )}
+                            </div>
+                            
+                            {isCurrent && (
+                              <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 flex items-center gap-1.5 transition-colors duration-350 ${
+                                isActionRequired ? "text-warning animate-pulse" : "text-on-surface-variant"
+                              }`}>
+                                {!isActionRequired && (
+                                  <span className="w-2.5 h-2.5 border-2 border-primary-container border-t-transparent rounded-full animate-spin shrink-0" />
+                                )}
                                 {isActionRequired 
-                                  ? (isPromptingOtp ? "⚠️ Tindakan Diperlukan: Masukkan OTP" : "⚠️ Tindakan Diperlukan: Atur Kata Sandi")
+                                  ? (isPromptingOtp ? "⚠️ Masukkan OTP dari Email" : "⚠️ Atur Kata Sandi Baru")
                                   : "Sedang diproses..."
                                 }
                               </p>
@@ -791,20 +836,15 @@ export default function AutomationPage() {
                     <div className="p-8 bg-white space-y-6 animate-fadeIn">
                       <div className="text-center space-y-2">
                         <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto">
-                          <span className="material-symbols-outlined text-2xl animate-bounce">sms</span>
+                          <span className="material-symbols-outlined text-2xl animate-bounce">mail</span>
                         </div>
                         <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">Masukkan Kode OTP</h3>
                         <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed">
-                          Masukkan kode OTP yang dikirimkan ke {currentStep === 4 ? "Email" : "WhatsApp/SMS"} Anda{" "}
-                          {currentStep === 4 ? (
-                            userContact.email ? (
-                              <strong>({maskEmail(userContact.email)})</strong>
-                            ) : ""
-                          ) : (
-                            userContact.nomorHp ? (
-                              <strong>({maskPhoneNumber(userContact.nomorHp)})</strong>
-                            ) : ""
-                          )} untuk memvalidasi pendaftaran di portal OSS.
+                          Masukkan kode OTP yang dikirimkan ke Email Anda{" "}
+                          {userContact.email ? (
+                            <strong>({maskEmail(userContact.email)})</strong>
+                          ) : ""}{" "}
+                          untuk memvalidasi pendaftaran di portal OSS.
                         </p>
                       </div>
 
