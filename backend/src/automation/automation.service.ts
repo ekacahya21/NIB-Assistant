@@ -98,6 +98,9 @@ export class AutomationService {
       item.reject(new Error('Sesi dibatalkan oleh pengguna.'));
       this.queue.splice(queuedIndex, 1);
       this.logger.log(`Draft ID ${draftId} removed from queue.`);
+      
+      // Update database status
+      this.draftsService.update(draftId, { status: 'FAILED' }).catch(() => {});
     }
 
     // 2. Close active browser if running
@@ -118,7 +121,7 @@ export class AutomationService {
     }
   }
 
-  private enqueueRequest(
+  private async enqueueRequest(
     draftId: string,
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>
@@ -127,6 +130,9 @@ export class AutomationService {
 
     if (this.activeSessionsCount < maxSessions) {
       this.activeSessionsCount++;
+      // Update status to RUNNING
+      await this.draftsService.update(draftId, { status: 'RUNNING' }).catch(() => {});
+
       this.runPlaywrightAutomation(draftId, akunOss, subject)
         .catch((err) => {
           this.logger.error(`Error running playwright automation for draft ${draftId}: ${err.message}`);
@@ -136,11 +142,19 @@ export class AutomationService {
           this.processQueue();
         });
     } else {
+      // Update status to QUEUED
+      await this.draftsService.update(draftId, { status: 'QUEUED' }).catch(() => {});
+
+      const avgDuration = await this.draftsService.getAverageDuration();
+      const sessionsAhead = this.activeSessionsCount + this.queue.length;
+      const waitSeconds = sessionsAhead * avgDuration;
+      const waitMessage = this.formatWaitTime(waitSeconds);
+
       this.logStep(
         subject,
         1,
         'info',
-        'Permintaan Anda sedang diproses. Mohon tunggu beberapa saat, kami sedang menyiapkan sesi pendaftaran yang aman untuk Anda...'
+        `Permintaan Anda telah masuk ke dalam antrean pendaftaran yang aman. Antrean Anda sedang diproses. Estimasi waktu tunggu: ${waitMessage}.`
       );
 
       new Promise<void>((resolve, reject) => {
@@ -153,7 +167,9 @@ export class AutomationService {
           isCancelled: false,
         });
       })
-        .then(() => {
+        .then(async () => {
+          // Update status to RUNNING
+          await this.draftsService.update(draftId, { status: 'RUNNING' }).catch(() => {});
           return this.runPlaywrightAutomation(draftId, akunOss, subject);
         })
         .catch((err) => {
@@ -177,6 +193,45 @@ export class AutomationService {
         this.activeSessionsCount++;
         nextTask.resolve();
       }
+    }
+    // Update estimates for all remaining queued tasks in background
+    this.updateQueueEstimates().catch((err) => {
+      this.logger.error(`Failed to update queue estimates: ${err.message}`);
+    });
+  }
+
+  private async updateQueueEstimates() {
+    const avgDuration = await this.draftsService.getAverageDuration();
+
+    for (let i = 0; i < this.queue.length; i++) {
+      const task = this.queue[i];
+      if (task.isCancelled) continue;
+
+      const position = i + 1;
+      const sessionsAhead = this.activeSessionsCount + i;
+      const waitSeconds = sessionsAhead * avgDuration;
+      const waitMessage = this.formatWaitTime(waitSeconds);
+
+      this.logStep(
+        task.subject,
+        1,
+        'info',
+        `Sesi pendaftaran Anda sedang dalam antrean. Posisi Anda saat ini: #${position}. Estimasi waktu tunggu: ${waitMessage}.`
+      );
+    }
+  }
+
+  private formatWaitTime(seconds: number): string {
+    if (seconds <= 0) return 'kurang dari 1 menit';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (minutes === 0) {
+      return `${remainingSeconds} detik`;
+    } else if (remainingSeconds === 0) {
+      return `${minutes} menit`;
+    } else {
+      return `${minutes} menit ${remainingSeconds} detik`;
     }
   }
 
@@ -302,6 +357,17 @@ export class AutomationService {
       const errMsg = error.message || String(error);
       this.logStep(subject, activeStep, 'error', `Terjadi kesalahan kritis: ${errMsg}`);
     } finally {
+      const timers = this.executionTimers.get(draftId);
+      const duration = timers ? Math.round((Date.now() - timers.startTime) / 1000) : 0;
+      const finalStatus = activeStep === 6 ? 'COMPLETED' : 'FAILED';
+
+      await this.draftsService.update(draftId, {
+        status: finalStatus,
+        automationDuration: duration
+      }).catch((err) => {
+        this.logger.error(`Failed to update draft automation status: ${err.message}`);
+      });
+
       if (page) {
         try {
           const videoPath = await page.video()?.path();
@@ -1186,6 +1252,18 @@ export class AutomationService {
     // wait for redirected page loaded
     await page.waitForURL(/.*\/lokasi-usaha.*/, { waitUntil: 'networkidle', timeout: 15000 });
 
+    // check if there's any popup message, close by clicking "Mengerti"
+    const mengertiBtn = page.getByRole('button', { name: /mengerti/i });
+    try {
+      await mengertiBtn.waitFor({ state: 'visible', timeout: 3000 });
+      this.logStep(subject, 5, 'info', 'Menutup popup pemberitahuan...');
+      await mengertiBtn.click();
+      await page.waitForTimeout(1000);
+    } catch (err) {
+      // Popup did not appear, proceed normally
+    
+    }
+
     await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
     await page.waitForURL(/.*\/lokasi-usaha\/tambah-lokasi.*/, { waitUntil: 'networkidle', timeout: 15000 });
 
@@ -1369,10 +1447,13 @@ export class AutomationService {
       this.logStep(subject, 5, 'warn', `Peringatan: Gagal memproses berkas PDF otomatis (${pdfErr.message || pdfErr}). Melompati unggah otomatis.`);
     }
 
-    // Check 'Tidak' radio button
-    this.logStep(subject, 5, 'info', 'Memilih opsi bangunan "Tidak"...');
-    await page.getByRole('radio', { name: 'Tidak' }).check();
-    await page.waitForTimeout(500);
+    // Check 'Tidak' radio button if it exists
+    const tidakRadio = page.getByRole('radio', { name: 'Tidak' });
+    if (await tidakRadio.isVisible()) {
+      this.logStep(subject, 5, 'info', 'Memilih opsi bangunan "Tidak"...');
+      await tidakRadio.check();
+      await page.waitForTimeout(500);
+    }
 
     // Save Position Location
     this.logStep(subject, 5, 'info', 'Mengklik tombol "Simpan Posisi Lokasi" untuk mendaftarkan lokasi...');

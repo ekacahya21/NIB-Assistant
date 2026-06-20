@@ -33,6 +33,8 @@ export class DraftData {
   updatedAt?: string;
   luasTanah?: string;
   fotoLokasi?: string;
+  status?: string;
+  automationDuration?: number;
 }
 
 @Injectable()
@@ -82,6 +84,8 @@ export class DraftsService {
         longitude: data.longitude,
         luasTanah: data.luasTanah,
         fotoLokasi: data.fotoLokasi,
+        status: data.status || 'DRAFT',
+        automationDuration: data.automationDuration,
         updatedAt: new Date(),
       },
     });
@@ -132,6 +136,8 @@ export class DraftsService {
         longitude: data.longitude,
         luasTanah: data.luasTanah,
         fotoLokasi: data.fotoLokasi,
+        status: data.status,
+        automationDuration: data.automationDuration,
         updatedAt: new Date(),
       },
     });
@@ -143,6 +149,18 @@ export class DraftsService {
       orderBy: { updatedAt: 'desc' },
     });
     return drafts.map((d) => this.mapToDraftData(d));
+  }
+
+  async getAverageDuration(): Promise<number> {
+    const result = await this.prisma.draft.aggregate({
+      _avg: {
+        automationDuration: true,
+      },
+      where: {
+        status: 'COMPLETED',
+      },
+    });
+    return result._avg.automationDuration || 180; // 180 seconds fallback
   }
 
   private mapToDraftData(draft: any): DraftData {

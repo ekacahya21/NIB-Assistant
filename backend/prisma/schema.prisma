@@ -38,6 +38,8 @@ model Draft {
   longitude         String?
   luasTanah         String?  @map("luas_tanah")
   fotoLokasi        String?  @map("foto_lokasi")
+  status            String   @default("DRAFT")
+  automationDuration Int?     @map("automation_duration")
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("drafts")
