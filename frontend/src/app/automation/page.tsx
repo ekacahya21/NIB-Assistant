@@ -31,6 +31,93 @@ export default function AutomationPage() {
   const [passwordError, setPasswordError] = useState<string>("");
   const [isSubmittingPassword, setIsSubmittingPassword] = useState<boolean>(false);
 
+  const [userContact, setUserContact] = useState<{ nomorHp: string; email: string }>({ nomorHp: "", email: "" });
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
+  const otpRefs = useRef<HTMLInputElement[]>([]);
+
+  const maskPhoneNumber = (num: string) => {
+    if (!num) return "";
+    if (num.length <= 8) return num;
+    const start = num.slice(0, 4);
+    const end = num.slice(-4);
+    return `${start}-${"*".repeat(num.length - 8)}-${end}`;
+  };
+
+  const maskEmail = (emailStr: string) => {
+    if (!emailStr) return "";
+    const parts = emailStr.split("@");
+    if (parts.length !== 2) return emailStr;
+    const name = parts[0];
+    const domain = parts[1];
+    if (name.length <= 3) return `${name[0]}***@${domain}`;
+    return `${name.slice(0, 2)}***${name.slice(-1)}@${domain}`;
+  };
+
+  const handleOtpDigitChange = (value: string, idx: number) => {
+    const cleanVal = value.replace(/\D/g, "").slice(0, 1);
+    const newDigits = [...otpDigits];
+    newDigits[idx] = cleanVal;
+    setOtpDigits(newDigits);
+
+    const fullOtp = newDigits.join("");
+    setOtp(fullOtp);
+
+    if (cleanVal && idx < 5) {
+      otpRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === "Backspace") {
+      if (!otpDigits[idx] && idx > 0) {
+        const newDigits = [...otpDigits];
+        newDigits[idx - 1] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+        otpRefs.current[idx - 1]?.focus();
+      } else if (otpDigits[idx]) {
+        const newDigits = [...otpDigits];
+        newDigits[idx] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+      }
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (pasteData.length > 0) {
+      const newDigits = [...otpDigits];
+      const digitsToFill = pasteData.slice(0, 6).split("");
+      
+      for (let i = 0; i < 6; i++) {
+        newDigits[i] = digitsToFill[i] || "";
+      }
+      
+      setOtpDigits(newDigits);
+      setOtp(newDigits.join(""));
+      
+      const targetFocusIdx = Math.min(digitsToFill.length, 5);
+      otpRefs.current[targetFocusIdx]?.focus();
+    }
+  };
+
+  const handleResendOtp = async () => {
+    addLog("Meminta pengiriman ulang kode OTP dari portal OSS...", "warn");
+    setTimeLeft(120);
+    setOtpDigits(Array(6).fill(""));
+    setOtp("");
+    try {
+      const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+      await fetch(`${API_URL}/automation/resend-otp/${draftId}`, { method: "POST" });
+      addLog("Permintaan Kirim Ulang OTP berhasil dikirim.", "success");
+    } catch (err) {
+      console.error(err);
+      addLog("Kirim ulang OTP dipicu secara lokal.", "info");
+    }
+  };
+
   // Error and Update States
   const [failedStep, setFailedStep] = useState<number | null>(null);
   const [errorType, setErrorType] = useState<"nik" | "email" | "ktp_mismatch" | "generic" | null>(null);
@@ -218,6 +305,20 @@ export default function AutomationPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("draft_form_data");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setUserContact({
+            nomorHp: parsed.nomorHp || "",
+            email: parsed.email || ""
+          });
+        } catch (e) {
+          console.error("Gagal membaca detail kontak draf:", e);
+        }
+      }
+    }
     connectStream();
     return () => {
       if (streamRef.current) {
@@ -694,12 +795,21 @@ export default function AutomationPage() {
                         </div>
                         <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">Masukkan Kode OTP</h3>
                         <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed">
-                          Masukkan kode OTP yang dikirimkan ke WhatsApp/SMS nomor HP Anda untuk memvalidasi pendaftaran di portal OSS.
+                          Masukkan kode OTP yang dikirimkan ke {currentStep === 4 ? "Email" : "WhatsApp/SMS"} Anda{" "}
+                          {currentStep === 4 ? (
+                            userContact.email ? (
+                              <strong>({maskEmail(userContact.email)})</strong>
+                            ) : ""
+                          ) : (
+                            userContact.nomorHp ? (
+                              <strong>({maskPhoneNumber(userContact.nomorHp)})</strong>
+                            ) : ""
+                          )} untuk memvalidasi pendaftaran di portal OSS.
                         </p>
                       </div>
 
                       <form onSubmit={handleOtpSubmit} className="space-y-4 max-w-xs mx-auto">
-                        <div className="flex flex-col gap-1.5 text-left">
+                        <div className="flex flex-col gap-2.5 text-left">
                           <div className="flex justify-between items-center text-[9px] font-extrabold uppercase tracking-wider text-on-surface-variant">
                             <span>Kode Verifikasi</span>
                             <span className={`flex items-center gap-1 font-mono font-bold ${timeLeft < 25 ? "text-error animate-pulse" : "text-primary-container"}`}>
@@ -707,26 +817,45 @@ export default function AutomationPage() {
                               {timeLeft > 0 ? formatTime(timeLeft) : "Waktu Habis"}
                             </span>
                           </div>
-                          <input
-                            type="text"
-                            placeholder="------"
-                            maxLength={6}
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                            className="w-full min-h-[44px] px-3.5 py-2.5 rounded border border-border-light bg-white text-center font-mono text-lg tracking-widest font-extrabold focus:border-primary-container focus:outline-none"
-                            disabled={timeLeft === 0}
-                            required
-                            autoFocus
-                          />
+                          
+                          <div className="flex gap-2 justify-center py-1">
+                            {otpDigits.map((digit, idx) => (
+                              <input
+                                key={idx}
+                                ref={(el) => { otpRefs.current[idx] = el!; }}
+                                type="text"
+                                maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleOtpDigitChange(e.target.value, idx)}
+                                onKeyDown={(e) => handleOtpKeyDown(e, idx)}
+                                onPaste={handleOtpPaste}
+                                className="w-10 h-12 rounded border border-border-light text-center font-bold text-lg focus:border-primary-container focus:outline-none bg-white text-on-surface shadow-sm"
+                                disabled={timeLeft === 0}
+                                autoFocus={idx === 0}
+                                required
+                              />
+                            ))}
+                          </div>
                         </div>
 
                         <button
                           type="submit"
-                          disabled={isSubmittingOtp || otp.length < 4 || timeLeft === 0}
+                          disabled={isSubmittingOtp || otp.length < 6 || timeLeft === 0}
                           className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
                         >
                           {isSubmittingOtp ? "Memverifikasi..." : "Verifikasi & Lanjutkan"}
                         </button>
+
+                        {timeLeft === 0 && (
+                          <button
+                            type="button"
+                            onClick={handleResendOtp}
+                            className="w-full border border-primary-container text-primary-container font-extrabold py-2.5 px-4 rounded text-xs uppercase tracking-wider hover:bg-primary-container/5 transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <span className="material-symbols-outlined text-xs">refresh</span>
+                            Kirim Ulang OTP
+                          </button>
+                        )}
 
                         {currentStep === 4 && (
                           <button
