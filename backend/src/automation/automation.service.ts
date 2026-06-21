@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from '@zorilla/puppeteer-extra-plugin-stealth';
@@ -17,7 +17,7 @@ export interface AutomationEvent {
 }
 
 @Injectable()
-export class AutomationService {
+export class AutomationService implements OnModuleDestroy {
   private readonly logger = new Logger(AutomationService.name);
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
@@ -48,6 +48,39 @@ export class AutomationService {
     private readonly documentsService: DocumentsService,
   ) {}
 
+  async onModuleDestroy() {
+    this.logger.log('Shutting down AutomationService. Cleaning up active browsers and streams...');
+    
+    // 1. Close all active browsers
+    const closePromises: Promise<void>[] = [];
+    for (const [draftId, browser] of this.activeBrowsers.entries()) {
+      this.logger.log(`Closing browser for draft ID during shutdown: ${draftId}`);
+      closePromises.push(
+        browser.close().catch((err: any) => {
+          this.logger.error(`Error closing browser for draft ID ${draftId} during shutdown: ${err}`);
+        })
+      );
+    }
+    await Promise.all(closePromises);
+    this.activeBrowsers.clear();
+
+    // 2. Complete all active subjects
+    for (const [draftId, subject] of this.activeSubjects.entries()) {
+      subject.complete();
+    }
+    this.activeSubjects.clear();
+
+    // 3. Reject all queued items
+    while (this.queue.length > 0) {
+      const task = this.queue.shift();
+      if (task) {
+        task.reject(new Error('Server sedang dimatikan. Sesi otomatisasi dibatalkan.'));
+      }
+    }
+
+    this.logger.log('Cleanup completed.');
+  }
+
   // Trigger login confirmation or OTP for a specific draft ID
   confirmLogin(draftId: string) {
     this.activeOtps.set(draftId, 'CONFIRMED');
@@ -67,6 +100,17 @@ export class AutomationService {
   // Observable SSE stream for automation status
   getStream(draftId: string, akunOss?: string): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
+      // Prevent double session for the same draftId
+      if (this.activeSubjects.has(draftId)) {
+        subscriber.next({
+          step: 1,
+          status: 'error',
+          text: 'Sesi otomatisasi untuk data ini sudah berjalan atau sedang mengantre.'
+        });
+        subscriber.complete();
+        return;
+      }
+
       const subject = new Subject<AutomationEvent>();
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);

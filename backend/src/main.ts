@@ -5,6 +5,9 @@ import { json, urlencoded } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  // Enable shutdown hooks for graceful cleanup of resources like Playwright browsers
+  app.enableShutdownHooks();
+  
   // Increase payload limit for base64 images and large JSON contents
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
