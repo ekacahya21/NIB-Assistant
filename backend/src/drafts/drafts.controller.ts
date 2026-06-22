@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
 import { DraftsService, DraftData } from './drafts.service';
 
 @Controller('drafts')
@@ -23,5 +23,10 @@ export class DraftsController {
   @Get()
   async findAll(): Promise<DraftData[]> {
     return this.draftsService.findAll();
+  }
+
+  @Delete(':id')
+  async delete(@Param('id') id: string): Promise<void> {
+    return this.draftsService.delete(id);
   }
 }

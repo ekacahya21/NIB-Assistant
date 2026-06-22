@@ -151,6 +151,18 @@ export class DraftsService {
     return drafts.map((d) => this.mapToDraftData(d));
   }
 
+  async delete(id: string): Promise<void> {
+    const draft = await this.prisma.draft.findUnique({
+      where: { id },
+    });
+    if (!draft) {
+      throw new NotFoundException(`Draft with ID ${id} not found`);
+    }
+    await this.prisma.draft.delete({
+      where: { id },
+    });
+  }
+
   async getAverageDuration(): Promise<number> {
     const result = await this.prisma.draft.aggregate({
       _avg: {

@@ -22,74 +22,6 @@ interface DraftItem {
   caraPenjualan?: string;
 }
 
-// Initial mock drafts to populate the dashboard beautifully if backend is empty
-const MOCK_DRAFTS: DraftItem[] = [
-  {
-    id: "NIB8812A",
-    namaPemilik: "BUDI SANTOSO",
-    namaUsaha: "GEPREK PEDAS MANTAP",
-    nik: "3201020304050607",
-    nomorHp: "081234567890",
-    email: "budi.santoso@email.com",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 mins ago
-    status: "Butuh OTP",
-    kbliCode: "56103",
-    kbliTitle: "Kedai Makanan",
-    alamatUsaha: "Jl. Raya Bogor No. 12, Kel. Cililitan, Kec. Kramat Jati, Jakarta Timur",
-    modalUsaha: "15000000",
-    jumlahPekerja: "2",
-    caraPenjualan: "keduanya"
-  },
-  {
-    id: "NIB7731B",
-    namaPemilik: "SITI NURHALIZA",
-    namaUsaha: "BUTIK HIJAB AN-NISA",
-    nik: "3202040506070809",
-    nomorHp: "085712345678",
-    email: "siti.hijab@email.com",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), // 3 hours ago
-    status: "Sukses",
-    kbliCode: "47711",
-    kbliTitle: "Perdagangan Eceran Pakaian",
-    alamatUsaha: "ITC Mangga Dua Lt. 1 Blok A No. 45, Jakarta Utara",
-    modalUsaha: "45000000",
-    jumlahPekerja: "1",
-    caraPenjualan: "online"
-  },
-  {
-    id: "NIB1109C",
-    namaPemilik: "HENDRA WIJAYA",
-    namaUsaha: "BENGKEL MOTOR BAROKAH",
-    nik: "3203050607080910",
-    nomorHp: "081987654321",
-    email: "hendra.bengkel@email.com",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), // 2 days ago
-    status: "Draft",
-    kbliCode: "45404",
-    kbliTitle: "Reparasi dan Perawatan Sepeda Motor",
-    alamatUsaha: "Jl. Margonda Raya No. 104, Depok",
-    modalUsaha: "25000000",
-    jumlahPekerja: "3",
-    caraPenjualan: "offline"
-  },
-  {
-    id: "NIB3329D",
-    namaPemilik: "AGUS SUPRIATNA",
-    namaUsaha: "WARUNG KOPI KITA",
-    nik: "3204060708091011",
-    nomorHp: "081399887766",
-    email: "agus.kopi@email.com",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days ago
-    status: "Proses",
-    kbliCode: "56304",
-    kbliTitle: "Kedai Minuman",
-    alamatUsaha: "Jl. Surya Kencana No. 56, Bogor",
-    modalUsaha: "10000000",
-    jumlahPekerja: "1",
-    caraPenjualan: "offline"
-  }
-];
-
 export default function DashboardPage() {
   const router = useRouter();
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
@@ -97,7 +29,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
 
-  // Load drafts from local backend and merge with mock drafts to ensure visual excellence
+  // Load drafts from local backend to ensure visual excellence
   useEffect(() => {
     async function fetchDrafts() {
       try {
@@ -106,14 +38,28 @@ export default function DashboardPage() {
           const data = await response.json();
           // Map backend items to DraftItem structures
           const backendDrafts: DraftItem[] = data.map((item: any) => {
-            // Infer status dynamically
+            // Infer status dynamically from backend DB status
             let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" = "Draft";
-            if (item.kbliCode && item.nik && item.alamatUsaha) {
-              status = "Proses"; // Ready to submit or in process
-            }
-            if (item.id === "DEMO123") {
+            const dbStatus = item.status ? item.status.toUpperCase() : null;
+            
+            if (dbStatus === "COMPLETED") {
+              status = "Sukses";
+            } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
               status = "Proses";
+            } else if (dbStatus === "FAILED") {
+              status = "Butuh OTP";
+            } else if (dbStatus === "DRAFT") {
+              status = "Draft";
+            } else {
+              // Backward compatibility fallback
+              if (item.kbliCode && item.nik && item.alamatUsaha) {
+                status = "Proses";
+              }
+              if (item.id === "DEMO123") {
+                status = "Proses";
+              }
             }
+
             return {
               id: item.id || Math.random().toString(36).substring(2, 9).toUpperCase(),
               namaPemilik: item.namaPemilik ? item.namaPemilik.toUpperCase() : "TANPA NAMA",
@@ -132,23 +78,15 @@ export default function DashboardPage() {
             };
           });
 
-          // Mix and de-duplicate (prefer backend drafts if they have matching IDs)
-          const merged = [...backendDrafts];
-          MOCK_DRAFTS.forEach((mock) => {
-            if (!merged.some((d) => d.id === mock.id)) {
-              merged.push(mock);
-            }
-          });
-
           // Sort by updatedAt descending
-          merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-          setDrafts(merged);
+          backendDrafts.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+          setDrafts(backendDrafts);
         } else {
-          setDrafts(MOCK_DRAFTS);
+          setDrafts([]);
         }
       } catch (err) {
-        console.error("Gagal memuat draft dari backend, menggunakan data simulasi.", err);
-        setDrafts(MOCK_DRAFTS);
+        console.error("Gagal memuat draft dari backend.", err);
+        setDrafts([]);
       } finally {
         setLoading(false);
       }
@@ -157,7 +95,7 @@ export default function DashboardPage() {
     fetchDrafts();
   }, []);
 
-  // Open Draft: Loads draft details into sessionStorage and redirects to Review
+  // Open Draft: Loads draft details into sessionStorage and redirects to Review or Result
   const handleOpenDraft = (draft: DraftItem) => {
     if (typeof window !== "undefined") {
       sessionStorage.setItem("draft_id", draft.id);
@@ -190,14 +128,39 @@ export default function DashboardPage() {
 
       // Default registration mode
       sessionStorage.setItem("akun_oss", "belum");
-      router.push("/review");
+      
+      if (draft.status === "Sukses") {
+        router.push("/result?state=success");
+      } else {
+        router.push("/review");
+      }
     }
   };
 
-  const handleDeleteDraft = (id: string, e: React.MouseEvent) => {
+  const handleDeleteDraft = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Apakah Anda yakin ingin menghapus draft ini secara permanen?")) {
-      setDrafts((prev) => prev.filter((d) => d.id !== id));
+      try {
+        const response = await fetch(`${API_URL}/drafts/${id}`, {
+          method: "DELETE",
+        });
+        
+        // Remove from local state if success or 404 (mock draft fallback)
+        if (response.ok || response.status === 404) {
+          setDrafts((prev) => prev.filter((d) => d.id !== id));
+        } else {
+          const errMsg = await response.text();
+          alert(`Gagal menghapus draft: ${errMsg || "kesalahan server"}`);
+        }
+      } catch (err) {
+        console.error("Gagal menghapus draft", err);
+        // Still allow deleting mock drafts locally if network fails
+        if (id.startsWith("NIB")) {
+          setDrafts((prev) => prev.filter((d) => d.id !== id));
+        } else {
+          alert("Terjadi kesalahan koneksi saat menghapus draft.");
+        }
+      }
     }
   };
 
