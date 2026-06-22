@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getSessionId } from "../../utils/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -44,7 +45,6 @@ export default function ReviewPage() {
     jumlahPekerjaPerempuan: "0",
     jumlahPekerja: "0",
     modalUsaha: "",
-    caraPenjualan: "keduanya",
     namaUsaha: "",
     ceritaUsaha: "",
   });
@@ -207,11 +207,11 @@ export default function ReviewPage() {
         ceritaUsaha: formData.ceritaUsaha,
         modalUsaha: formData.modalUsaha,
         jumlahPekerja: formData.jumlahPekerja,
-        caraPenjualan: formData.caraPenjualan,
         kbliCode: selectedKbli.code,
         kbliTitle: selectedKbli.title,
         luasTanah: formData.luasTanah || "0",
         fotoLokasi: formData.fotoLokasi || "",
+        sessionId: getSessionId(),
       };
 
       const res = await fetch(`${API_URL}/drafts`, {

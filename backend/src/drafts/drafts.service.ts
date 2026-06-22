@@ -24,7 +24,6 @@ export class DraftData {
   ceritaUsaha!: string;
   modalUsaha!: string;
   jumlahPekerja!: string;
-  caraPenjualan!: string;
   kbliCode?: string;
   kbliTitle?: string;
   jenisKelamin?: string;
@@ -35,6 +34,7 @@ export class DraftData {
   fotoLokasi?: string;
   status?: string;
   automationDuration?: number;
+  sessionId?: string;
 }
 
 @Injectable()
@@ -76,7 +76,6 @@ export class DraftsService {
         ceritaUsaha: data.ceritaUsaha,
         modalUsaha: data.modalUsaha,
         jumlahPekerja: data.jumlahPekerja,
-        caraPenjualan: data.caraPenjualan,
         kbliCode: data.kbliCode,
         kbliTitle: data.kbliTitle,
         jenisKelamin: data.jenisKelamin,
@@ -86,6 +85,7 @@ export class DraftsService {
         fotoLokasi: data.fotoLokasi,
         status: data.status || 'DRAFT',
         automationDuration: data.automationDuration,
+        sessionId: data.sessionId,
         updatedAt: new Date(),
       },
     });
@@ -128,7 +128,6 @@ export class DraftsService {
         ceritaUsaha: data.ceritaUsaha,
         modalUsaha: data.modalUsaha,
         jumlahPekerja: data.jumlahPekerja,
-        caraPenjualan: data.caraPenjualan,
         kbliCode: data.kbliCode,
         kbliTitle: data.kbliTitle,
         jenisKelamin: data.jenisKelamin,
@@ -138,14 +137,16 @@ export class DraftsService {
         fotoLokasi: data.fotoLokasi,
         status: data.status,
         automationDuration: data.automationDuration,
+        sessionId: data.sessionId,
         updatedAt: new Date(),
       },
     });
     return this.mapToDraftData(updated);
   }
 
-  async findAll(): Promise<DraftData[]> {
+  async findAll(sessionId?: string): Promise<DraftData[]> {
     const drafts = await this.prisma.draft.findMany({
+      where: sessionId ? { sessionId } : undefined,
       orderBy: { updatedAt: 'desc' },
     });
     return drafts.map((d) => this.mapToDraftData(d));

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getSessionId } from "../../utils/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -19,7 +20,6 @@ interface DraftItem {
   alamatUsaha?: string;
   modalUsaha?: string;
   jumlahPekerja?: string;
-  caraPenjualan?: string;
 }
 
 export default function DashboardPage() {
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDrafts() {
       try {
-        const response = await fetch(`${API_URL}/drafts`);
+        const response = await fetch(`${API_URL}/drafts?sessionId=${getSessionId()}`);
         if (response.ok) {
           const data = await response.json();
           // Map backend items to DraftItem structures
@@ -73,8 +73,7 @@ export default function DashboardPage() {
               kbliTitle: item.kbliTitle,
               alamatUsaha: item.alamatUsaha,
               modalUsaha: item.modalUsaha,
-              jumlahPekerja: item.jumlahPekerja,
-              caraPenjualan: item.caraPenjualan
+              jumlahPekerja: item.jumlahPekerja
             };
           });
 
@@ -109,7 +108,6 @@ export default function DashboardPage() {
         alamatUsaha: draft.alamatUsaha || "",
         modalUsaha: draft.modalUsaha || "",
         jumlahPekerja: draft.jumlahPekerja || "",
-        caraPenjualan: draft.caraPenjualan || "keduanya",
       };
 
       sessionStorage.setItem("draft_form_data", JSON.stringify(formData));

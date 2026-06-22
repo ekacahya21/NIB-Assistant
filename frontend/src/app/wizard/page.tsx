@@ -106,7 +106,6 @@ export default function WizardPage() {
     // Step 3: Cerita Usaha (KBLI Prep)
     namaUsaha: "",
     ceritaUsaha: "",
-    caraPenjualan: "keduanya", // online | offline | keduanya
     // Step 4: Skala Usaha & Tenaga Kerja
     modalUsaha: "",
     luasTanah: "",
@@ -682,7 +681,6 @@ export default function WizardPage() {
       field !== "kotaKabupatenKtp" &&
       field !== "kecamatanKtp" &&
       field !== "kelurahanKtp" &&
-      field !== "caraPenjualan" &&
       field !== "jumlahPekerja"
     ) {
       processedValue = value.toUpperCase();

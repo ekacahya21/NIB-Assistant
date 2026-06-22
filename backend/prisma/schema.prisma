@@ -30,7 +30,6 @@ model Draft {
   ceritaUsaha       String   @map("cerita_usaha")
   modalUsaha        String   @map("modal_usaha")
   jumlahPekerja     String   @map("jumlah_pekerja")
-  caraPenjualan     String   @map("cara_penjualan")
   kbliCode          String?  @map("kbli_code")
   kbliTitle         String?  @map("kbli_title")
   jenisKelamin      String?  @map("jenis_kelamin")
@@ -40,6 +39,7 @@ model Draft {
   fotoLokasi        String?  @map("foto_lokasi")
   status            String   @default("DRAFT")
   automationDuration Int?     @map("automation_duration")
+  sessionId         String?  @map("session_id")
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("drafts")
