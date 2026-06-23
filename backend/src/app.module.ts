@@ -12,10 +12,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    DocumentsModule,
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DocumentsModule],
   controllers: [
     AppController,
     DraftsController,

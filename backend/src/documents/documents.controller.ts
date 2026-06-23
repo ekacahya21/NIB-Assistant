@@ -8,12 +8,19 @@ export class DocumentsController {
 
   @Post('generate-nps')
   async generateNps(
-    @Body() body: { alamatUsaha: string; latitude: string; longitude: string; luasTanah: string },
+    @Body()
+    body: {
+      alamatUsaha: string;
+      latitude: string;
+      longitude: string;
+      luasTanah: string;
+    },
     @Res() res: Response,
   ) {
     try {
-      const pdfBuffer = await this.documentsService.generateAdministrationPdf(body);
-      
+      const pdfBuffer =
+        await this.documentsService.generateAdministrationPdf(body);
+
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename=dokumen_administrasi_${new Date().toISOString().split('T')[0]}.pdf`,
@@ -43,7 +50,9 @@ export class DocumentsController {
         });
       }
 
-      const pdfBuffer = await this.documentsService.convertPhotoToPdf(body.fotoLokasi);
+      const pdfBuffer = await this.documentsService.convertPhotoToPdf(
+        body.fotoLokasi,
+      );
 
       res.set({
         'Content-Type': 'application/pdf',

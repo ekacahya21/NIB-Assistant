@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { DraftsService, DraftData } from './drafts.service';
 
 @Controller('drafts')
@@ -16,7 +25,10 @@ export class DraftsController {
   }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() data: Partial<DraftData>): Promise<DraftData> {
+  async update(
+    @Param('id') id: string,
+    @Body() data: Partial<DraftData>,
+  ): Promise<DraftData> {
     return this.draftsService.update(id, data);
   }
 

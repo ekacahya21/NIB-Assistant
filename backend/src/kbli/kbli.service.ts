@@ -16,58 +16,102 @@ export class KbliService {
     {
       code: '56103',
       title: 'Kedai Makanan',
-      description: 'Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap yang menyajikan makanan dan minuman siap saji langsung ke pelanggan.',
+      description:
+        'Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap yang menyajikan makanan dan minuman siap saji langsung ke pelanggan.',
       confidence: 'sangat_cocok',
-      suitableFor: ['warung makan', 'kedai bakso', 'makanan rumahan', 'ayam geprek', 'mie ayam'],
+      suitableFor: [
+        'warung makan',
+        'kedai bakso',
+        'makanan rumahan',
+        'ayam geprek',
+        'mie ayam',
+      ],
     },
     {
       code: '56210',
       title: 'Jasa Boga Untuk Suatu Event Tertentu (Catering)',
-      description: 'Penyediaan makanan dan minuman atas dasar kontrak/pesanan untuk suatu acara tertentu seperti pesta, rapat, atau hajatan.',
+      description:
+        'Penyediaan makanan dan minuman atas dasar kontrak/pesanan untuk suatu acara tertentu seperti pesta, rapat, atau hajatan.',
       confidence: 'alternatif',
-      suitableFor: ['catering pernikahan', 'nasi kotak syukuran', 'pesanan kue basah'],
+      suitableFor: [
+        'catering pernikahan',
+        'nasi kotak syukuran',
+        'pesanan kue basah',
+      ],
     },
     {
       code: '56104',
       title: 'Penyediaan Makanan Keliling / Tempat Tidak Tetap',
-      description: 'Penyediaan makanan yang dijajakan secara berkeliling atau menggunakan fasilitas tidak permanen seperti gerobak, pikulan, atau food truck.',
+      description:
+        'Penyediaan makanan yang dijajakan secara berkeliling atau menggunakan fasilitas tidak permanen seperti gerobak, pikulan, atau food truck.',
       confidence: 'alternatif',
-      suitableFor: ['gerobak keliling', 'food truck', 'kaki lima bongkar pasang'],
+      suitableFor: [
+        'gerobak keliling',
+        'food truck',
+        'kaki lima bongkar pasang',
+      ],
     },
     {
       code: '47711',
       title: 'Perdagangan Eceran Pakaian',
-      description: 'Perdagangan eceran berbagai jenis pakaian jadi baik dari bahan tekstil, rajutan, kulit, untuk pria, wanita, maupun anak-anak.',
+      description:
+        'Perdagangan eceran berbagai jenis pakaian jadi baik dari bahan tekstil, rajutan, kulit, untuk pria, wanita, maupun anak-anak.',
       confidence: 'sangat_cocok',
-      suitableFor: ['butik pakaian', 'jualan hijab online', 'reseller baju jadi', 'toko daster'],
+      suitableFor: [
+        'butik pakaian',
+        'jualan hijab online',
+        'reseller baju jadi',
+        'toko daster',
+      ],
     },
     {
       code: '47911',
       title: 'Perdagangan Eceran Melalui Media (Online/Internet)',
-      description: 'Perdagangan eceran berbagai jenis barang melayani pesanan lewat pos, telepon, marketplace, media sosial, atau website.',
+      description:
+        'Perdagangan eceran berbagai jenis barang melayani pesanan lewat pos, telepon, marketplace, media sosial, atau website.',
       confidence: 'alternatif',
-      suitableFor: ['online shop instagram', 'reseller shopee/tokopedia', 'dropshipper baju'],
+      suitableFor: [
+        'online shop instagram',
+        'reseller shopee/tokopedia',
+        'dropshipper baju',
+      ],
     },
     {
       code: '47712',
       title: 'Perdagangan Eceran Alas Kaki',
-      description: 'Perdagangan eceran berbagai jenis alas kaki/sepatu/sandal dari bahan kulit, karet, plastik, atau sintetis.',
+      description:
+        'Perdagangan eceran berbagai jenis alas kaki/sepatu/sandal dari bahan kulit, karet, plastik, atau sintetis.',
       confidence: 'alternatif',
-      suitableFor: ['toko sepatu lokal', 'jualan sandal jepit', 'reseller sepatu olahraga'],
+      suitableFor: [
+        'toko sepatu lokal',
+        'jualan sandal jepit',
+        'reseller sepatu olahraga',
+      ],
     },
     {
       code: '96200',
       title: 'Jasa Pencucian dan Pembersihan (Laundry)',
-      description: 'Jasa pencucian, pembersihan, setrika pakaian jadi, sprei, karpet, jas baik kiloan maupun satuan.',
+      description:
+        'Jasa pencucian, pembersihan, setrika pakaian jadi, sprei, karpet, jas baik kiloan maupun satuan.',
       confidence: 'sangat_cocok',
-      suitableFor: ['laundry kiloan', 'cuci sepatu & helm', 'dry cleaning jas', 'setrika rumahan'],
+      suitableFor: [
+        'laundry kiloan',
+        'cuci sepatu & helm',
+        'dry cleaning jas',
+        'setrika rumahan',
+      ],
     },
     {
       code: '96999',
       title: 'Aktivitas Jasa Perorangan Lainnya YTDL',
-      description: 'Penyediaan jasa perorangan lainnya yang belum tercakup di tempat lain seperti pangkas rambut keliling atau jasa setrika panggilan.',
+      description:
+        'Penyediaan jasa perorangan lainnya yang belum tercakup di tempat lain seperti pangkas rambut keliling atau jasa setrika panggilan.',
       confidence: 'alternatif',
-      suitableFor: ['jasa bersih rumah', 'jasa setrika panggilan', 'salon rumahan'],
+      suitableFor: [
+        'jasa bersih rumah',
+        'jasa setrika panggilan',
+        'salon rumahan',
+      ],
     },
   ];
 
@@ -79,28 +123,44 @@ export class KbliService {
     }
 
     if (this.cache.has(q)) {
-      console.log(`[KBLI Agent] [CACHE HIT] Returning cached KBLI results for: "${q}"`);
+      console.log(
+        `[KBLI Agent] [CACHE HIT] Returning cached KBLI results for: "${q}"`,
+      );
       return this.cache.get(q)!;
     }
 
     const vertexProject = process.env.VERTEX_AI_PROJECT;
     const vertexLocation = process.env.VERTEX_AI_LOCATION || 'us-central1';
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
+    const apiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY;
 
     if (vertexProject || apiKey) {
       try {
-        console.log(`[KBLI Agent] Executing online Google ADK agent search for: "${query}"`);
+        console.log(
+          `[KBLI Agent] Executing online Google ADK agent search for: "${query}"`,
+        );
         // Dynamically import ADK modules to prevent initial compilation load issues
-        const { LlmAgent, InMemoryRunner, GOOGLE_SEARCH, VertexAiSearchTool, stringifyContent, Gemini } = await import('@google/adk');
+        const {
+          LlmAgent,
+          InMemoryRunner,
+          GOOGLE_SEARCH,
+          VertexAiSearchTool,
+          stringifyContent,
+          Gemini,
+        } = await import('@google/adk');
 
         let llmModel: any;
         if (vertexProject) {
-          console.log(`[KBLI Agent] Using Vertex AI on Project ID: "${vertexProject}", Region: "${vertexLocation}"`);
+          console.log(
+            `[KBLI Agent] Using Vertex AI on Project ID: "${vertexProject}", Region: "${vertexLocation}"`,
+          );
           llmModel = new Gemini({
             model: 'gemini-2.5-flash',
             vertexai: true,
             project: vertexProject,
-            location: vertexLocation
+            location: vertexLocation,
           });
         } else {
           console.log(`[KBLI Agent] Using Google AI Studio Gemini API Key.`);
@@ -115,16 +175,21 @@ export class KbliService {
           let formattedDataStoreId = rawDataStoreId;
           if (!rawDataStoreId.startsWith('projects/')) {
             const project = vertexProject || 'jarvistant-ai-491514';
-            const location = process.env.VERTEX_AI_DATASTORE_LOCATION || 'global';
+            const location =
+              process.env.VERTEX_AI_DATASTORE_LOCATION || 'global';
             formattedDataStoreId = `projects/${project}/locations/${location}/collections/default_collection/dataStores/${rawDataStoreId}`;
           }
 
-          console.log(`[KBLI Agent] Initializing Vertex AI Search with Formatted Data Store ID: "${formattedDataStoreId}"`);
+          console.log(
+            `[KBLI Agent] Initializing Vertex AI Search with Formatted Data Store ID: "${formattedDataStoreId}"`,
+          );
           kbliSearchTool = new VertexAiSearchTool({
-            dataStoreId: formattedDataStoreId
+            dataStoreId: formattedDataStoreId,
           });
         } else {
-          console.log(`[KBLI Agent] VERTEX_AI_DATASTORE_ID is not configured. Using standard Web GOOGLE_SEARCH.`);
+          console.log(
+            `[KBLI Agent] VERTEX_AI_DATASTORE_ID is not configured. Using standard Web GOOGLE_SEARCH.`,
+          );
           kbliSearchTool = GOOGLE_SEARCH;
         }
 
@@ -139,12 +204,12 @@ Tugas Anda adalah:
 
 Kriteria 'confidence' harus bernilai 'sangat_cocok' untuk 1-2 kecocokan utama, dan 'alternatif' untuk rekomendasi pendukung.
 Pastikan HANYA menghasilkan JSON yang valid, tanpa penjelasan markdown lain di luar blok code JSON (atau langsung kembalikan raw JSON agar mudah diparsing).`,
-          tools: [kbliSearchTool]
+          tools: [kbliSearchTool],
         });
 
         const runner = new InMemoryRunner({
           agent,
-          appName: 'KBLIAssistant'
+          appName: 'KBLIAssistant',
         });
 
         const prompt = `Cari kode KBLI 2020 yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}".
@@ -167,14 +232,16 @@ Kembalikan HANYA array JSON tersebut saja!`;
           userId: 'user-session',
           newMessage: {
             role: 'user',
-            parts: [{ text: prompt }]
-          }
+            parts: [{ text: prompt }],
+          },
         });
 
         let fullText = '';
         for await (const event of stream) {
           if (event.errorMessage) {
-            console.error(`[KBLI Agent] LLM Error received from ADK: "${event.errorMessage}" (Code: ${event.errorCode})`);
+            console.error(
+              `[KBLI Agent] LLM Error received from ADK: "${event.errorMessage}" (Code: ${event.errorCode})`,
+            );
             throw new Error(`Vertex AI LLM Error: ${event.errorMessage}`);
           }
           const text = stringifyContent(event);
@@ -185,7 +252,9 @@ Kembalikan HANYA array JSON tersebut saja!`;
 
         const trimmedText = fullText.trim();
         if (!trimmedText) {
-          throw new Error('KBLI AI Search Agent returned an empty text response.');
+          throw new Error(
+            'KBLI AI Search Agent returned an empty text response.',
+          );
         }
 
         try {
@@ -193,21 +262,30 @@ Kembalikan HANYA array JSON tersebut saja!`;
           if (match) {
             const records = JSON.parse(match[0]) as KBLIRecord[];
             if (Array.isArray(records) && records.length > 0) {
-              console.log(`[KBLI Agent] Successfully retrieved ${records.length} records online.`);
+              console.log(
+                `[KBLI Agent] Successfully retrieved ${records.length} records online.`,
+              );
               this.cache.set(q, records);
               return records;
             }
           } else {
             const records = JSON.parse(trimmedText) as KBLIRecord[];
             if (Array.isArray(records) && records.length > 0) {
-              console.log(`[KBLI Agent] Successfully retrieved ${records.length} records online from raw text.`);
+              console.log(
+                `[KBLI Agent] Successfully retrieved ${records.length} records online from raw text.`,
+              );
               this.cache.set(q, records);
               return records;
             }
           }
-          throw new Error('No valid KBLI records array could be extracted from agent response.');
+          throw new Error(
+            'No valid KBLI records array could be extracted from agent response.',
+          );
         } catch (parseError) {
-          console.error('[KBLI Agent] Failed to parse JSON from AI Agent response text:', parseError);
+          console.error(
+            '[KBLI Agent] Failed to parse JSON from AI Agent response text:',
+            parseError,
+          );
           console.debug('[KBLI Agent] Raw text was:', fullText);
           throw parseError;
         }
@@ -216,16 +294,17 @@ Kembalikan HANYA array JSON tersebut saja!`;
         // Fall back gracefully to local static search
       }
     } else {
-      console.warn('[KBLI Agent] Neither Vertex AI nor Gemini API Key is configured. Falling back to local static search.');
+      console.warn(
+        '[KBLI Agent] Neither Vertex AI nor Gemini API Key is configured. Falling back to local static search.',
+      );
     }
-
 
     // Filter list based on title, description, or tags matching keywords
     const matches = this.kbliList.filter(
       (k) =>
         k.title.toLowerCase().includes(q) ||
         k.description.toLowerCase().includes(q) ||
-        k.suitableFor.some((tag) => tag.includes(q))
+        k.suitableFor.some((tag) => tag.includes(q)),
     );
 
     if (matches.length > 0) {
@@ -233,7 +312,8 @@ Kembalikan HANYA array JSON tersebut saja!`;
     }
 
     // If no direct matches, return general food suggestions
-    return this.kbliList.filter((k) => k.code === '56103' || k.code === '47711' || k.code === '96200');
+    return this.kbliList.filter(
+      (k) => k.code === '56103' || k.code === '47711' || k.code === '96200',
+    );
   }
 }
-

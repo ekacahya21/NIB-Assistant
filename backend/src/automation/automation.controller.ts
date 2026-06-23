@@ -1,4 +1,12 @@
-import { Controller, Sse, Post, Param, Body, Query, MessageEvent } from '@nestjs/common';
+import {
+  Controller,
+  Sse,
+  Post,
+  Param,
+  Body,
+  Query,
+  MessageEvent,
+} from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { Observable, map } from 'rxjs';
 
@@ -16,9 +24,9 @@ export class AutomationController {
     @Param('draftId') draftId: string,
     @Query('akunOss') akunOss?: string,
   ): Observable<MessageEvent> {
-    return this.automationService.getStream(draftId, akunOss).pipe(
-      map((event) => ({ data: event } as MessageEvent))
-    );
+    return this.automationService
+      .getStream(draftId, akunOss)
+      .pipe(map((event) => ({ data: event })));
   }
 
   @Post('confirm/:draftId')
@@ -28,10 +36,7 @@ export class AutomationController {
   }
 
   @Post('otp/:draftId')
-  submitOtp(
-    @Param('draftId') draftId: string,
-    @Body() body: { otp: string },
-  ) {
+  submitOtp(@Param('draftId') draftId: string, @Body() body: { otp: string }) {
     this.automationService.submitOtp(draftId, body.otp);
     return { success: true };
   }

@@ -6,17 +6,22 @@ export class DocumentsService {
   /**
    * Helper method to fetch map tile with standard browser user-agent and fallbacks.
    */
-  private async fetchTile(zoom: number, tx: number, ty: number): Promise<Buffer | null> {
+  private async fetchTile(
+    zoom: number,
+    tx: number,
+    ty: number,
+  ): Promise<Buffer | null> {
     const urls = [
       `https://basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}.png`,
-      `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
+      `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`,
     ];
     for (const url of urls) {
       try {
         const res = await fetch(url, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) NIB-Assistant/1.0'
-          }
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) NIB-Assistant/1.0',
+          },
         });
         if (res.ok) {
           const ab = await res.arrayBuffer();
@@ -53,7 +58,7 @@ export class DocumentsService {
           .fillColor('#0284c7') // Sky blue accent
           .rect(50, 40, doc.page.width - 100, 8)
           .fill();
-          
+
         doc.moveDown(1.5);
 
         // --- Title ---
@@ -61,7 +66,9 @@ export class DocumentsService {
           .fillColor('#1e293b')
           .fontSize(14)
           .font('Helvetica-Bold')
-          .text('DOKUMEN ADMINISTRASI PERNYATAAN LOKASI USAHA', { align: 'center' })
+          .text('DOKUMEN ADMINISTRASI PERNYATAAN LOKASI USAHA', {
+            align: 'center',
+          })
           .moveDown(0.2);
 
         doc
@@ -88,18 +95,24 @@ export class DocumentsService {
 
         // Content on Top of the Card
         doc.fillColor('#334155').fontSize(11).font('Helvetica-Bold');
-        
+
         doc.text('INFORMASI LOKASI & LAHAN', 65, startY + 15);
-        
+
         doc.font('Helvetica').fontSize(10);
-        
+
         // Row 1: Alamat Usaha
         doc.font('Helvetica-Bold').text('Alamat Usaha:', 65, startY + 40);
-        doc.font('Helvetica').text(data.alamatUsaha.toUpperCase(), 175, startY + 40, { width: doc.page.width - 260 });
+        doc
+          .font('Helvetica')
+          .text(data.alamatUsaha.toUpperCase(), 175, startY + 40, {
+            width: doc.page.width - 260,
+          });
 
         // Row 2: Koordinat
         doc.font('Helvetica-Bold').text('Titik Koordinat:', 65, startY + 70);
-        doc.font('Helvetica').text(`${data.latitude}, ${data.longitude}`, 175, startY + 70);
+        doc
+          .font('Helvetica')
+          .text(`${data.latitude}, ${data.longitude}`, 175, startY + 70);
 
         // Row 3: Luas Lahan
         doc.font('Helvetica-Bold').text('Luas Lahan Usaha:', 65, startY + 90);
@@ -124,7 +137,10 @@ export class DocumentsService {
           const n = Math.pow(2, zoom);
           const x = ((lonNum + 180) / 360) * n;
           const latRad = (latNum * Math.PI) / 180;
-          const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+          const y =
+            ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
+              2) *
+            n;
 
           const cx = Math.floor(x);
           const cy = Math.floor(y);
@@ -166,7 +182,10 @@ export class DocumentsService {
             if (tile.buffer) {
               const dx = boxCenterX + (tile.tx - x) * tileSize;
               const dy = boxCenterY + (tile.ty - y) * tileSize;
-              doc.image(tile.buffer, dx, dy, { width: tileSize, height: tileSize });
+              doc.image(tile.buffer, dx, dy, {
+                width: tileSize,
+                height: tileSize,
+              });
             }
           }
           doc.restore();
@@ -183,11 +202,12 @@ export class DocumentsService {
           doc.fillColor('#ef4444');
           doc.strokeColor('#ffffff').lineWidth(1.5);
           doc.circle(boxCenterX, boxCenterY - 12, 6).fillAndStroke();
-          doc.moveTo(boxCenterX - 6, boxCenterY - 10)
-             .lineTo(boxCenterX, boxCenterY)
-             .lineTo(boxCenterX + 6, boxCenterY - 10)
-             .closePath()
-             .fillAndStroke();
+          doc
+            .moveTo(boxCenterX - 6, boxCenterY - 10)
+            .lineTo(boxCenterX, boxCenterY)
+            .lineTo(boxCenterX + 6, boxCenterY - 10)
+            .closePath()
+            .fillAndStroke();
           doc.fillColor('#ffffff');
           doc.circle(boxCenterX, boxCenterY - 12, 2.5).fill();
           doc.restore();
@@ -196,7 +216,9 @@ export class DocumentsService {
         } catch (mapErr) {
           doc
             .fillColor('#ef4444')
-            .text('[Gagal memuat tangkapan peta dari OpenStreetMap]', { align: 'center' });
+            .text('[Gagal memuat tangkapan peta dari OpenStreetMap]', {
+              align: 'center',
+            });
           doc.y += 30;
         }
 
@@ -208,7 +230,10 @@ export class DocumentsService {
           .fillColor('#0f172a')
           .fontSize(10)
           .font('Helvetica-Bold')
-          .text('Pemohon Perizinan NIB,', doc.page.width - 250, sigY + 20, { align: 'center', width: 200 })
+          .text('Pemohon Perizinan NIB,', doc.page.width - 250, sigY + 20, {
+            align: 'center',
+            width: 200,
+          })
           .moveDown(3.5);
 
         doc
@@ -221,7 +246,10 @@ export class DocumentsService {
         doc
           .fontSize(9)
           .font('Helvetica')
-          .text('TANDA TANGAN DIGITAL', doc.page.width - 250, doc.y + 5, { align: 'center', width: 200 });
+          .text('TANDA TANGAN DIGITAL', doc.page.width - 250, doc.y + 5, {
+            align: 'center',
+            width: 200,
+          });
 
         doc.end();
       } catch (err) {
@@ -280,9 +308,14 @@ export class DocumentsService {
           .fillColor('#64748b')
           .fontSize(9)
           .font('Helvetica')
-          .text('Foto Lokasi Usaha ini diambil secara langsung dari sistem pemohon.', 40, doc.page.height - 60, {
-            align: 'center',
-          });
+          .text(
+            'Foto Lokasi Usaha ini diambil secara langsung dari sistem pemohon.',
+            40,
+            doc.page.height - 60,
+            {
+              align: 'center',
+            },
+          );
 
         doc.end();
       } catch (err) {

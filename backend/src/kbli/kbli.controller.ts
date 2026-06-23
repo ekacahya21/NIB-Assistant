@@ -10,4 +10,3 @@ export class KbliController {
     return this.kbliService.search(query);
   }
 }
-
