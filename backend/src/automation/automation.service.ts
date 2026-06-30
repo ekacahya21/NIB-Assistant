@@ -1942,9 +1942,8 @@ export class AutomationService implements OnModuleDestroy {
 
     // Select Provinsi
     const cleanProvinsi = (
-      draft.provinsiKtp ||
       draft.provinsi ||
-      'DKI JAKARTA'
+      draft.provinsiKtp
     ).trim();
     const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
     this.logStep(
@@ -1972,7 +1971,7 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(500);
 
     // Select Kota/Kabupaten (combobox index 1)
-    const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten || '';
+    const rawKota = draft.kotaKabupaten || draft.kotaKabupatenKtp;
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.getOptimalSearchQuery(cleanKota);
     this.logStep(
@@ -1997,7 +1996,7 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(500);
 
     // Select Kecamatan (combobox index 2)
-    const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan || '').trim();
+    const cleanKecamatan = (draft.kecamatan || draft.kecamatanKtp).trim();
     const searchKecamatan = this.getOptimalSearchQuery(cleanKecamatan);
     this.logStep(
       subject,
@@ -2025,7 +2024,7 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(500);
 
     // Select Desa / Kelurahan (combobox index 3)
-    const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan || '').trim();
+    const cleanKelurahan = (draft.kelurahan || draft.kelurahanKtp).trim();
     const searchKelurahan = this.getOptimalSearchQuery(cleanKelurahan);
     this.logStep(
       subject,
@@ -2055,7 +2054,7 @@ export class AutomationService implements OnModuleDestroy {
     // input kode pos
     await page
       .getByRole('textbox', { name: 'Kode Pos' })
-      .fill(draft.kodePosKtp || draft.kodePos || '');
+      .fill(draft.kodePos || draft.kodePosKtp || '');
 
     // Dynamic Document PDF Generation & Upload
     this.logStep(
@@ -2073,10 +2072,10 @@ export class AutomationService implements OnModuleDestroy {
     try {
       // 1. Generate NPS PDF
       const npsBuffer = await this.documentsService.generateAdministrationPdf({
-        alamatUsaha: draft.alamatUsaha || 'Alamat Usaha',
-        latitude: draft.latitude || '-6.2088',
-        longitude: draft.longitude || '106.8456',
-        luasTanah: draft.luasTanah || '150',
+        alamatUsaha: draft.alamatUsaha || '',
+        latitude: draft.latitude || '',
+        longitude: draft.longitude || '',
+        luasTanah: draft.luasTanah || '',
       });
       fs.writeFileSync(npsPath, npsBuffer);
       createdNps = true;
@@ -2271,5 +2270,14 @@ export class AutomationService implements OnModuleDestroy {
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
+
+    await page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' }).click();
+
+    // check if 'Seluruh' ruang lingkup is exists, then click it
+    const seluruhRuangLingkup = page.getByText('Seluruh');
+    if (await seluruhRuangLingkup.isVisible()) {
+      await seluruhRuangLingkup.click();
+      await page.waitForTimeout(1000);
+    }
   }
 }
