@@ -129,6 +129,7 @@ export default function WizardPage() {
   const [expandedKbliCard, setExpandedKbliCard] = useState<string | null>(null);
   const [kbliError, setKbliError] = useState<string>("");
   const [isAiRecommended, setIsAiRecommended] = useState<boolean>(false);
+  const [kbliFlow, setKbliFlow] = useState<"popular" | "ai">("popular");
 
   // Fetch initial preferences from onboarding page on mount
   useEffect(() => {
@@ -161,6 +162,9 @@ export default function WizardPage() {
         try {
           const parsed = JSON.parse(saved);
           setFormData((prev) => ({ ...prev, ...parsed }));
+          if (parsed.ceritaUsaha && parsed.ceritaUsaha.trim().length >= 15) {
+            setKbliFlow("ai");
+          }
         } catch (e) {
           console.error("Gagal memuat draf dari session:", e);
         }
@@ -911,7 +915,7 @@ export default function WizardPage() {
       if (!formData.namaUsaha.trim()) {
         newErrors.namaUsaha = "Nama usaha/warung harus diisi.";
       }
-      if (formData.ceritaUsaha.trim().length < 15) {
+      if (kbliFlow === "ai" && formData.ceritaUsaha.trim().length < 15) {
         newErrors.ceritaUsaha = "Ceritakan usaha Anda minimal 15 karakter.";
       }
       if (!selectedKbliCode) {
@@ -968,6 +972,9 @@ export default function WizardPage() {
     setLoadingKbli(true);
     setKbliError("");
     setIsAiRecommended(!!q);
+    if (q) {
+      setKbliFlow("ai");
+    }
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const res = await fetch(`${apiUrl}/kbli/search?q=${encodeURIComponent(q)}`);
@@ -1762,6 +1769,50 @@ export default function WizardPage() {
                 </div>
 
                 <div className="bento-card space-y-5">
+                  {/* Flow Tab Selector */}
+                  <div className="flex bg-[#F3F4F6] p-1 rounded-lg w-full">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKbliFlow("popular");
+                        setIsAiRecommended(false);
+                        if (isAiRecommended) {
+                          fetchRecommendations("");
+                        }
+                        if (errors.ceritaUsaha) {
+                          setErrors((prev) => {
+                            const copy = { ...prev };
+                            delete copy.ceritaUsaha;
+                            return copy;
+                          });
+                        }
+                      }}
+                      className={`flex-1 text-center py-2.5 rounded-md text-[11px] font-extrabold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        kbliFlow === "popular"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "text-on-surface-variant hover:bg-white/50"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">trending_up</span>
+                      KBLI Populer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKbliFlow("ai");
+                        setIsAiRecommended(recommendations.length > 0 && isAiRecommended);
+                      }}
+                      className={`flex-1 text-center py-2.5 rounded-md text-[11px] font-extrabold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        kbliFlow === "ai"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "text-on-surface-variant hover:bg-white/50"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">psychology</span>
+                      Analisis AI
+                    </button>
+                  </div>
+
                   {/* Nama Usaha */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-on-surface-variant" htmlFor="namaUsaha">
@@ -1785,52 +1836,55 @@ export default function WizardPage() {
                     )}
                   </div>
 
-                  {/* Deskripsi/Cerita Usaha */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="ceritaUsaha">
-                      DESKRIPSI USAHA LENGKAP
-                    </label>
-                    <textarea
-                      id="ceritaUsaha"
-                      placeholder="Contoh: Saya menjual ayam geprek pedas dan nasi kotak secara online lewat GoFood/GrabFood. Saya memasak sendiri di rumah dibantu satu orang tetangga untuk membungkus makanan."
-                      rows={5}
-                      value={formData.ceritaUsaha}
-                      onChange={(e) => handleInputChange("ceritaUsaha", e.target.value)}
-                      className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none leading-relaxed ${
-                        errors.ceritaUsaha ? "border-error" : ""
-                      }`}
-                    />
-                    <p className="text-[10px] text-on-surface-variant leading-relaxed font-bold">
-                      <strong>💡 Tips:</strong> Ceritakan apa produknya, bagaimana penjualannya (online/offline), dan proses produksinya secara santai agar AI dapat memetakan KBLI secara akurat.
-                    </p>
-                    {errors.ceritaUsaha && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.ceritaUsaha}
+                  {/* Deskripsi/Cerita Usaha (ONLY in AI flow) */}
+                  {kbliFlow === "ai" && (
+                    <div className="flex flex-col gap-1.5 animate-fadeIn">
+                      <label className="text-xs font-bold text-on-surface-variant" htmlFor="ceritaUsaha">
+                        DESKRIPSI USAHA LENGKAP
+                      </label>
+                      <textarea
+                        id="ceritaUsaha"
+                        placeholder="Contoh: Saya menjual ayam geprek pedas dan nasi kotak secara online lewat GoFood/GrabFood. Saya memasak sendiri di rumah dibantu satu orang tetangga untuk membungkus makanan."
+                        rows={5}
+                        value={formData.ceritaUsaha}
+                        onChange={(e) => handleInputChange("ceritaUsaha", e.target.value)}
+                        className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none leading-relaxed ${
+                          errors.ceritaUsaha ? "border-error" : ""
+                        }`}
+                      />
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed font-bold">
+                        <strong>💡 Tips:</strong> Ceritakan apa produknya, bagaimana penjualannya (online/offline), dan proses produksinya secara santai agar AI dapat memetakan KBLI secara akurat.
                       </p>
-                    )}
+                      {errors.ceritaUsaha && (
+                        <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">error</span>
+                          {errors.ceritaUsaha}
+                        </p>
+                      )}
 
-                    {/* AI Recommendation Trigger Button */}
-                    <div className="flex justify-end pt-2">
-                      <button
-                        type="button"
-                        disabled={loadingKbli || formData.ceritaUsaha.trim().length < 15}
-                        onClick={() => fetchRecommendations(formData.ceritaUsaha)}
-                        className="bg-primary-container hover:bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-2 px-3.5 rounded flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-xs animate-pulse">auto_awesome</span>
-                        {loadingKbli ? "Menganalisis..." : "Cari Rekomendasi KBLI (AI)"}
-                      </button>
+                      {/* AI Recommendation Trigger Button */}
+                      <div className="flex justify-end pt-2">
+                        <button
+                          type="button"
+                          disabled={loadingKbli || formData.ceritaUsaha.trim().length < 15}
+                          onClick={() => fetchRecommendations(formData.ceritaUsaha)}
+                          className="bg-primary-container hover:bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-2 px-3.5 rounded flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-xs animate-pulse">auto_awesome</span>
+                          {loadingKbli ? "Menganalisis..." : "Cari Rekomendasi KBLI (AI)"}
+                        </button>
+                      </div>
                     </div>
+                  )}
 
-                    {errors.kbli && (
+                  {errors.kbli && (
+                    <div className="pt-2">
                       <p className="text-[11px] text-error font-semibold flex items-center gap-1">
                         <span className="material-symbols-outlined text-xs">error</span>
                         {errors.kbli}
                       </p>
-                    )}
-                  </div>
-
+                    </div>
+                  )}
                 </div>
 
                 {/* KBLI Recommendations Card */}
