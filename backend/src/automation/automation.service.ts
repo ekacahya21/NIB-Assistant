@@ -35,6 +35,13 @@ export class AutomationService implements OnModuleDestroy {
       stepStartTimes: Map<number, number>;
     }
   >();
+  private readonly adminEvents = new Subject<any>();
+  private readonly draftMetadata = new Map<
+    string,
+    { namaUsaha: string; namaPemilik: string }
+  >();
+  private readonly cancelledDrafts = new Set<string>();
+
 
   // Queue and browser management
   private activeSessionsCount = 0;
@@ -147,8 +154,13 @@ export class AutomationService implements OnModuleDestroy {
     });
   }
 
+  getAdminStream(): Observable<any> {
+    return this.adminEvents.asObservable();
+  }
+
   cancelStream(draftId: string) {
     this.logger.log(`Received cancellation request for draft ID: ${draftId}`);
+    this.cancelledDrafts.add(draftId);
 
     // 1. If in queue, cancel it and reject the promise
     const queuedIndex = this.queue.findIndex(
@@ -162,7 +174,12 @@ export class AutomationService implements OnModuleDestroy {
       this.logger.log(`Draft ID ${draftId} removed from queue.`);
 
       // Update database status
-      this.draftsService.update(draftId, { status: 'FAILED' }).catch(() => {});
+      this.draftsService
+        .update(draftId, {
+          status: 'FAILED',
+          errorMessage: 'Sesi dibatalkan oleh pengguna (di antrean).',
+        })
+        .catch(() => {});
     }
 
     // 2. Close active browser if running
@@ -171,6 +188,7 @@ export class AutomationService implements OnModuleDestroy {
       this.logger.log(`Closing active browser for draft ID: ${draftId}`);
       activeBrowser.close().catch((err: any) => {
         this.logger.error(`Error closing browser on cancellation: ${err}`);
+
       });
       this.activeBrowsers.delete(draftId);
     }
@@ -356,6 +374,18 @@ export class AutomationService implements OnModuleDestroy {
             text: completionMsg,
           });
           this.logger.log(`[Tx: ${draftId}] ${completionMsg}`);
+
+          // Broadcast step completion to admin stream
+          const meta = this.draftMetadata.get(draftId);
+          this.adminEvents.next({
+            draftId,
+            namaUsaha: meta?.namaUsaha || 'DRAF USAHA BARU',
+            namaPemilik: meta?.namaPemilik || 'TANPA NAMA',
+            step: prevStep,
+            status: 'success',
+            text: completionMsg,
+            timestamp: new Date().toISOString(),
+          });
         }
         timers.stepStartTimes.set(step, now);
       }
@@ -369,6 +399,18 @@ export class AutomationService implements OnModuleDestroy {
 
     const richText = `${text}${timeSuffix}`;
     subject.next({ step, status, text: richText });
+
+    // Broadcast log update to admin stream
+    const meta = this.draftMetadata.get(draftId);
+    this.adminEvents.next({
+      draftId,
+      namaUsaha: meta?.namaUsaha || 'DRAF USAHA BARU',
+      namaPemilik: meta?.namaPemilik || 'TANPA NAMA',
+      step,
+      status,
+      text: richText,
+      timestamp: new Date().toISOString(),
+    });
 
     const formattedText = `[Tx: ${draftId}] [Step ${step}] [${status.toUpperCase()}] ${richText}`;
     if (status === 'error') {
@@ -392,6 +434,11 @@ export class AutomationService implements OnModuleDestroy {
       );
     }
 
+    this.draftMetadata.set(draftId, {
+      namaUsaha: draft.namaUsaha || 'Draf Usaha Baru',
+      namaPemilik: draft.namaPemilik || 'Tanpa Nama',
+    });
+
     const isRegister = akunOss === 'belum';
     const timerNow = Date.now();
     this.executionTimers.set(draftId, {
@@ -405,6 +452,7 @@ export class AutomationService implements OnModuleDestroy {
     let page: any = null;
     let activeStep = 1;
     let passwordCode = '';
+    let finalErrorMessage: string | null = null;
 
     try {
       // Step 1: Initialize Browser
@@ -460,6 +508,7 @@ export class AutomationService implements OnModuleDestroy {
         error,
       );
       const errMsg = error.message || String(error);
+      finalErrorMessage = errMsg;
       this.logStep(
         subject,
         activeStep,
@@ -472,11 +521,20 @@ export class AutomationService implements OnModuleDestroy {
         ? Math.round((Date.now() - timers.startTime) / 1000)
         : 0;
       const finalStatus = activeStep === 7 ? 'COMPLETED' : 'FAILED';
+      const isCancelled = this.cancelledDrafts.has(draftId);
+      this.cancelledDrafts.delete(draftId);
+
+      const dbErrorMessage = finalStatus === 'COMPLETED'
+        ? null
+        : (isCancelled
+            ? 'Sesi dibatalkan oleh pengguna.'
+            : (finalErrorMessage || 'Terjadi kesalahan tidak dikenal.'));
 
       await this.draftsService
         .update(draftId, {
           status: finalStatus,
           automationDuration: duration,
+          errorMessage: dbErrorMessage,
         })
         .catch((err) => {
           this.logger.error(
@@ -507,6 +565,7 @@ export class AutomationService implements OnModuleDestroy {
       this.subjectToDraftId.delete(subject);
       this.activeBrowsers.delete(draftId);
       this.activeSubjects.delete(draftId);
+      this.draftMetadata.delete(draftId);
       if (browser) {
         await browser.close().catch(() => {});
       }

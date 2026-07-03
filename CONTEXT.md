@@ -58,6 +58,15 @@ _Avoid_: Business license, registration number, Izin Usaha
 The person using the application—either the business owner (UMKM) themselves or an assistant/agent acting on their behalf—tracked via a client session identifier.
 _Avoid_: Admin, Owner, Client
 
+**Administrator (Admin)**:
+The system operator or support staff who monitors all system-wide drafts and receives real-time error notifications from running automation sessions.
+_Avoid_: User, Client
+
+**Admin Dashboard (Dashboard Admin)**:
+The administrative interface located at `/admin` used by the Administrator to monitor all Draft statuses and receive real-time notifications of execution errors.
+_Avoid_: Wizard, User Dashboard
+
+
 **Draft Status (Status Draf)**:
 The lifecycle state of a Draft as it progresses through the system, mapped to user-facing status labels:
 - **Draft (Draf)** (DB: `DRAFT`): Initial state where the business profile is being filled or reviewed.

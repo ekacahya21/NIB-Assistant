@@ -29,6 +29,13 @@ export class AutomationController {
       .pipe(map((event) => ({ data: event })));
   }
 
+  @Sse('admin-stream')
+  adminStream(): Observable<MessageEvent> {
+    return this.automationService
+      .getAdminStream()
+      .pipe(map((event) => ({ data: event })));
+  }
+
   @Post('confirm/:draftId')
   confirm(@Param('draftId') draftId: string) {
     this.automationService.confirmLogin(draftId);
