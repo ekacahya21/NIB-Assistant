@@ -789,12 +789,6 @@ export default function AutomationPage() {
                                 {label}
                               </h4>
                               
-                              {/* Pill Badges */}
-                              {isCompleted && (
-                                <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-success/10 text-success uppercase tracking-wider border border-success/10">
-                                  Selesai
-                                </span>
-                              )}
                               {isActionRequired && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-warning/15 text-warning uppercase tracking-wider animate-pulse border border-warning/20">
                                   Butuh OTP

@@ -97,6 +97,8 @@ export default function AdminDashboardPage() {
   
   const drawerTerminalEndRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
+  const drawerDraftIdRef = useRef<string | null>(null);
+  const loadedDraftIdsRef = useRef<Set<string>>(new Set());
 
   // Check token on mount
   useEffect(() => {
@@ -126,6 +128,14 @@ export default function AdminDashboardPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        
+        // Track loaded draft IDs to dynamically add new incoming sessions
+        const ids = new Set<string>();
+        data.forEach((item: any) => {
+          if (item.id) ids.add(item.id);
+        });
+        loadedDraftIdsRef.current = ids;
+
         const mapped: DraftItem[] = data.map((item: any) => {
           let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal" = "Draft";
           const dbStatus = item.status ? item.status.toUpperCase() : null;
@@ -178,6 +188,13 @@ export default function AdminDashboardPage() {
         try {
           const payload = JSON.parse(event.data);
           if (payload && payload.draftId) {
+            // If it's a new draft session, add to set and trigger a refresh
+            if (!loadedDraftIdsRef.current.has(payload.draftId)) {
+              loadedDraftIdsRef.current.add(payload.draftId);
+              fetchDrafts();
+              return;
+            }
+
             // Append log entry
             const newEvent: ActivityEvent = {
               id: Math.random().toString(36).substring(2, 9).toUpperCase(),
@@ -238,6 +255,16 @@ export default function AdminDashboardPage() {
                 return d;
               });
             });
+
+            // If terminal state (error or complete), deactivate drawer and auto-refresh table
+            if (payload.status === "error" || payload.step === 7) {
+              if (drawerDraftIdRef.current === payload.draftId) {
+                setDrawerIsActive(false);
+              }
+              setTimeout(() => {
+                fetchDrafts();
+              }, 1500);
+            }
 
             // Trigger visual error toast notification if status is error
             if (payload.status === "error") {
@@ -319,6 +346,9 @@ export default function AdminDashboardPage() {
     setToasts([]);
     setSelectedDraftId(null);
     setIsDrawerOpen(false);
+    setDrawerDraftId(null);
+    drawerDraftIdRef.current = null;
+    loadedDraftIdsRef.current.clear();
     setUsername("");
     setPassword("");
   };
@@ -351,10 +381,17 @@ export default function AdminDashboardPage() {
   // Open Log Drawer
   const handleOpenDrawer = (draft: DraftItem, isActive: boolean) => {
     setDrawerDraftId(draft.id);
+    drawerDraftIdRef.current = draft.id;
     setDrawerDraftName(draft.namaUsaha);
     setDrawerDraftOwner(draft.namaPemilik);
     setDrawerIsActive(isActive);
     setIsDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setDrawerDraftId(null);
+    drawerDraftIdRef.current = null;
   };
 
   // Helper formats
@@ -844,7 +881,7 @@ export default function AdminDashboardPage() {
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Translucent Backdrop */}
           <div 
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={handleCloseDrawer}
             className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300"
           />
 
@@ -872,7 +909,7 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
               <button 
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={handleCloseDrawer}
                 className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
                 title="Tutup Panel"
               >
