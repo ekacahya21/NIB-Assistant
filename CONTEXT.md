@@ -85,7 +85,8 @@ The lifecycle state of a Draft as it progresses through the system, mapped to us
 - **Draft (Draf)** (DB: `DRAFT`): Initial state where the business profile is being filled or reviewed.
 - **Proses (Processing)** (DB: `QUEUED` / `RUNNING`): The draft is active, either sitting in the Pending List or running an Automation Session.
 - **Sukses (Success)** (DB: `COMPLETED`): The registration and form-filling on the OSS portal were successfully completed.
-- **Butuh OTP (Action Required / Failed)** (DB: `FAILED`): The session was interrupted, failed, or paused, requiring user attention (such as entering OTP or fixing data errors).
+- **Butuh OTP (Action Required / Failed)** (DB: `FAILED`): The session failed or was interrupted *during or before* NIK validation & OTP registration (Step 2), requiring user input to try registering again.
+- **Gagal (Automation Interrupted / Login Needed)** (DB: `FAILED_LATER`): The account was successfully registered on the OSS portal, but the session encountered an error *after* registration (Step 3 to 6). Reopening this draft will launch the automation directly in login mode (`akunOss=sudah`) rather than registration.
 _Avoid_: Backend enums, progress steps
 
 ---
