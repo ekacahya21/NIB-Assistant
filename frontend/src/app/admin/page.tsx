@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+interface LogEntry {
+  step: number;
+  status: "info" | "success" | "warn" | "error";
+  text: string;
+  timestamp: string;
+}
+
 interface DraftItem {
   id: string;
   namaPemilik: string;
@@ -15,6 +22,7 @@ interface DraftItem {
   updatedAt: string;
   status: "Draft" | "Proses" | "Sukses" | "Butuh OTP";
   errorMessage?: string | null;
+  logs?: LogEntry[] | null;
   kbliCode?: string | null;
   kbliTitle?: string | null;
   alamatUsaha?: string | null;
@@ -70,19 +78,25 @@ export default function AdminDashboardPage() {
   // UI states
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("Semua");
+  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
-  const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(true);
   
-  const terminalEndRef = useRef<HTMLDivElement | null>(null);
+  // Log Drawer state
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [drawerDraftId, setDrawerDraftId] = useState<string | null>(null);
+  const [drawerDraftName, setDrawerDraftName] = useState<string>("");
+  const [drawerDraftOwner, setDrawerDraftOwner] = useState<string>("");
+  const [drawerIsActive, setDrawerIsActive] = useState<boolean>(false);
+  
+  const drawerTerminalEndRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
 
-  // Auto scroll terminal to bottom when new logs arrive
+  // Auto scroll drawer terminal to bottom when new logs arrive
   useEffect(() => {
-    if (isTerminalOpen && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (isDrawerOpen && drawerTerminalEndRef.current) {
+      drawerTerminalEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [activities, isTerminalOpen]);
+  }, [activities, isDrawerOpen, drawerDraftId]);
 
   // Load all drafts from the local backend
   const fetchDrafts = async () => {
@@ -146,7 +160,7 @@ export default function AdminDashboardPage() {
               timestamp: payload.timestamp || new Date().toISOString(),
             };
             
-            setActivities((prev) => [...prev.slice(-99), newEvent]); // Keep last 100 entries
+            setActivities((prev) => [...prev.slice(-199), newEvent]); // Keep last 200 entries
 
             // Update draft status dynamically in the UI list
             setDrafts((prevDrafts) => {
@@ -165,10 +179,29 @@ export default function AdminDashboardPage() {
                     updatedStatus = "Proses";
                   }
 
+                  // Build running logs in memory for active stream view
+                  const currentLogs = d.logs || [];
+                  const exists = currentLogs.some(
+                    (log) => log.text === payload.text && log.step === payload.step
+                  );
+                  
+                  const updatedLogs = exists 
+                    ? currentLogs 
+                    : [
+                        ...currentLogs, 
+                        {
+                          step: payload.step,
+                          status: payload.status || "info",
+                          text: payload.text,
+                          timestamp: payload.timestamp || new Date().toISOString()
+                        }
+                      ];
+
                   return {
                     ...d,
                     status: updatedStatus,
                     errorMessage: dbErrorMessage,
+                    logs: updatedLogs,
                     updatedAt: new Date().toISOString(),
                   };
                 }
@@ -235,6 +268,15 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Open Log Drawer
+  const handleOpenDrawer = (draft: DraftItem, isActive: boolean) => {
+    setDrawerDraftId(draft.id);
+    setDrawerDraftName(draft.namaUsaha);
+    setDrawerDraftOwner(draft.namaPemilik);
+    setDrawerIsActive(isActive);
+    setIsDrawerOpen(true);
+  };
+
   // Helper formats
   const formatDate = (dateStr: string) => {
     try {
@@ -251,34 +293,83 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const getLogStyle = (status: string) => {
+    switch (status) {
+      case "success":
+        return "text-emerald-400 font-semibold";
+      case "error":
+        return "text-rose-400 font-bold bg-rose-950/20 px-1.5 py-0.5 rounded border border-rose-900/30";
+      case "warn":
+        return "text-amber-400 font-semibold";
+      case "info":
+      default:
+        return "text-cyan-400";
+    }
+  };
+
   // Filter & Search drafts
-  const filteredDrafts = drafts.filter((draft) => {
+  const searchedDrafts = drafts.filter((draft) => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch = 
+    return (
       draft.namaPemilik.toLowerCase().includes(q) ||
       draft.namaUsaha.toLowerCase().includes(q) ||
       draft.id.toLowerCase().includes(q) ||
-      (draft.nik && draft.nik.includes(q));
-    
-    if (statusFilter === "Semua") return matchesSearch;
-    return matchesSearch && draft.status === statusFilter;
+      (draft.nik && draft.nik.includes(q))
+    );
   });
+
+  // Split drafts based on Active vs Previous tabs
+  const activeSessions = searchedDrafts.filter((d) => d.status === "Proses");
+  const historySessions = searchedDrafts.filter((d) => d.status !== "Proses");
+
+  const currentTabDrafts = activeTab === "active" ? activeSessions : historySessions;
 
   // Calculate stats KPIs
   const totalCount = drafts.length;
   const successCount = drafts.filter((d) => d.status === "Sukses").length;
   const errorCount = drafts.filter((d) => d.status === "Butuh OTP").length;
-  
-  // Calculate active sessions: how many have "Proses" status
   const activeCount = drafts.filter((d) => d.status === "Proses").length;
 
+  // Get log entries for the active drawer
+  const getDrawerLogs = (): LogEntry[] => {
+    if (!drawerDraftId) return [];
+    
+    // Find matching draft
+    const matchedDraft = drafts.find((d) => d.id === drawerDraftId);
+    
+    if (drawerIsActive) {
+      // For active sessions, show logs accumulated in state (or filter from live activities)
+      const stateLogs = matchedDraft?.logs || [];
+      const activityLogs = activities
+        .filter((act) => act.draftId === drawerDraftId)
+        .map((act) => ({
+          step: act.step,
+          status: act.status,
+          text: act.text,
+          timestamp: act.timestamp,
+        }));
+      
+      // Combine and filter duplicates
+      const allLogs = [...stateLogs];
+      activityLogs.forEach((actLog) => {
+        if (!allLogs.some((l) => l.text === actLog.text && l.step === actLog.step)) {
+          allLogs.push(actLog);
+        }
+      });
+      return allLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    } else {
+      // For inactive history, load persisted logs array
+      return matchedDraft?.logs || [];
+    }
+  };
+
   return (
-    <div className="flex-grow flex flex-col bg-background min-h-screen font-sans text-on-background">
+    <div className="flex-grow flex flex-col bg-background min-h-screen font-sans text-on-background relative overflow-x-hidden">
       
       {/* ── Header ── */}
       <header className="sticky top-0 bg-white border-b border-border-light h-16 px-4 md:px-8 flex items-center justify-between z-40 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#E5E7EB] text-lg shadow-inner select-none shrink-0">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#E5E7EB] text-lg shadow-inner select-none shrink-0" title="Admin Icon">
             👑
           </div>
           <div className="flex flex-col">
@@ -286,19 +377,19 @@ export default function AdminDashboardPage() {
               NIB Assistant
             </span>
             <span className="text-[10px] font-bold text-secondary uppercase tracking-widest leading-none mt-1">
-              Admin Area Dashboard
+              Admin Monitor Dashboard
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-[10px] md:text-xs font-bold bg-[#E5E7EB] px-2.5 py-1 rounded text-primary-container">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-            SSE CONNECTED
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1.5 text-[10px] md:text-xs font-bold bg-[#E2E8F0] px-2.5 py-1 rounded text-primary-container">
+            <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></span>
+            SSE ACTIVE
           </span>
           <button 
             onClick={() => router.push("/dashboard")}
-            className="px-3.5 py-1.5 rounded text-xs font-bold bg-primary text-white hover:bg-primary-container transition-all uppercase tracking-wider cursor-pointer"
+            className="px-4 py-2 rounded text-xs font-bold bg-primary text-white hover:bg-primary-container transition-all uppercase tracking-wider cursor-pointer"
           >
             Dashboard Client
           </button>
@@ -324,7 +415,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 2: Active */}
-          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-primary-container/40 transition-all">
+          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-primary-container/40 transition-all bg-primary-container/5">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-primary-container uppercase tracking-wider">Sesi Aktif</p>
@@ -336,7 +427,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 3: Success */}
-          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-success/40 transition-all">
+          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-success/40 transition-all bg-success/5">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-success uppercase tracking-wider">Registrasi Sukses</p>
@@ -348,7 +439,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 4: FAILED */}
-          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-error/40 transition-all">
+          <div className="bento-card border border-border-light relative overflow-hidden group hover:border-error/40 transition-all bg-error/5">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-error uppercase tracking-wider">Gagal / Butuh OTP</p>
@@ -361,78 +452,9 @@ export default function AdminDashboardPage() {
 
         </section>
 
-        {/* ── Collapsible Live Activity Terminal Console ── */}
-        <section className="bento-card p-0 overflow-hidden border border-border-light bg-[#1E1E24]">
-          <button 
-            onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-            className="w-full flex items-center justify-between px-5 py-3.5 bg-[#17171C] text-white cursor-pointer select-none"
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></span>
-              <span className="text-xs font-bold tracking-widest uppercase text-outline-variant">
-                Live Activity Log Stream (All Sessions)
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActivities([]);
-                }}
-                className="px-2 py-0.5 rounded border border-outline/35 hover:bg-outline/10 text-[9px] font-extrabold uppercase tracking-wide text-[#A3A3AF] cursor-pointer"
-              >
-                Clear Log
-              </button>
-              <span className="material-symbols-outlined text-base">
-                {isTerminalOpen ? "expand_less" : "expand_more"}
-              </span>
-            </div>
-          </button>
-
-          {isTerminalOpen && (
-            <div className="h-64 overflow-y-auto px-5 py-4 font-mono text-[10px] md:text-xs leading-relaxed space-y-1.5 scrollbar-thin">
-              {activities.length === 0 ? (
-                <div className="text-zinc-500 italic py-4 text-center">
-                  Menunggu log otomatisasi dari klien... Mulai sesi otomatisasi dari wizard untuk melihat aktivitas live.
-                </div>
-              ) : (
-                activities.map((act) => {
-                  let textClass = "text-zinc-300";
-                  let prefix = "[INFO]";
-                  
-                  if (act.status === "success") {
-                    textClass = "text-emerald-400 font-semibold";
-                    prefix = "✅ [SUCCESS]";
-                  } else if (act.status === "error") {
-                    textClass = "text-rose-400 font-bold bg-rose-950/20 px-1 rounded border border-rose-900/30";
-                    prefix = "❌ [CRITICAL]";
-                  } else if (act.status === "warn") {
-                    textClass = "text-amber-400 font-semibold";
-                    prefix = "⚠️ [WARNING]";
-                  } else if (act.status === "info") {
-                    textClass = "text-cyan-400";
-                    prefix = "ℹ️ [INFO]";
-                  }
-
-                  const timeStr = new Date(act.timestamp).toLocaleTimeString("id-ID");
-
-                  return (
-                    <div key={act.id} className={`flex items-start gap-1 ${textClass} animate-fadeIn`}>
-                      <span className="text-zinc-500 shrink-0 select-none">[{timeStr}]</span>
-                      <span className="font-extrabold text-blue-400 shrink-0 select-none">[{act.namaUsaha}]</span>
-                      <span className="font-extrabold shrink-0 select-none">{prefix}</span>
-                      <span className="break-all">{act.text}</span>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={terminalEndRef} />
-            </div>
-          )}
-        </section>
-
-        {/* ── Search & Filter Controls ── */}
-        <section className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        {/* ── Search & Tab Controls ── */}
+        <section className="flex flex-col md:flex-row gap-4 items-center justify-between mt-2">
+          {/* Search Input */}
           <div className="relative w-full md:max-w-md">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">
               search
@@ -446,24 +468,38 @@ export default function AdminDashboardPage() {
             />
           </div>
 
+          {/* Tabs Selector */}
           <div className="flex overflow-x-auto w-full md:w-auto pb-1 gap-1.5 scrollbar-thin">
-            {["Semua", "Draft", "Proses", "Butuh OTP", "Sukses"].map((filterName) => (
-              <button
-                key={filterName}
-                onClick={() => setStatusFilter(filterName)}
-                className={`px-3.5 py-1.5 rounded text-[10px] font-extrabold uppercase tracking-wider border shrink-0 transition-all cursor-pointer ${
-                  statusFilter === filterName
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-on-surface-variant border-border-light hover:bg-surface-container-low"
-                }`}
-              >
-                {filterName}
-              </button>
-            ))}
+            <button
+              onClick={() => setActiveTab("active")}
+              className={`px-4 py-2 rounded text-[10px] font-extrabold uppercase tracking-wider border shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "active"
+                  ? "bg-primary text-white border-primary shadow"
+                  : "bg-white text-on-surface-variant border-border-light hover:bg-surface-container-low"
+              }`}
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22C55E] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22C55E]"></span>
+              </span>
+              Sesi Aktif ({activeSessions.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`px-4 py-2 rounded text-[10px] font-extrabold uppercase tracking-wider border shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "history"
+                  ? "bg-primary text-white border-primary shadow"
+                  : "bg-white text-on-surface-variant border-border-light hover:bg-surface-container-low"
+              }`}
+            >
+              <span className="material-symbols-outlined text-xs">history</span>
+              Riwayat Selesai & Gagal ({historySessions.length})
+            </button>
           </div>
         </section>
 
-        {/* ── Main Drafts List Table ── */}
+        {/* ── Tabbed Drafts List Table ── */}
         <section className="bento-card border border-border-light p-0 overflow-hidden shadow-md">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
@@ -472,26 +508,29 @@ export default function AdminDashboardPage() {
                 Memuat data registrasi...
               </span>
             </div>
-          ) : filteredDrafts.length === 0 ? (
-            <div className="text-center py-16 text-outline italic text-xs">
-              Tidak ada draft pendaftaran yang cocok dengan kriteria.
+          ) : currentTabDrafts.length === 0 ? (
+            <div className="text-center py-20 text-outline italic text-xs bg-white space-y-2">
+              <span className="material-symbols-outlined text-3xl block text-zinc-300">folder_open</span>
+              <p>Tidak ada data {activeTab === "active" ? "sesi aktif yang sedang berjalan" : "riwayat pendaftaran"} ditemukan.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-surface-container-low border-b border-border-light font-bold text-on-surface uppercase tracking-wider">
-                    <th className="px-5 py-3">ID Draft</th>
-                    <th className="px-5 py-3">Nama Usaha / Pemilik</th>
-                    <th className="px-5 py-3">NIK</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Terakhir Diperbarui</th>
-                    <th className="px-5 py-3 text-right">Aksi</th>
+                    <th className="px-5 py-3.5">ID Draft</th>
+                    <th className="px-5 py-3.5">Nama Usaha / Pemilik</th>
+                    <th className="px-5 py-3.5">NIK</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5">Terakhir Diperbarui</th>
+                    <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-light">
-                  {filteredDrafts.map((draft) => {
+                  {currentTabDrafts.map((draft) => {
                     const isExpanded = selectedDraftId === draft.id;
+                    const isRunning = draft.status === "Proses";
+
                     return (
                       <Fragment key={draft.id}>
                         {/* Table Row */}
@@ -501,7 +540,15 @@ export default function AdminDashboardPage() {
                         >
                           <td className="px-5 py-4 font-bold text-primary font-mono">{draft.id}</td>
                           <td className="px-5 py-4">
-                            <div className="font-extrabold text-on-surface">{draft.namaUsaha}</div>
+                            <div className="flex items-center gap-2">
+                              {isRunning && (
+                                <span className="relative flex h-2 w-2 shrink-0" title="Active indicator">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                                </span>
+                              )}
+                              <span className="font-extrabold text-on-surface truncate max-w-[200px]">{draft.namaUsaha}</span>
+                            </div>
                             <div className="text-[10px] text-outline font-bold mt-0.5">{draft.namaPemilik}</div>
                           </td>
                           <td className="px-5 py-4 font-mono font-semibold text-zinc-600">{draft.nik}</td>
@@ -520,7 +567,28 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="px-5 py-4 text-outline font-semibold">{formatDate(draft.updatedAt)}</td>
                           <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* CTA View Log Drawer */}
+                              {isRunning ? (
+                                <button
+                                  onClick={() => handleOpenDrawer(draft, true)}
+                                  className="px-2.5 py-1.5 rounded text-[10px] font-bold bg-[#17171C] text-emerald-400 hover:bg-[#202027] border border-emerald-500/25 transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                  title="Lihat Log Running"
+                                >
+                                  <span className="material-symbols-outlined text-xs animate-pulse text-emerald-400 font-semibold">terminal</span>
+                                  Log Running
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleOpenDrawer(draft, false)}
+                                  className="px-2.5 py-1.5 rounded text-[10px] font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all border border-border-light uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                  title="Lihat Riwayat Log"
+                                >
+                                  <span className="material-symbols-outlined text-xs text-zinc-500 font-semibold">history</span>
+                                  Log History
+                                </button>
+                              )}
+
                               <button 
                                 onClick={(e) => handleDeleteDraft(draft.id, e)}
                                 className="p-1.5 hover:bg-error/10 hover:text-error rounded text-outline transition-all cursor-pointer flex items-center justify-center"
@@ -528,9 +596,6 @@ export default function AdminDashboardPage() {
                               >
                                 <span className="material-symbols-outlined text-sm font-semibold">delete</span>
                               </button>
-                              <span className="material-symbols-outlined text-outline/70 select-none text-base">
-                                {isExpanded ? "keyboard_arrow_up" : "keyboard_arrow_down"}
-                              </span>
                             </div>
                           </td>
                         </tr>
@@ -599,6 +664,94 @@ export default function AdminDashboardPage() {
         </section>
 
       </main>
+
+      {/* ── Right Slide-out Terminal Log Drawer ── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Translucent Backdrop */}
+          <div 
+            onClick={() => setIsDrawerOpen(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+          />
+
+          {/* Drawer Console Content */}
+          <div className="relative w-full max-w-lg md:max-w-2xl bg-[#17171C] shadow-2xl h-full flex flex-col border-l border-zinc-800 animate-fadeIn z-10">
+            
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-[#121216] text-white">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {drawerIsActive ? (
+                    <span className="relative flex h-2.5 w-2.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+                    </span>
+                  ) : (
+                    <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span>
+                  )}
+                  <h3 className="font-extrabold text-sm md:text-base uppercase tracking-wider truncate text-[#ECEEF0]">
+                    {drawerDraftName}
+                  </h3>
+                </div>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mt-0.5">
+                  Pemilik: {drawerDraftOwner} | ID: {drawerDraftId}
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                title="Tutup Panel"
+              >
+                <span className="material-symbols-outlined font-bold text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Terminal Body */}
+            <div className="flex-grow overflow-y-auto px-6 py-5 font-mono text-[10px] md:text-xs leading-relaxed space-y-2 bg-[#17171C] text-zinc-300 scrollbar-thin">
+              <div className="text-zinc-600 select-none pb-2 border-b border-zinc-900/60 mb-2 italic">
+                --- AWAL LOG TRANSAKSI ({drawerIsActive ? "SESI RUNNING LIVE" : "SESI SELESAI"}) ---
+              </div>
+              
+              {getDrawerLogs().length === 0 ? (
+                <div className="text-zinc-500 italic py-10 text-center select-none">
+                  {drawerIsActive 
+                    ? "Menghubungkan ke logs stream... Menunggu baris baru."
+                    : "Tidak ada data riwayat log yang tersimpan."}
+                </div>
+              ) : (
+                getDrawerLogs().map((log, idx) => {
+                  const time = new Date(log.timestamp).toLocaleTimeString("id-ID");
+                  const style = getLogStyle(log.status);
+
+                  return (
+                    <div key={idx} className={`flex items-start gap-1.5 ${style} animate-fadeIn`}>
+                      <span className="text-zinc-600 shrink-0 select-none">[{time}]</span>
+                      <span className="font-extrabold shrink-0 select-none">
+                        {log.status === "error" ? "❌ [ERR]" : log.status === "success" ? "✅ [OK]" : log.status === "warn" ? "⚠️ [WRN]" : "ℹ️ [MSG]"}
+                      </span>
+                      <span className="break-all">{log.text}</span>
+                    </div>
+                  );
+                })
+              )}
+              
+              <div ref={drawerTerminalEndRef} />
+            </div>
+
+            {/* Terminal Footer */}
+            <div className="px-6 py-3 border-t border-zinc-850 bg-[#121216] flex items-center justify-between text-[10px] text-zinc-500 font-bold uppercase select-none">
+              <span>NIB Assistant Console v1.0</span>
+              {drawerIsActive && (
+                <span className="flex items-center gap-1.5 text-emerald-400 font-bold animate-pulse">
+                  <span className="material-symbols-outlined text-xs">radio_button_checked</span>
+                  STREAMING LIVE...
+                </span>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ── Floating Error Notification Toasts (Top Right) ── */}
       <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">

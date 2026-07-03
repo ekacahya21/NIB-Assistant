@@ -40,6 +40,7 @@ model Draft {
   status            String   @default("DRAFT")
   automationDuration Int?     @map("automation_duration")
   sessionId         String?  @map("session_id")
+  logs              Json?
   errorMessage      String?  @map("error_message")
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 

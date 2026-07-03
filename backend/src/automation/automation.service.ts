@@ -41,6 +41,7 @@ export class AutomationService implements OnModuleDestroy {
     { namaUsaha: string; namaPemilik: string }
   >();
   private readonly cancelledDrafts = new Set<string>();
+  private readonly sessionLogs = new Map<string, Array<any>>();
 
 
   // Queue and browser management
@@ -375,6 +376,17 @@ export class AutomationService implements OnModuleDestroy {
           });
           this.logger.log(`[Tx: ${draftId}] ${completionMsg}`);
 
+          // Record log to session log array
+          const logList = this.sessionLogs.get(draftId);
+          if (logList) {
+            logList.push({
+              step: prevStep,
+              status: 'success',
+              text: completionMsg,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
           // Broadcast step completion to admin stream
           const meta = this.draftMetadata.get(draftId);
           this.adminEvents.next({
@@ -399,6 +411,17 @@ export class AutomationService implements OnModuleDestroy {
 
     const richText = `${text}${timeSuffix}`;
     subject.next({ step, status, text: richText });
+
+    // Record log to session log array
+    const logList = this.sessionLogs.get(draftId);
+    if (logList) {
+      logList.push({
+        step,
+        status,
+        text: richText,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Broadcast log update to admin stream
     const meta = this.draftMetadata.get(draftId);
@@ -438,6 +461,8 @@ export class AutomationService implements OnModuleDestroy {
       namaUsaha: draft.namaUsaha || 'Draf Usaha Baru',
       namaPemilik: draft.namaPemilik || 'Tanpa Nama',
     });
+
+    this.sessionLogs.set(draftId, []);
 
     const isRegister = akunOss === 'belum';
     const timerNow = Date.now();
@@ -530,11 +555,15 @@ export class AutomationService implements OnModuleDestroy {
             ? 'Sesi dibatalkan oleh pengguna.'
             : (finalErrorMessage || 'Terjadi kesalahan tidak dikenal.'));
 
+      const logsToSave = this.sessionLogs.get(draftId) || [];
+      this.sessionLogs.delete(draftId);
+
       await this.draftsService
         .update(draftId, {
           status: finalStatus,
           automationDuration: duration,
           errorMessage: dbErrorMessage,
+          logs: logsToSave,
         })
         .catch((err) => {
           this.logger.error(

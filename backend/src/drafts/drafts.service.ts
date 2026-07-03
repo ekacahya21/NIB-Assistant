@@ -36,6 +36,7 @@ export class DraftData {
   automationDuration?: number;
   sessionId?: string;
   errorMessage?: string | null;
+  logs?: any;
 }
 
 @Injectable()
@@ -88,6 +89,7 @@ export class DraftsService {
         automationDuration: data.automationDuration,
         sessionId: data.sessionId,
         errorMessage: data.errorMessage,
+        logs: data.logs,
         updatedAt: new Date(),
       },
     });
@@ -141,6 +143,7 @@ export class DraftsService {
         automationDuration: data.automationDuration,
         sessionId: data.sessionId,
         errorMessage: data.errorMessage,
+        logs: data.logs,
         updatedAt: new Date(),
       },
     });
