@@ -6,9 +6,11 @@ import {
   Body,
   Query,
   MessageEvent,
+  UseGuards,
 } from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { Observable, map } from 'rxjs';
+import { AdminGuard } from '../auth/admin.guard';
 
 class LoginPayload {
   username!: string;
@@ -30,6 +32,7 @@ export class AutomationController {
   }
 
   @Sse('admin-stream')
+  @UseGuards(AdminGuard)
   adminStream(): Observable<MessageEvent> {
     return this.automationService
       .getAdminStream()

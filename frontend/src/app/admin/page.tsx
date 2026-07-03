@@ -70,6 +70,13 @@ interface ToastNotification {
 export default function AdminDashboardPage() {
   const router = useRouter();
   
+  // Auth state
+  const [adminToken, setAdminToken] = useState<string | null>(null);
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authenticating, setAuthenticating] = useState<boolean>(false);
+  
   // Data lists
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
@@ -91,6 +98,16 @@ export default function AdminDashboardPage() {
   const drawerTerminalEndRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
 
+  // Check token on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = sessionStorage.getItem("admin_token");
+      if (token) {
+        setAdminToken(token);
+      }
+    }
+  }, []);
+
   // Auto scroll drawer terminal to bottom when new logs arrive
   useEffect(() => {
     if (isDrawerOpen && drawerTerminalEndRef.current) {
@@ -100,8 +117,13 @@ export default function AdminDashboardPage() {
 
   // Load all drafts from the local backend
   const fetchDrafts = async () => {
+    if (!adminToken) return;
     try {
-      const response = await fetch(`${API_URL}/drafts`);
+      const response = await fetch(`${API_URL}/drafts`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         const mapped: DraftItem[] = data.map((item: any) => {
@@ -128,6 +150,9 @@ export default function AdminDashboardPage() {
         
         mapped.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         setDrafts(mapped);
+      } else if (response.status === 418 || response.status === 401) {
+        // Token expired or invalid
+        handleLogout();
       }
     } catch (err) {
       console.error("Gagal memuat semua draft untuk admin.", err);
@@ -137,11 +162,14 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
+    if (!adminToken) return;
+    
     fetchDrafts();
 
     // Establish SSE stream connection for global admin activities
+    let eventSource: EventSource | null = null;
     try {
-      const eventSource = new EventSource(`${API_URL}/automation/admin-stream`);
+      eventSource = new EventSource(`${API_URL}/automation/admin-stream?token=${adminToken}`);
       streamRef.current = eventSource;
 
       eventSource.onmessage = (event) => {
@@ -241,19 +269,69 @@ export default function AdminDashboardPage() {
     }
 
     return () => {
-      if (streamRef.current) {
-        streamRef.current.close();
+      if (eventSource) {
+        eventSource.close();
       }
     };
-  }, []);
+  }, [adminToken]);
+
+  // Login handler
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthenticating(true);
+    try {
+      const response = await fetch(`${API_URL}/auth/admin/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          sessionStorage.setItem("admin_token", data.token);
+          setAdminToken(data.token);
+          setLoading(true);
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setAuthError(errData.message || "Username atau password salah.");
+      }
+    } catch (err) {
+      console.error("Gagal melakukan autentikasi admin:", err);
+      setAuthError("Gagal terhubung ke server backend lokal.");
+    } finally {
+      setAuthenticating(false);
+    }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    sessionStorage.removeItem("admin_token");
+    setAdminToken(null);
+    setDrafts([]);
+    setActivities([]);
+    setToasts([]);
+    setSelectedDraftId(null);
+    setIsDrawerOpen(false);
+    setUsername("");
+    setPassword("");
+  };
 
   // Delete draft handler
   const handleDeleteDraft = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!adminToken) return;
     if (confirm(`Apakah Anda yakin ingin menghapus draft ID ${id} secara permanen? Tindakan ini tidak dapat dibatalkan.`)) {
       try {
         const response = await fetch(`${API_URL}/drafts/${id}`, {
           method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
         });
         if (response.ok) {
           setDrafts((prev) => prev.filter((d) => d.id !== id));
@@ -363,6 +441,92 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // ── Render Login Screen if not authenticated ──
+  if (!adminToken) {
+    return (
+      <div className="flex-grow flex items-center justify-center bg-[#090D16] min-h-screen px-4 font-sans select-none relative overflow-hidden">
+        {/* Background Decorative Gradients */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-secondary/10 blur-[120px] pointer-events-none" />
+
+        <div className="w-full max-w-sm bg-white/5 border border-white/10 backdrop-blur-md p-8 rounded-xl shadow-2xl space-y-6 animate-fadeIn">
+          
+          {/* Logo & Heading */}
+          <div className="text-center space-y-2">
+            <span className="text-4xl block">🇮🇩</span>
+            <h2 className="text-lg font-extrabold tracking-wider text-white uppercase mt-2">
+              Admin Portal Login
+            </h2>
+            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+              NIB Assistant Management
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            
+            {/* Username Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                Username
+              </label>
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Masukkan username admin"
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-xs text-white focus:outline-none focus:border-primary-container transition-all"
+              />
+            </div>
+
+            {/* Password Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                Kata Sandi
+              </label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Masukkan kata sandi"
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-xs text-white focus:outline-none focus:border-primary-container transition-all"
+              />
+            </div>
+
+            {/* Error Message */}
+            {authError && (
+              <div className="bg-rose-950/20 border border-rose-900/30 p-2.5 rounded text-rose-400 text-[10px] font-bold leading-normal flex items-start gap-1.5">
+                <span className="material-symbols-outlined text-sm shrink-0">warning</span>
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={authenticating}
+              className="w-full py-2.5 rounded bg-primary-container text-white text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              {authenticating ? (
+                <>
+                  <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                  Memverifikasi...
+                </>
+              ) : (
+                "Masuk Portal"
+              )}
+            </button>
+
+          </form>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render Authenticated Dashboard ──
   return (
     <div className="flex-grow flex flex-col bg-background min-h-screen font-sans text-on-background relative overflow-x-hidden">
       
@@ -389,9 +553,15 @@ export default function AdminDashboardPage() {
           </span>
           <button 
             onClick={() => router.push("/dashboard")}
-            className="px-4 py-2 rounded text-xs font-bold bg-primary text-white hover:bg-primary-container transition-all uppercase tracking-wider cursor-pointer"
+            className="px-3.5 py-1.5 rounded text-xs font-bold border border-border-light bg-white text-on-surface hover:bg-surface-container-low transition-all uppercase tracking-wider cursor-pointer"
           >
             Dashboard Client
+          </button>
+          <button 
+            onClick={handleLogout}
+            className="px-3.5 py-1.5 rounded text-xs font-bold bg-primary text-white hover:bg-primary-container transition-all uppercase tracking-wider cursor-pointer"
+          >
+            Keluar
           </button>
         </div>
       </header>

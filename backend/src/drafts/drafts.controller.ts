@@ -7,8 +7,10 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { DraftsService, DraftData } from './drafts.service';
+import { AdminGuard } from '../auth/admin.guard';
 
 @Controller('drafts')
 export class DraftsController {
@@ -33,6 +35,7 @@ export class DraftsController {
   }
 
   @Get()
+  @UseGuards(AdminGuard)
   async findAll(@Query('sessionId') sessionId?: string): Promise<DraftData[]> {
     return this.draftsService.findAll(sessionId);
   }

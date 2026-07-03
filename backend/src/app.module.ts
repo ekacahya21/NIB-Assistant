@@ -10,6 +10,7 @@ import { AutomationController } from './automation/automation.controller';
 import { AutomationService } from './automation/automation.service';
 import { DocumentsModule } from './documents/documents.module';
 import { PrismaService } from './prisma.service';
+import { AuthController } from './auth/auth.controller';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), DocumentsModule],
@@ -18,6 +19,7 @@ import { PrismaService } from './prisma.service';
     DraftsController,
     KbliController,
     AutomationController,
+    AuthController,
   ],
   providers: [
     AppService,
