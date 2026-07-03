@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
 
 export interface KBLIRecord {
   code: string;
@@ -10,6 +11,8 @@ export interface KBLIRecord {
 
 @Injectable()
 export class KbliService {
+  constructor(private readonly prisma: PrismaService) {}
+
   private readonly cache = new Map<string, KBLIRecord[]>();
 
   private readonly kbliList: KBLIRecord[] = [
@@ -118,8 +121,61 @@ export class KbliService {
   async search(query: string): Promise<KBLIRecord[]> {
     const q = (query || '').toLowerCase().trim();
     if (!q) {
-      // Default to food codes
-      return this.kbliList.filter((k) => k.code.startsWith('56'));
+      try {
+        console.log('[KBLI Agent] Fetching default KBLI recommendations based on most chosen database entries...');
+        const grouped = await this.prisma.draft.groupBy({
+          by: ['kbliCode', 'kbliTitle'],
+          _count: {
+            kbliCode: true,
+          },
+          where: {
+            kbliCode: {
+              not: '',
+            },
+            NOT: {
+              kbliCode: null,
+            },
+          },
+          orderBy: {
+            _count: {
+              kbliCode: 'desc',
+            },
+          },
+          take: 3,
+        });
+
+        const results: KBLIRecord[] = [];
+        for (const item of grouped) {
+          if (!item.kbliCode) continue;
+
+          const existing = this.kbliList.find((k) => k.code === item.kbliCode);
+          if (existing) {
+            results.push({ ...existing, confidence: 'sangat_cocok' });
+          } else {
+            results.push({
+              code: item.kbliCode,
+              title: item.kbliTitle || 'Aktivitas Usaha',
+              description: 'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
+              confidence: 'sangat_cocok',
+              suitableFor: ['Paling banyak dipilih', 'Tren UMKM'],
+            });
+          }
+        }
+
+        if (results.length < 3) {
+          for (const fallback of this.kbliList) {
+            if (results.length >= 3) break;
+            if (!results.some((r) => r.code === fallback.code)) {
+              results.push({ ...fallback, confidence: 'sangat_cocok' });
+            }
+          }
+        }
+
+        return results.slice(0, 3);
+      } catch (error) {
+        console.error('[KBLI Agent] Error fetching default KBLIs from database, falling back to static list:', error);
+        return this.kbliList.slice(0, 3);
+      }
     }
 
     if (this.cache.has(q)) {

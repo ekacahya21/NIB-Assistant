@@ -195,7 +195,12 @@ ${kbliText}
             Dashboard
           </button>
           <button 
-            onClick={() => router.push("/")}
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                sessionStorage.clear();
+              }
+              router.push("/");
+            }}
             className="px-3.5 py-1.5 rounded text-[11px] font-bold bg-primary-container text-white hover:bg-primary transition-all uppercase tracking-wider"
           >
             Mulai Baru

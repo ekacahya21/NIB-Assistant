@@ -128,6 +128,7 @@ export default function WizardPage() {
   const [loadingKbli, setLoadingKbli] = useState<boolean>(false);
   const [expandedKbliCard, setExpandedKbliCard] = useState<string | null>(null);
   const [kbliError, setKbliError] = useState<string>("");
+  const [isAiRecommended, setIsAiRecommended] = useState<boolean>(false);
 
   // Fetch initial preferences from onboarding page on mount
   useEffect(() => {
@@ -964,16 +965,16 @@ export default function WizardPage() {
 
   const fetchRecommendations = async (queryText: string) => {
     const q = (queryText || "").trim();
-    if (!q) return;
     setLoadingKbli(true);
     setKbliError("");
+    setIsAiRecommended(!!q);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const res = await fetch(`${apiUrl}/kbli/search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setRecommendations(data);
+          let updatedData = [...data];
           
           // Load previous selection if any, otherwise default to first recommendation
           const stored = sessionStorage.getItem("selected_kbli");
@@ -986,16 +987,24 @@ export default function WizardPage() {
                 setSelectedKbliCode(found.code);
                 setExpandedKbliCard(found.code);
                 loaded = true;
+              } else {
+                // Prepend/append the selected KBLI to the recommendations list so it remains visible
+                updatedData = [parsed, ...updatedData];
+                setSelectedKbliCode(parsed.code);
+                setExpandedKbliCard(parsed.code);
+                loaded = true;
               }
             } catch (e) {
               console.error(e);
             }
           }
           
+          setRecommendations(updatedData);
+
           if (!loaded) {
-            setSelectedKbliCode(data[0].code);
-            setExpandedKbliCard(data[0].code);
-            sessionStorage.setItem("selected_kbli", JSON.stringify(data[0]));
+            setSelectedKbliCode(updatedData[0].code);
+            setExpandedKbliCard(updatedData[0].code);
+            sessionStorage.setItem("selected_kbli", JSON.stringify(updatedData[0]));
           }
         } else {
           setKbliError("Tidak ditemukan rekomendasi KBLI yang cocok. Silakan sesuaikan deskripsi usaha Anda.");
@@ -1011,10 +1020,14 @@ export default function WizardPage() {
     }
   };
 
-  // Automatically trigger KBLI recommendation if Step 3 is entered with enough text and no recommendations yet
+  // Automatically trigger KBLI recommendation if Step 3 is entered
   useEffect(() => {
-    if (currentStep === 3 && formData.ceritaUsaha.trim().length >= 15 && recommendations.length <= 1) {
-      fetchRecommendations(formData.ceritaUsaha);
+    if (currentStep === 3 && recommendations.length <= 1) {
+      if (formData.ceritaUsaha.trim().length >= 15) {
+        fetchRecommendations(formData.ceritaUsaha);
+      } else {
+        fetchRecommendations("");
+      }
     }
   }, [currentStep]);
 
@@ -1828,7 +1841,7 @@ export default function WizardPage() {
                     <div className="flex justify-between items-center border-b border-border-light pb-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-primary-container text-sm">list_alt</span>
-                        Hasil Rekomendasi KBLI (AI)
+                        Hasil Rekomendasi KBLI {isAiRecommended ? "(AI)" : "(Populer)"}
                       </span>
                       {!loadingKbli && recommendations.length > 0 && (
                         <span className="text-[9px] text-outline font-bold bg-[#F3F4F6] border border-border-light px-2 py-0.5 rounded uppercase">
