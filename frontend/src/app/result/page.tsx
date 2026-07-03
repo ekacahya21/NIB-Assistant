@@ -11,6 +11,18 @@ const getTimestampSeconds = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
 };
 
+// Deterministic NIB generator based on draft ID and NIK to remain consistent
+const generateDeterministicNib = (id: string, nik: string) => {
+  if (!id) return "24061500501474";
+  let hash = 0;
+  const combined = id + (nik || "");
+  for (let i = 0; i < combined.length; i++) {
+    hash = combined.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const suffix = Math.abs(hash % 900000) + 100000;
+  return `24061500${suffix}`;
+};
+
 // Simple fallback for Suspense boundary
 function ResultLoading() {
   return (
@@ -57,45 +69,78 @@ function ResultPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const stateParam = searchParams.get("state") || "success"; // success, warning, failed
+  const draftIdParam = searchParams.get("draftId");
   
-  // Data states
+  // UI & Data states
+  const [loading, setLoading] = useState<boolean>(true);
   const [draftId, setDraftId] = useState<string>("");
   const [formData, setFormData] = useState<any>(null);
   const [selectedKbli, setSelectedKbli] = useState<any>(null);
   const [downloadingNps, setDownloadingNps] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
-
-  // Generate a mock NIB for demonstration
-  const [mockNib] = useState(() => {
-    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-    return `24061500${randomSuffix}`;
-  });
+  const [mockNib, setMockNib] = useState<string>("24061500501474");
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedId = sessionStorage.getItem("draft_id") || "DEMO123";
-      const storedData = sessionStorage.getItem("draft_form_data");
-      const storedKbli = sessionStorage.getItem("selected_kbli");
-
-      setDraftId(storedId);
-
-      if (storedData) {
-        try {
-          setFormData(JSON.parse(storedData));
-        } catch (e) {
-          console.error("Error parsing form data", e);
+    const loadDraftData = async () => {
+      let currentDraftId = draftIdParam;
+      if (!currentDraftId && typeof window !== "undefined") {
+        currentDraftId = sessionStorage.getItem("draft_id");
+      }
+      
+      if (!currentDraftId) {
+        setDraftId("DEMO123");
+        setLoading(false);
+        return;
+      }
+      
+      setDraftId(currentDraftId);
+      setLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/drafts/${currentDraftId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setFormData(data);
+          if (data.kbliCode) {
+            setSelectedKbli({
+              code: data.kbliCode,
+              title: data.kbliTitle || "KBLI Terpilih"
+            });
+          }
+          setMockNib(generateDeterministicNib(currentDraftId, data.nik));
+        } else {
+          // Fallback to sessionStorage if fetch fails (e.g. offline/local)
+          loadLocalFallback(currentDraftId);
+        }
+      } catch (err) {
+        console.error("Gagal mengambil data draft untuk halaman hasil:", err);
+        // Fallback to sessionStorage
+        loadLocalFallback(currentDraftId);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    const loadLocalFallback = (currentId: string) => {
+      if (typeof window !== "undefined") {
+        const storedData = sessionStorage.getItem("draft_form_data");
+        const storedKbli = sessionStorage.getItem("selected_kbli");
+        if (storedData) {
+          try {
+            const parsed = JSON.parse(storedData);
+            setFormData(parsed);
+            setMockNib(generateDeterministicNib(currentId, parsed.nik));
+          } catch {}
+        }
+        if (storedKbli) {
+          try {
+            setSelectedKbli(JSON.parse(storedKbli));
+          } catch {}
         }
       }
-
-      if (storedKbli) {
-        try {
-          setSelectedKbli(JSON.parse(storedKbli));
-        } catch (e) {
-          console.error("Error parsing KBLI data", e);
-        }
-      }
-    }
-  }, []);
+    };
+    
+    loadDraftData();
+  }, [draftIdParam]);
 
   // PDF Download Trigger
   const downloadNpsPdf = async () => {
@@ -167,6 +212,10 @@ ${kbliText}
     }
     return formData?.kbliCode ? `${formData.kbliCode} — ${formData.kbliTitle || "KBLI Terpilih"}` : "56103 — Kedai Makanan";
   };
+
+  if (loading) {
+    return <ResultLoading />;
+  }
 
   return (
     <div className="flex-grow flex flex-col bg-background min-h-screen font-sans">
@@ -254,11 +303,11 @@ ${kbliText}
                 <div className="space-y-3 pt-2">
                   <div className="flex justify-between items-start py-2 border-b border-border-light text-xs">
                     <span className="font-bold text-on-surface-variant uppercase tracking-wide shrink-0 w-32">Nama Usaha</span>
-                    <span className="font-extrabold text-on-surface text-right">{formData?.namaUsaha || "Geprek Pedas Mantap"}</span>
+                    <span className="font-extrabold text-on-surface text-right">{formData?.namaUsaha || "-"}</span>
                   </div>
                   <div className="flex justify-between items-start py-2 border-b border-border-light text-xs">
                     <span className="font-bold text-on-surface-variant uppercase tracking-wide shrink-0 w-32">Nama Pemilik</span>
-                    <span className="font-extrabold text-on-surface text-right">{formData?.namaPemilik || "Budi Santoso"}</span>
+                    <span className="font-extrabold text-on-surface text-right">{formData?.namaPemilik || "-"}</span>
                   </div>
                   <div className="flex justify-between items-start py-2 border-b border-border-light text-xs">
                     <span className="font-bold text-on-surface-variant uppercase tracking-wide shrink-0 w-32">KBLI Terpilih</span>
@@ -426,15 +475,15 @@ ${kbliText}
                 {/* Copyable Data Fields */}
                 <div className="space-y-3 pt-2">
                   {[
-                    { label: "Nama Pemilik", val: formData?.namaPemilik || "Budi Santoso" },
-                    { label: "NIK KTP", val: formData?.nik || "3201020304050607" },
-                    { label: "Tanggal Lahir", val: formData?.tanggalLahir || "1990-01-01" },
-                    { label: "Email Pemilik", val: formData?.email || "budi.santoso@email.com" },
-                    { label: "Nomor HP / WA", val: formData?.nomorHp || "08123456789" },
-                    { label: "Nama Usaha / Toko", val: formData?.namaUsaha || "Geprek Pedas Mantap" },
-                    { label: "Alamat Usaha", val: formData?.alamatUsaha || formData?.alamatUsahaRaw || "Jl. Raya Bogor No. 12" },
-                    { label: "Modal Usaha", val: formData?.modalUsaha ? `Rp ${formData.modalUsaha}` : "Rp 15.000.000" },
-                    { label: "Tenaga Kerja", val: formData?.jumlahPekerja ? `${formData.jumlahPekerja} orang` : "2 orang" },
+                    { label: "Nama Pemilik", val: formData?.namaPemilik || "-" },
+                    { label: "NIK KTP", val: formData?.nik || "-" },
+                    { label: "Tanggal Lahir", val: formData?.tanggalLahir || "-" },
+                    { label: "Email Pemilik", val: formData?.email || "-" },
+                    { label: "Nomor HP / WA", val: formData?.nomorHp || "-" },
+                    { label: "Nama Usaha / Toko", val: formData?.namaUsaha || "-" },
+                    { label: "Alamat Usaha", val: formData?.alamatUsaha || formData?.alamatUsahaRaw || "-" },
+                    { label: "Modal Usaha", val: formData?.modalUsaha ? `Rp ${Number(formData.modalUsaha).toLocaleString("id-ID")}` : "-" },
+                    { label: "Tenaga Kerja", val: formData?.jumlahPekerja ? `${formData.jumlahPekerja} orang` : "-" },
                     { label: "KBLI Usaha", val: getKbliDisplay() }
                   ].map((field, idx) => (
                     <div key={idx} className="flex justify-between items-center py-2.5 border-b border-border-light text-xs gap-3">

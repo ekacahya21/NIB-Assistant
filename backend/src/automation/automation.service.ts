@@ -545,7 +545,9 @@ export class AutomationService implements OnModuleDestroy {
       const duration = timers
         ? Math.round((Date.now() - timers.startTime) / 1000)
         : 0;
-      const finalStatus = activeStep === 7 ? 'COMPLETED' : 'FAILED';
+      const finalStatus = activeStep === 7 
+        ? 'COMPLETED' 
+        : (activeStep > 2 ? 'FAILED_LATER' : 'FAILED');
       const isCancelled = this.cancelledDrafts.has(draftId);
       this.cancelledDrafts.delete(draftId);
 

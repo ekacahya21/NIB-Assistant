@@ -14,7 +14,7 @@ interface DraftItem {
   nomorHp: string;
   email: string;
   updatedAt: string;
-  status: "Draft" | "Proses" | "Sukses" | "Butuh OTP";
+  status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal";
   kbliCode?: string;
   kbliTitle?: string;
   alamatUsaha?: string;
@@ -57,13 +57,15 @@ export default function DashboardPage() {
           // Map backend items to DraftItem structures
           const backendDrafts: DraftItem[] = data.map((item: any) => {
             // Infer status dynamically from backend DB status
-            let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" = "Draft";
+            let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal" = "Draft";
             const dbStatus = item.status ? item.status.toUpperCase() : null;
             
             if (dbStatus === "COMPLETED") {
               status = "Sukses";
             } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
               status = "Proses";
+            } else if (dbStatus === "FAILED_LATER") {
+              status = "Gagal";
             } else if (dbStatus === "FAILED") {
               status = "Butuh OTP";
             } else if (dbStatus === "DRAFT") {
@@ -183,11 +185,15 @@ export default function DashboardPage() {
         sessionStorage.removeItem("selected_kbli");
       }
 
-      // Default registration mode
-      sessionStorage.setItem("akun_oss", "belum");
+      // Set registration mode dynamically: if Gagal, account already exists
+      if (draft.status === "Gagal") {
+        sessionStorage.setItem("akun_oss", "sudah");
+      } else {
+        sessionStorage.setItem("akun_oss", "belum");
+      }
       
       if (draft.status === "Sukses") {
-        router.push("/result?state=success");
+        router.push(`/result?state=success&draftId=${draft.id}`);
       } else {
         router.push("/review");
       }
@@ -313,7 +319,7 @@ export default function DashboardPage() {
 
           {/* Filter Tabs (Flat Selector Layout) */}
           <div className="flex overflow-x-auto pb-1 gap-1.5 scrollbar-thin">
-            {["Semua", "Draft", "Proses", "Butuh OTP", "Sukses"].map((filterName) => (
+            {["Semua", "Draft", "Proses", "Butuh OTP", "Gagal", "Sukses"].map((filterName) => (
               <button
                 key={filterName}
                 onClick={() => setActiveFilter(filterName)}
@@ -378,11 +384,13 @@ export default function DashboardPage() {
                     <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border shrink-0 ${
                       draft.status === "Sukses"
                         ? "bg-success/5 border-success/20 text-success"
-                        : draft.status === "Butuh OTP"
-                          ? "bg-warning/5 border-warning/20 text-warning"
-                          : draft.status === "Proses"
-                            ? "bg-primary-container/5 border-primary-container/20 text-primary-container"
-                            : "bg-tertiary/5 border-tertiary/20 text-tertiary"
+                        : draft.status === "Gagal"
+                          ? "bg-error/5 border-error/20 text-error"
+                          : draft.status === "Butuh OTP"
+                            ? "bg-warning/5 border-warning/20 text-warning"
+                            : draft.status === "Proses"
+                              ? "bg-primary-container/5 border-primary-container/20 text-primary-container"
+                              : "bg-tertiary/5 border-tertiary/20 text-tertiary"
                     }`}>
                       {draft.status}
                     </span>

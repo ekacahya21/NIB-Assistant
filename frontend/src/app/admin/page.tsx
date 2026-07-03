@@ -20,7 +20,7 @@ interface DraftItem {
   nomorHp: string;
   email: string;
   updatedAt: string;
-  status: "Draft" | "Proses" | "Sukses" | "Butuh OTP";
+  status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal";
   errorMessage?: string | null;
   logs?: LogEntry[] | null;
   kbliCode?: string | null;
@@ -127,13 +127,15 @@ export default function AdminDashboardPage() {
       if (response.ok) {
         const data = await response.json();
         const mapped: DraftItem[] = data.map((item: any) => {
-          let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" = "Draft";
+          let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal" = "Draft";
           const dbStatus = item.status ? item.status.toUpperCase() : null;
           
           if (dbStatus === "COMPLETED") {
             status = "Sukses";
           } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
             status = "Proses";
+          } else if (dbStatus === "FAILED_LATER") {
+            status = "Gagal";
           } else if (dbStatus === "FAILED") {
             status = "Butuh OTP";
           } else {
@@ -194,11 +196,11 @@ export default function AdminDashboardPage() {
             setDrafts((prevDrafts) => {
               return prevDrafts.map((d) => {
                 if (d.id === payload.draftId) {
-                  let updatedStatus: "Draft" | "Proses" | "Sukses" | "Butuh OTP" = d.status;
+                  let updatedStatus: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal" = d.status;
                   let dbErrorMessage = d.errorMessage;
                   
                   if (payload.status === "error") {
-                    updatedStatus = "Butuh OTP";
+                    updatedStatus = payload.step > 2 ? "Gagal" : "Butuh OTP";
                     dbErrorMessage = payload.text;
                   } else if (payload.step === 7) {
                     updatedStatus = "Sukses";
@@ -405,7 +407,7 @@ export default function AdminDashboardPage() {
   // Calculate stats KPIs
   const totalCount = drafts.length;
   const successCount = drafts.filter((d) => d.status === "Sukses").length;
-  const errorCount = drafts.filter((d) => d.status === "Butuh OTP").length;
+  const errorCount = drafts.filter((d) => d.status === "Butuh OTP" || d.status === "Gagal").length;
   const activeCount = drafts.filter((d) => d.status === "Proses").length;
 
   // Get log entries for the active drawer
@@ -726,11 +728,13 @@ export default function AdminDashboardPage() {
                             <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider border shrink-0 ${
                               draft.status === "Sukses"
                                 ? "bg-success/5 border-success/20 text-success"
-                                : draft.status === "Butuh OTP"
+                                : draft.status === "Gagal"
                                   ? "bg-error/5 border-error/20 text-error"
-                                  : draft.status === "Proses"
-                                    ? "bg-primary/5 border-primary/20 text-primary"
-                                    : "bg-tertiary/5 border-tertiary/20 text-tertiary"
+                                  : draft.status === "Butuh OTP"
+                                    ? "bg-warning/5 border-warning/20 text-warning"
+                                    : draft.status === "Proses"
+                                      ? "bg-primary/5 border-primary/20 text-primary"
+                                      : "bg-tertiary/5 border-tertiary/20 text-tertiary"
                             }`}>
                               {draft.status}
                             </span>

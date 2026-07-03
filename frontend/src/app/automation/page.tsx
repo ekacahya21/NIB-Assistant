@@ -285,7 +285,7 @@ export default function AutomationPage() {
               setIsPromptingPassword(false);
               // Redirect to result page after 2 seconds
               setTimeout(() => {
-                router.push("/result?state=success");
+                router.push(`/result?state=success&draftId=${draftId}`);
               }, 2000);
             }
           }
@@ -485,7 +485,8 @@ export default function AutomationPage() {
   };
 
   const handleManualRedirect = () => {
-    router.push("/result?state=failed");
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+    router.push(`/result?state=failed&draftId=${draftId}`);
   };
 
   const isBelumAkun = () => akunOss === "belum";
