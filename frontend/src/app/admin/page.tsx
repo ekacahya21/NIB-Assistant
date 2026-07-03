@@ -964,8 +964,8 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ── Floating Error Notification Toasts (Top Right) ── */}
-      <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      {/* ── Floating Error Notification Toasts (Bottom Left) ── */}
+      <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map((toast) => (
           <div 
             key={toast.id}
