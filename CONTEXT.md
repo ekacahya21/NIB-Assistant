@@ -66,6 +66,19 @@ _Avoid_: User, Client
 The administrative interface located at `/admin` used by the Administrator to monitor all Draft statuses and receive real-time notifications of execution errors.
 _Avoid_: Wizard, User Dashboard
 
+**Transaction Logs (Log Transaksi)**:
+The chronological sequence of execution steps, warnings, and errors captured during an Automation Session and persisted permanently as a JSON array inside the database upon session termination.
+_Avoid_: Console print, system print
+
+**Admin Drawer Console (Konsol Drawer Admin)**:
+The right-aligned slide-out terminal overlay on the Admin Dashboard displaying real-time filtered SSE log streams for running sessions or persisted JSON logs for finished/aborted ones.
+_Avoid_: Popup overlay, terminal tab
+
+**Admin Authentication (Autentikasi Admin)**:
+The Bearer token-based security mechanism verifying the Administrator's credentials against the server environment to lock down administrative REST APIs and EventSource streams.
+_Avoid_: Session lock, user signup
+
+
 
 **Draft Status (Status Draf)**:
 The lifecycle state of a Draft as it progresses through the system, mapped to user-facing status labels:
