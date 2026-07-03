@@ -279,7 +279,7 @@ export default function AutomationPage() {
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
             }
-            if (payload.step === 6 && failedStepRef.current === null) {
+            if (payload.step === 7 && payload.status === "success" && failedStepRef.current === null) {
               setStatusText("Proses Otomatisasi Selesai!");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
@@ -496,11 +496,13 @@ export default function AutomationPage() {
     { label: "Validasi NIK & OTP", icon: "mail", step: 2 },
     { label: "Detail Profil & Registrasi", icon: "app_registration", step: 3 },
     { label: "Login & Otentikasi", icon: "login", step: 4 },
-    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 }
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
+    { label: "Kelola Detail Usaha", icon: "business_center", step: 6 }
   ] : [
     { label: "Inisialisasi Portal", icon: "cloud_sync", step: 1 },
     { label: "Login & Otentikasi", icon: "login", step: 4 },
-    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 }
+    { label: "Kelola Lokasi Usaha", icon: "location_on", step: 5 },
+    { label: "Kelola Detail Usaha", icon: "business_center", step: 6 }
   ];
 
   const renderTechnicalLogs = () => (
@@ -809,7 +811,7 @@ export default function AutomationPage() {
                                   <span className="w-2.5 h-2.5 border-2 border-primary-container border-t-transparent rounded-full animate-spin shrink-0" />
                                 )}
                                 {isActionRequired 
-                                  ? (isPromptingOtp ? "⚠️ Masukkan OTP dari Email" : "⚠️ Atur Kata Sandi Baru")
+                                  ? (isPromptingOtp ? "⚠️ Masukkan OTP dari Email" : (isBelumAkun() ? "⚠️ Atur Kata Sandi Baru" : "⚠️ Masukkan Kata Sandi"))
                                   : "Sedang diproses..."
                                 }
                               </p>
@@ -940,10 +942,12 @@ export default function AutomationPage() {
                       <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-xs mx-auto">
                         <div className="flex flex-col gap-3 text-left">
                           <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kata Sandi Baru</label>
+                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">
+                              {isBelumAkun() ? "Kata Sandi Baru" : "Kata Sandi"}
+                            </label>
                             <input
                               type="password"
-                              placeholder="Minimal 8 karakter"
+                              placeholder={isBelumAkun() ? "Minimal 8 karakter" : "Masukkan kata sandi Anda"}
                               value={newPassword}
                               onChange={(e) => setNewPassword(e.target.value)}
                               className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
