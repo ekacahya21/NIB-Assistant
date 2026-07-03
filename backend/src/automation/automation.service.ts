@@ -2245,6 +2245,24 @@ export class AutomationService implements OnModuleDestroy {
       'Memulai pengelolaan detail usaha (Step 5)...',
     );
 
+    // check lokasi usaha questions, if exists, select 'Tidak'
+    const obvitnasQuestion = page.getByRole('radiogroup', { name: 'Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?' });
+    if (await obvitnasQuestion.isVisible()) {
+      await obvitnasQuestion.getByLabel('Tidak').check();
+      await page.waitForTimeout(500);
+    }
+    const psnQuestion = page.getByRole('radiogroup', { name: 'Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?' });
+    if (await psnQuestion.isVisible()) {
+      await psnQuestion.getByLabel('Tidak').check();
+      await page.waitForTimeout(500);
+    }
+
+    const buttonSelanjutnya = page.getByRole('heading', { name: 'Data Lokasi Usaha' }).locator('//ancestor::form').locator('..').getByRole('button', {name: 'Selanjutnya'});
+    if (await buttonSelanjutnya.isVisible()) {
+      await buttonSelanjutnya.click();
+      await page.waitForTimeout(500);
+    }
+
     // select jenis kegiatan usaha
     await page
       .getByRole('combobox', { name: 'Pilih jenis kegiatan usaha' })

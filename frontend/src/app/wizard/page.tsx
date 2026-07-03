@@ -76,6 +76,7 @@ export default function WizardPage() {
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const hasResolvedInitialRegions = useRef(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -470,6 +471,137 @@ export default function WizardPage() {
     };
     fetchProvinces();
   }, []);
+
+  // Automatically resolve existing region names to IDs on mount / initial load
+  useEffect(() => {
+    if (provincesList.length === 0 || hasResolvedInitialRegions.current) return;
+
+    const resolveRegions = async () => {
+      hasResolvedInitialRegions.current = true;
+      
+      // 1. Resolve KTP address
+      let ktpProvId = "";
+      if (formData.provinsiKtp) {
+        const matchedProv = provincesList.find(
+          (p) => p.name.toUpperCase() === formData.provinsiKtp.toUpperCase()
+        );
+        if (matchedProv) {
+          ktpProvId = matchedProv.id;
+          setSelectedKtpProvId(matchedProv.id);
+        }
+      }
+
+      let ktpCityId = "";
+      if (ktpProvId && formData.kotaKabupatenKtp) {
+        try {
+          const res = await fetch(`/api/regions?type=regencies&id=${ktpProvId}`);
+          const cities = await res.json();
+          setCitiesKtpList(cities);
+          const matchedCity = cities.find(
+            (c: any) => c.name.toUpperCase() === formData.kotaKabupatenKtp.toUpperCase()
+          );
+          if (matchedCity) {
+            ktpCityId = matchedCity.id;
+            setSelectedKtpCityId(matchedCity.id);
+          }
+        } catch (e) {
+          console.error("Gagal resolve kota KTP:", e);
+        }
+      }
+
+      let ktpDistId = "";
+      if (ktpCityId && formData.kecamatanKtp) {
+        try {
+          const res = await fetch(`/api/regions?type=districts&id=${ktpCityId}`);
+          const districts = await res.json();
+          setDistrictsKtpList(districts);
+          const matchedDist = districts.find(
+            (d: any) => d.name.toUpperCase() === formData.kecamatanKtp.toUpperCase()
+          );
+          if (matchedDist) {
+            ktpDistId = matchedDist.id;
+            setSelectedKtpDistId(matchedDist.id);
+          }
+        } catch (e) {
+          console.error("Gagal resolve kecamatan KTP:", e);
+        }
+      }
+
+      if (ktpDistId && formData.kelurahanKtp) {
+        try {
+          const res = await fetch(`/api/regions?type=villages&id=${ktpDistId}`);
+          const villages = await res.json();
+          setVillagesKtpList(villages);
+        } catch (e) {
+          console.error("Gagal resolve kelurahan KTP:", e);
+        }
+      }
+
+      // 2. Resolve Business address (if not same as KTP address)
+      if (formData.isAddressSame) {
+        return;
+      }
+
+      let usahaProvId = "";
+      if (formData.provinsi) {
+        const matchedProv = provincesList.find(
+          (p) => p.name.toUpperCase() === formData.provinsi.toUpperCase()
+        );
+        if (matchedProv) {
+          usahaProvId = matchedProv.id;
+          setSelectedProvId(matchedProv.id);
+        }
+      }
+
+      let usahaCityId = "";
+      if (usahaProvId && formData.kotaKabupaten) {
+        try {
+          const res = await fetch(`/api/regions?type=regencies&id=${usahaProvId}`);
+          const cities = await res.json();
+          setCitiesList(cities);
+          const matchedCity = cities.find(
+            (c: any) => c.name.toUpperCase() === formData.kotaKabupaten.toUpperCase()
+          );
+          if (matchedCity) {
+            usahaCityId = matchedCity.id;
+            setSelectedCityId(matchedCity.id);
+          }
+        } catch (e) {
+          console.error("Gagal resolve kota usaha:", e);
+        }
+      }
+
+      let usahaDistId = "";
+      if (usahaCityId && formData.kecamatan) {
+        try {
+          const res = await fetch(`/api/regions?type=districts&id=${usahaCityId}`);
+          const districts = await res.json();
+          setDistrictsList(districts);
+          const matchedDist = districts.find(
+            (d: any) => d.name.toUpperCase() === formData.kecamatan.toUpperCase()
+          );
+          if (matchedDist) {
+            usahaDistId = matchedDist.id;
+            setSelectedDistId(matchedDist.id);
+          }
+        } catch (e) {
+          console.error("Gagal resolve kecamatan usaha:", e);
+        }
+      }
+
+      if (usahaDistId && formData.kelurahan) {
+        try {
+          const res = await fetch(`/api/regions?type=villages&id=${usahaDistId}`);
+          const villages = await res.json();
+          setVillagesList(villages);
+        } catch (e) {
+          console.error("Gagal resolve kelurahan usaha:", e);
+        }
+      }
+    };
+
+    resolveRegions();
+  }, [provincesList, formData.provinsi, formData.provinsiKtp]);
 
   const handleProvinceChange = async (provId: string) => {
     setSelectedProvId(provId);

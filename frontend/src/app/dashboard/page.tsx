@@ -20,6 +20,24 @@ interface DraftItem {
   alamatUsaha?: string;
   modalUsaha?: string;
   jumlahPekerja?: string;
+  tanggalLahir?: string;
+  jenisKelamin?: string;
+  alamatKtp?: string;
+  provinsiKtp?: string;
+  kotaKabupatenKtp?: string;
+  kecamatanKtp?: string;
+  kelurahanKtp?: string;
+  kodePosKtp?: string;
+  provinsi?: string;
+  kotaKabupaten?: string;
+  kecamatan?: string;
+  kelurahan?: string;
+  kodePos?: string;
+  latitude?: string;
+  longitude?: string;
+  luasTanah?: string;
+  fotoLokasi?: string;
+  ceritaUsaha?: string;
 }
 
 export default function DashboardPage() {
@@ -73,7 +91,25 @@ export default function DashboardPage() {
               kbliTitle: item.kbliTitle,
               alamatUsaha: item.alamatUsaha,
               modalUsaha: item.modalUsaha,
-              jumlahPekerja: item.jumlahPekerja
+              jumlahPekerja: item.jumlahPekerja,
+              tanggalLahir: item.tanggalLahir || "",
+              jenisKelamin: item.jenisKelamin || "Laki-laki",
+              alamatKtp: item.alamatKtp || "",
+              provinsiKtp: item.provinsiKtp || "",
+              kotaKabupatenKtp: item.kotaKabupatenKtp || "",
+              kecamatanKtp: item.kecamatanKtp || "",
+              kelurahanKtp: item.kelurahanKtp || "",
+              kodePosKtp: item.kodePosKtp || "",
+              provinsi: item.provinsi || "",
+              kotaKabupaten: item.kotaKabupaten || "",
+              kecamatan: item.kecamatan || "",
+              kelurahan: item.kelurahan || "",
+              kodePos: item.kodePos || "",
+              latitude: item.latitude || "-6.2088",
+              longitude: item.longitude || "106.8456",
+              fotoLokasi: item.fotoLokasi || "",
+              ceritaUsaha: item.ceritaUsaha || "",
+              luasTanah: item.luasTanah || ""
             };
           });
 
@@ -99,15 +135,38 @@ export default function DashboardPage() {
     if (typeof window !== "undefined") {
       sessionStorage.setItem("draft_id", draft.id);
       
+      const isAddressSame = draft.alamatUsaha && draft.alamatKtp && draft.alamatUsaha.trim() === draft.alamatKtp.trim();
+
       const formData = {
         namaPemilik: draft.namaPemilik,
         nik: draft.nik,
+        tanggalLahir: draft.tanggalLahir || "",
+        jenisKelamin: draft.jenisKelamin || "Laki-laki",
         nomorHp: draft.nomorHp,
         email: draft.email,
-        namaUsaha: draft.namaUsaha,
+        alamatKtp: draft.alamatKtp || "",
+        provinsiKtp: draft.provinsiKtp || "",
+        kotaKabupatenKtp: draft.kotaKabupatenKtp || "",
+        kecamatanKtp: draft.kecamatanKtp || "",
+        kelurahanKtp: draft.kelurahanKtp || "",
+        kodePosKtp: draft.kodePosKtp || "",
+        isAddressSame: !!isAddressSame,
         alamatUsaha: draft.alamatUsaha || "",
+        provinsi: draft.provinsi || "",
+        kotaKabupaten: draft.kotaKabupaten || "",
+        kecamatan: draft.kecamatan || "",
+        kelurahan: draft.kelurahan || "",
+        kodePos: draft.kodePos || "",
+        latitude: draft.latitude || "-6.2088",
+        longitude: draft.longitude || "106.8456",
+        fotoLokasi: draft.fotoLokasi || "",
+        namaUsaha: draft.namaUsaha,
+        ceritaUsaha: draft.ceritaUsaha || "",
         modalUsaha: draft.modalUsaha || "",
-        jumlahPekerja: draft.jumlahPekerja || "",
+        luasTanah: draft.luasTanah || "",
+        jumlahPekerjaLakiLaki: draft.jumlahPekerja || "0",
+        jumlahPekerjaPerempuan: "0",
+        jumlahPekerja: draft.jumlahPekerja || "0"
       };
 
       sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
