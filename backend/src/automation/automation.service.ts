@@ -2347,7 +2347,7 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(500);
     }
 
-    const buttonSelanjutnya = page.getByRole('heading', { name: 'Data Lokasi Usaha' }).locator('//ancestor::form').locator('..').getByRole('button', {name: 'Selanjutnya'});
+    const buttonSelanjutnya = page.getByRole('button', {name: 'Selanjutnya'});
     if (await buttonSelanjutnya.isVisible()) {
       await buttonSelanjutnya.click();
       await page.waitForTimeout(500);
