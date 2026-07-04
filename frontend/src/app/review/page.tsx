@@ -459,7 +459,7 @@ export default function ReviewPage() {
                   <span className="material-symbols-outlined text-xs">edit</span> Ubah
                 </button>
               </div>
-              <div className="flex gap-3 items-start bg-[#F3F4F6] border border-border-light p-3 rounded text-xs">
+              <div className="flex gap-3 items-center bg-[#F3F4F6] border border-border-light p-3 rounded text-xs">
                 <div className="w-12 h-8 rounded bg-primary-container text-white font-mono font-bold flex items-center justify-center shrink-0">
                   {selectedKbli.code}
                 </div>

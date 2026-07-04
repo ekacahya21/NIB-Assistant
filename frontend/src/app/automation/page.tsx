@@ -711,7 +711,7 @@ export default function AutomationPage() {
 
                   <div className="space-y-4 relative transition-all duration-350">
                     {stepLabels.map(({ label, icon, step }, idx) => {
-                      const isCompleted = currentStep > step || (step === 5 && currentStep === 5);
+                      const isCompleted = currentStep > step;
                       const isCurrent = currentStep === step;
                       const isActionRequired = isCurrent && (isPromptingOtp || isPromptingPassword);
                       const isPromptActive = isPromptingOtp || isPromptingPassword;
@@ -739,7 +739,7 @@ export default function AutomationPage() {
                           {!isLastStep && !shouldHide && !nextShouldHide && (
                             <div 
                               className={`absolute left-4 -translate-x-1/2 top-8 bottom-[-16px] w-0.5 transition-all duration-350 ${
-                                currentStep >= stepLabels[idx + 1].step || (stepLabels[idx + 1].step === 5 && currentStep === 5)
+                                currentStep >= stepLabels[idx + 1].step
                                   ? "bg-success"
                                   : isActionRequired
                                     ? "bg-warning/30 border-dashed border-l border-warning/50"

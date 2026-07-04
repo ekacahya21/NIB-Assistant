@@ -2390,29 +2390,81 @@ export class AutomationService implements OnModuleDestroy {
     await this.dismissPopupIfVisible(page, subject, 6);
 
     // choose kbli
-    const searchKbli = this.getOptimalSearchQuery(draft.kbli);
+    const searchKbli = this.getOptimalSearchQuery(draft.kbliCode);
     this.logStep(
       subject,
       6,
       'info',
-      `Mencari kegiatan usaha: ${draft.kbli}...`,
+      `Mencari kegiatan usaha: ${draft.kbliCode}...`,
     );
-    await page.getByPlaceholder('kode KBLI').locator('input').fill(searchKbli);
-    await page
-      .getByText(draft.kbli || '')
-      .first()
-      .click();
+    const kbliSearchInput = page.getByPlaceholder('kode KBLI').locator('input');
+    await kbliSearchInput.click();
+    await kbliSearchInput.fill(searchKbli);
+    await page.getByText(searchKbli).first().click();
+    await page.waitForTimeout(1000);
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
 
     await page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' }).click();
-
+    
     // check if 'Seluruh' ruang lingkup is exists, then click it
     const seluruhRuangLingkup = page.getByText('Seluruh');
     if (await seluruhRuangLingkup.isVisible()) {
       await seluruhRuangLingkup.click();
       await page.waitForTimeout(1000);
     }
+    
+    // click tombol tambah bidang usaha
+    await page.getByRole('button', { name: 'Tambah Bidang Usaha' }).click();
+    
+    // wait for prosesBidangUsaha
+    const prosesBidangUsahaPromise = page
+        .waitForResponse(
+          (response: any) =>
+            (response.url().includes('/prosesBidangUsaha')) &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+    await prosesBidangUsahaPromise;
+    await page.waitForTimeout(1000);
+    
+    await page.getByRole('textbox', { name: 'Contoh : Restoran' }).fill(draft.namaUsaha);
+    await page.getByRole('button', { name: 'Selanjutnya' }).click();
+    
+    // wait for prosesProyek
+    const prosesProyekPromise = page
+        .waitForResponse(
+          (response: any) =>
+            (response.url().includes('/prosesProyek')) &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+    await prosesProyekPromise;
+    await page.waitForTimeout(1000);
+
+    // check for pernyataan mandiri
+    await page.getByText('Saya menyatakan pemberian ini').click();
+
+    // click tombol proses
+    await page.getByRole('button', { name: 'Proses' }).click();
+
+    // process
+    await page.getByTestId('modal-proses').getByRole('button', { name: 'Proses' }).click();
+
+    // wait for submitPernyataanMandiri
+    const submitPernyataanMandiriPromise = page
+        .waitForResponse(
+          (response: any) =>
+            (response.url().includes('/submitPernyataanMandiri')) &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+    await submitPernyataanMandiriPromise;
+    await page.waitForTimeout(1000);
+
   }
 }
