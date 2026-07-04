@@ -347,12 +347,22 @@ Kembalikan HANYA array JSON tersebut saja!`;
         }
       } catch (error) {
         console.error('[KBLI Agent] Error executing ADK agent search:', error);
-        // Fall back gracefully to local static search
+        console.log('[KBLI Agent] Trying Local LLM fallback...');
+        const localLlmRecords = await this.queryLocalLlm(query);
+        if (localLlmRecords) {
+          this.cache.set(q, localLlmRecords);
+          return localLlmRecords;
+        }
       }
     } else {
       console.warn(
-        '[KBLI Agent] Neither Vertex AI nor Gemini API Key is configured. Falling back to local static search.',
+        '[KBLI Agent] Neither Vertex AI nor Gemini API Key is configured. Trying Local LLM fallback...',
       );
+      const localLlmRecords = await this.queryLocalLlm(query);
+      if (localLlmRecords) {
+        this.cache.set(q, localLlmRecords);
+        return localLlmRecords;
+      }
     }
 
     // Filter list based on title, description, or tags matching keywords
@@ -371,5 +381,85 @@ Kembalikan HANYA array JSON tersebut saja!`;
     return this.kbliList.filter(
       (k) => k.code === '56103' || k.code === '47711' || k.code === '96200',
     );
+  }
+
+  private async queryLocalLlm(query: string): Promise<KBLIRecord[] | null> {
+    const host = process.env.LOCAL_LLM_HOST || 'http://localhost:20128/v1';
+    const key = process.env.LOCAL_LLM_KEY || 'sk-be6dc08e77bc7a4a-pk6lq6-69274223';
+    const model = process.env.LOCAL_LLM_MODEL || 'combo-max';
+
+    console.log(
+      `[KBLI Agent] Attempting fallback to Local LLM at ${host} using model ${model}...`,
+    );
+
+    try {
+      const response = await fetch(`${host}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            {
+              role: 'system',
+              content: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) 2020 yang handal.
+Berikut adalah katalog KBLI lokal yang terverifikasi:
+${JSON.stringify(this.kbliList, null, 2)}
+
+Tugas Anda adalah:
+1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
+2. Mencari kecocokan dari katalog KBLI lokal di atas. Jika ada yang cocok, gunakan data tersebut. Jika tidak ada yang cocok di katalog, gunakan pengetahuan Anda untuk merumuskan kode KBLI 2020 resmi lainnya yang valid.
+3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON array of objects yang valid tanpa penjelasan apapun di luar JSON block.
+
+Setiap objek dalam array harus memiliki skema berikut:
+[
+  {
+    "code": "string (5 digit kode KBLI, contoh: '56103')",
+    "title": "string (Nama resmi KBLI 2020, contoh: 'Kedai Makanan')",
+    "description": "string (Deskripsi resmi cakupan aktivitas KBLI tersebut)",
+    "confidence": "string (Hanya boleh 'sangat_cocok' atau 'alternatif')",
+    "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)]
+  }
+]
+
+Berikan minimal 3 dan maksimal 6 rekomendasi KBLI yang relevan. Prioritaskan kode KBLI 2020 yang paling mendekati deskripsi usaha pengguna.
+Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \`\`\`json atau penjelasan lainnya.`,
+            },
+            {
+              role: 'user',
+              content: `Cari kode KBLI 2020 yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}"`,
+            },
+          ],
+          temperature: 0.1,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (!text) {
+        throw new Error('Local LLM returned an empty response.');
+      }
+
+      // Try to parse JSON array from response
+      const match = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      const jsonText = match ? match[0] : text;
+      const records = JSON.parse(jsonText) as KBLIRecord[];
+      if (Array.isArray(records) && records.length > 0) {
+        console.log(
+          `[KBLI Agent] Successfully retrieved ${records.length} records from Local LLM.`,
+        );
+        return records;
+      }
+      return null;
+    } catch (err) {
+      console.error('[KBLI Agent] Local LLM query failed:', err);
+      return null;
+    }
   }
 }
