@@ -2414,6 +2414,13 @@ export class AutomationService implements OnModuleDestroy {
       await seluruhRuangLingkup.click();
       await page.waitForTimeout(1000);
     }
+
+    // select bidang usaha
+    const bidangUsaha = page.getByTestId('radio-bidang-usaha');
+    if (await bidangUsaha.isVisible()) {
+      await bidangUsaha.getByRole('radio').first().click();
+      await page.waitForTimeout(1000);
+    }
     
     // click tombol tambah bidang usaha
     await page.getByRole('button', { name: 'Tambah Bidang Usaha' }).click();
