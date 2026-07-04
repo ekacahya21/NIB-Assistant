@@ -55,13 +55,13 @@ const KBLI_DETAILS_MAP: Record<string, KBLIUIDetails> = {
   }
 };
 
-const getKBLIDetails = (code: string, fallbackDesc: string, fallbackSuitable: string[]): KBLIUIDetails => {
+const getKBLIDetails = (code: string, fallbackDesc: string, fallbackSuitable?: string[]): KBLIUIDetails => {
   if (KBLI_DETAILS_MAP[code]) {
     return KBLI_DETAILS_MAP[code];
   }
   return {
     summary: fallbackDesc,
-    suitable: fallbackSuitable.length > 0 ? fallbackSuitable : ["Aktivitas perdagangan eceran", "Jasa perorangan mikro"],
+    suitable: (fallbackSuitable && fallbackSuitable.length > 0) ? fallbackSuitable : ["Aktivitas perdagangan eceran", "Jasa perorangan mikro"],
     unsuitable: ["Usaha skala industri menengah/besar", "Ekspor-impor skala besar (Kargo kontainer)"]
   };
 };
