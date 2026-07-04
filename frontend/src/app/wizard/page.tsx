@@ -17,48 +17,7 @@ interface KBLIUIDetails {
   unsuitable: string[];
 }
 
-const KBLI_DETAILS_MAP: Record<string, KBLIUIDetails> = {
-  "56103": {
-    summary: "Usaha warung makan, kedai makanan menetap atau restoran kecil siap saji.",
-    suitable: ["Warung makan / warteg", "Kedai bakso & mie ayam", "Outlet ayam geprek", "Rumah makan Padang kecil"],
-    unsuitable: ["Katering borongan pesta besar", "Jasa jualan keliling gerobak", "Pabrik pengolahan makanan beku"]
-  },
-  "56210": {
-    summary: "Penyediaan makanan dan catering berdasarkan kontrak/pesanan untuk acara.",
-    suitable: ["Katering syukuran & pernikahan", "Nasi kotak kantoran", "Pesanan kue basah & snack box"],
-    unsuitable: ["Warung makan menetap di ruko", "Pedagang asongan keliling", "Restoran cepat saji fisik"]
-  },
-  "56104": {
-    summary: "Penyediaan makanan keliling memakai gerobak, pikulan, atau mobil food truck.",
-    suitable: ["Gerobak bakso keliling warga", "Food truck minuman keliling", "Pedagang kaki lima bongkar pasang"],
-    unsuitable: ["Restoran fisik permanen", "Katering pabrik industri besar"]
-  },
-  "47711": {
-    summary: "Perdagangan eceran baju, hijab, pakaian jadi, dan aksesori sandang fisik/online.",
-    suitable: ["Butik baju & toko busana", "Jualan hijab & gamis online", "Reseller pakaian anak jadi", "Toko daster"],
-    unsuitable: ["Jasa jahit pakaian kustom", "Pabrik konveksi & tenun kain", "Grosir kontainer pakaian mentah"]
-  },
-  "47911": {
-    summary: "Perdagangan eceran aneka jenis barang khusus via toko online/marketplace/medsos.",
-    suitable: ["Online shop Instagram/TikTok", "Reseller e-commerce", "Dropshipper aksesoris & perabotan"],
-    unsuitable: ["Toko kelontong fisik di pasar", "Pedagang grosir offline pergudangan"]
-  },
-  "96200": {
-    summary: "Jasa pencucian, setrika, laundry pakaian jadi, selimut, karpet, helm, sepatu.",
-    suitable: ["Laundry kiloan & satuan", "Jasa cuci sepatu & tas", "Dry cleaning jas", "Jasa setrika rumahan"],
-    unsuitable: ["Laundry industri skala pabrik", "Jasa bersih-bersih rumah panggilan"]
-  },
-  "96999": {
-    summary: "Aktivitas jasa perorangan lainnya yang belum tercakup di tempat lain.",
-    suitable: ["Jasa potong rambut rumahan", "Jasa setrika keliling", "Jasa asisten rumah tangga harian"],
-    unsuitable: ["Klinik kecantikan medis", "Pabrik kosmetik & salon besar"]
-  }
-};
-
 const getKBLIDetails = (code: string, fallbackDesc: string, fallbackSuitable?: string[]): KBLIUIDetails => {
-  if (KBLI_DETAILS_MAP[code]) {
-    return KBLI_DETAILS_MAP[code];
-  }
   return {
     summary: fallbackDesc,
     suitable: (fallbackSuitable && fallbackSuitable.length > 0) ? fallbackSuitable : ["Aktivitas perdagangan eceran", "Jasa perorangan mikro"],
