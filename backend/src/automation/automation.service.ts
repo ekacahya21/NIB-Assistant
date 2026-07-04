@@ -1452,23 +1452,44 @@ export class AutomationService implements OnModuleDestroy {
         if (
           currentUrl &&
           !currentUrl.includes('/login') &&
-          !currentUrl.includes('ui-login.oss.go.id')
+          !currentUrl.includes('ui-login.oss.go.id') &&
+          !currentUrl.includes('ui-login-stg.oss.go.id')
         ) {
           isRedirected = true;
           break;
         }
+
+        // Quick check for visible validation errors to abort immediately
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isErrorVisible = await errorLocator.isVisible().catch(() => false);
+        if (isErrorVisible) {
+          const errorMsg = await errorLocator
+            .textContent()
+            .catch(() => 'Username atau Kata Sandi salah.');
+          this.logStep(
+            subject,
+            4,
+            'error',
+            `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
+          );
+          throw new Error(`Login gagal: ${errorMsg.trim()}`);
+        }
+
         await page.waitForTimeout(1000);
       }
 
       if (!isRedirected) {
-        // Check for any visible error message on the page related to login failure
-        const isLoginErrorVisible = await page
-          .getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i)
+        // Fallback post-loop check for validation error messages
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isLoginErrorVisible = await errorLocator
           .isVisible()
           .catch(() => false);
         if (isLoginErrorVisible) {
-          const errorMsg = await page
-            .getByText(/salah|tidak valid|expired|tidak terdaftar|sandi/i)
+          const errorMsg = await errorLocator
             .textContent()
             .catch(() => 'Username atau Kata Sandi salah.');
           this.logStep(
@@ -2227,7 +2248,7 @@ export class AutomationService implements OnModuleDestroy {
         subject,
         5,
         'info',
-        'Mengunggah Dokumen Pernyataan Mandiri...',
+        'Mengunggah Dokumen Administrasi Lokasi...',
       );
       await fileInputs.first().setInputFiles(npsPath);
       await upload1Promise;
@@ -2347,16 +2368,22 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(500);
     }
 
-    const buttonSelanjutnya = page.getByRole('button', {name: 'Selanjutnya'});
-    if (await buttonSelanjutnya.isVisible()) {
-      await buttonSelanjutnya.click();
-      await page.waitForTimeout(500);
-    }
+    const getListKbliPromise = page
+        .waitForResponse(
+          (response: any) =>
+            (response.url().includes('/getListKBLI')) &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+
+    this.logStep(subject, 6, 'info', 'Memilih KBLI...');
+    await page.getByRole('button', {name: 'Selanjutnya'}).click();
+    await getListKbliPromise;
+    await page.waitForTimeout(1000);
 
     // select jenis kegiatan usaha
-    await page
-      .getByRole('combobox', { name: 'Pilih jenis kegiatan usaha' })
-      .click();
+    await page.getByPlaceholder('Pilih jenis kegiatan usaha').locator('input').click();
     await page.getByText('Kegiatan Usaha Utama').click();
 
     // check if there's any popup message, close by clicking "Mengerti"
