@@ -2421,7 +2421,7 @@ export class AutomationService implements OnModuleDestroy {
       await bidangUsaha.getByRole('radio').first().click();
       await page.waitForTimeout(1000);
     }
-    
+
     // click tombol tambah bidang usaha
     await page.getByRole('button', { name: 'Tambah Bidang Usaha' }).click();
     
@@ -2488,5 +2488,95 @@ export class AutomationService implements OnModuleDestroy {
     // click lanjut to navigate to 'Perizinan Berusaha'
     await page.getByRole('tab', { name: 'Perizinan Berusaha' }).click();
     await page.getByRole('button', { name: 'Lanjut' }).click();
+
+    // Apakah kegiatan usaha ini sudah berjalan?
+    const isRunning = draft.sudahBerjalan === 'sudah';
+    const runningOptionText = isRunning ? 'Sudah Berjalan' : 'Belum Berjalan';
+    this.logStep(subject, 6, 'info', `Mengisi status berjalan: ${runningOptionText}`);
+    const runningCombobox = page.locator('div[role="combobox"]').filter({ hasText: /Berjalan/i }).first()
+      .or(page.getByRole('combobox', { name: /Apakah kegiatan usaha ini/i }))
+      .or(page.getByPlaceholder(/Pilih status/i));
+    
+    if (await runningCombobox.isVisible()) {
+      await runningCombobox.click();
+      await page.waitForTimeout(500);
+      await page.getByRole('option', { name: runningOptionText }).click().catch(async () => {
+        await page.getByText(runningOptionText, { exact: true }).first().click();
+      });
+      await page.waitForTimeout(500);
+    }
+
+    // Conditional Date Pickers for Sudah Berjalan
+    if (isRunning) {
+      if (draft.tanggalMulaiUsaha) {
+        const tglMulai = this.formatToDDMMYYYY(draft.tanggalMulaiUsaha);
+        this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${tglMulai}`);
+        const dateInput = page.getByRole('textbox', { name: 'DD/MM/YYYY' });
+        if (await dateInput.isVisible()) {
+          await dateInput.fill(tglMulai);
+          await page.waitForTimeout(500);
+        }
+      }
+
+      if (draft.tanggalMulaiOperasional) {
+        const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
+        this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
+        const dateInputOp = page.getByRole('textbox', { name: 'MM/YYYY', exact: true });
+        if (await dateInputOp.isVisible()) {
+          await dateInputOp.fill(tglOp);
+          await page.waitForTimeout(500);
+        }
+      }
+    }
+
+    // Modal Kerja 3 Bulan
+    const modalKerjaVal = draft.modalKerja || '0';
+    this.logStep(subject, 6, 'info', `Mengisi modal kerja 3 bulan: Rp ${parseInt(modalKerjaVal).toLocaleString('id-ID')}`);
+    const workingCapitalInput = page.getByText('Modal Kerja 3 Bulan').locator('input').first();
+    if (await workingCapitalInput.isVisible()) {
+      await workingCapitalInput.fill(modalKerjaVal);
+      await page.waitForTimeout(500);
+    } else {
+      await page.getByRole('textbox', { name: /Modal Kerja/i }).fill(modalKerjaVal).catch(() => {});
+    }
+
+    // Sumber Pembiayaan
+    const fundingSource = draft.sumberPembiayaan || 'modal_sendiri';
+    this.logStep(subject, 6, 'info', `Mengisi sumber pembiayaan: ${fundingSource === 'pinjaman' ? 'Pinjaman' : 'Modal Sendiri'}`);
+    if (fundingSource === 'pinjaman') {
+      await page.getByText('Pinjaman', { exact: true }).click().catch(() => {});
+    } else {
+      await page.getByText('Modal Sendiri', { exact: true }).click().catch(() => {});
+    }
+    await page.waitForTimeout(500);
+
+    // Hasil Penjualan Tahunan
+    const omzetVal = draft.omzetTahunan || '0';
+    this.logStep(subject, 6, 'info', `Mengisi omzet tahunan: Rp ${parseInt(omzetVal).toLocaleString('id-ID')}`);
+    const salesInput = page.getByTestId('pendapatan_tahunan').locator('input').first();
+    if (await salesInput.isVisible()) {
+      await salesInput.fill(omzetVal);
+      await page.waitForTimeout(500);
+    }
+  }
+
+  private formatToDDMMYYYY(dateStr?: string): string {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  }
+
+  private formatToMMYYYY(dateStr?: string): string {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[1]}/${parts[0]}`;
+    } else if (parts.length === 2) {
+      return `${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
   }
 }

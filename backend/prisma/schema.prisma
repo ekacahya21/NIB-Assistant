@@ -42,7 +42,13 @@ model Draft {
   sessionId         String?  @map("session_id")
   logs              Json?
   errorMessage      String?  @map("error_message")
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+  sumberPembiayaan        String?  @map("sumber_pembiayaan")
+  omzetTahunan            String?  @map("omzet_tahunan")
+  modalKerja              String?  @map("modal_kerja")
+  sudahBerjalan           String?  @map("sudah_berjalan")
+  tanggalMulaiUsaha       String?  @map("tanggal_mulai_usaha")
+  tanggalMulaiOperasional String?  @map("tanggal_mulai_operasional")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("drafts")
 }

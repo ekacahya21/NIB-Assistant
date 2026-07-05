@@ -15,109 +15,6 @@ export class KbliService {
 
   private readonly cache = new Map<string, KBLIRecord[]>();
 
-  private readonly kbliList: KBLIRecord[] = [
-    {
-      code: '56103',
-      title: 'Kedai Makanan',
-      description:
-        'Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap yang menyajikan makanan dan minuman siap saji langsung ke pelanggan.',
-      confidence: 'sangat_cocok',
-      suitableFor: [
-        'warung makan',
-        'kedai bakso',
-        'makanan rumahan',
-        'ayam geprek',
-        'mie ayam',
-      ],
-    },
-    {
-      code: '56210',
-      title: 'Jasa Boga Untuk Suatu Event Tertentu (Catering)',
-      description:
-        'Penyediaan makanan dan minuman atas dasar kontrak/pesanan untuk suatu acara tertentu seperti pesta, rapat, atau hajatan.',
-      confidence: 'alternatif',
-      suitableFor: [
-        'catering pernikahan',
-        'nasi kotak syukuran',
-        'pesanan kue basah',
-      ],
-    },
-    {
-      code: '56104',
-      title: 'Penyediaan Makanan Keliling / Tempat Tidak Tetap',
-      description:
-        'Penyediaan makanan yang dijajakan secara berkeliling atau menggunakan fasilitas tidak permanen seperti gerobak, pikulan, atau food truck.',
-      confidence: 'alternatif',
-      suitableFor: [
-        'gerobak keliling',
-        'food truck',
-        'kaki lima bongkar pasang',
-      ],
-    },
-    {
-      code: '47711',
-      title: 'Perdagangan Eceran Pakaian',
-      description:
-        'Perdagangan eceran berbagai jenis pakaian jadi baik dari bahan tekstil, rajutan, kulit, untuk pria, wanita, maupun anak-anak.',
-      confidence: 'sangat_cocok',
-      suitableFor: [
-        'butik pakaian',
-        'jualan hijab online',
-        'reseller baju jadi',
-        'toko daster',
-      ],
-    },
-    {
-      code: '47911',
-      title: 'Perdagangan Eceran Melalui Media (Online/Internet)',
-      description:
-        'Perdagangan eceran berbagai jenis barang melayani pesanan lewat pos, telepon, marketplace, media sosial, atau website.',
-      confidence: 'alternatif',
-      suitableFor: [
-        'online shop instagram',
-        'reseller shopee/tokopedia',
-        'dropshipper baju',
-      ],
-    },
-    {
-      code: '47712',
-      title: 'Perdagangan Eceran Alas Kaki',
-      description:
-        'Perdagangan eceran berbagai jenis alas kaki/sepatu/sandal dari bahan kulit, karet, plastik, atau sintetis.',
-      confidence: 'alternatif',
-      suitableFor: [
-        'toko sepatu lokal',
-        'jualan sandal jepit',
-        'reseller sepatu olahraga',
-      ],
-    },
-    {
-      code: '96200',
-      title: 'Jasa Pencucian dan Pembersihan (Laundry)',
-      description:
-        'Jasa pencucian, pembersihan, setrika pakaian jadi, sprei, karpet, jas baik kiloan maupun satuan.',
-      confidence: 'sangat_cocok',
-      suitableFor: [
-        'laundry kiloan',
-        'cuci sepatu & helm',
-        'dry cleaning jas',
-        'setrika rumahan',
-      ],
-    },
-    {
-      code: '96999',
-      title: 'Aktivitas Jasa Perorangan Lainnya YTDL',
-      description:
-        'Penyediaan jasa perorangan lainnya yang belum tercakup di tempat lain seperti pangkas rambut keliling atau jasa setrika panggilan.',
-      confidence: 'alternatif',
-      suitableFor: [
-        'jasa bersih rumah',
-        'jasa setrika panggilan',
-        'salon rumahan',
-      ],
-    },
-  ];
-
   async search(query: string): Promise<KBLIRecord[]> {
     const q = (query || '').toLowerCase().trim();
     if (!q) {
@@ -147,34 +44,30 @@ export class KbliService {
         const results: KBLIRecord[] = [];
         for (const item of grouped) {
           if (!item.kbliCode) continue;
-
-          const existing = this.kbliList.find((k) => k.code === item.kbliCode);
-          if (existing) {
-            results.push({ ...existing, confidence: 'sangat_cocok' });
-          } else {
-            results.push({
-              code: item.kbliCode,
-              title: item.kbliTitle || 'Aktivitas Usaha',
-              description: 'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
-              confidence: 'sangat_cocok',
-              suitableFor: ['Paling banyak dipilih', 'Tren UMKM'],
-            });
-          }
+          results.push({
+            code: item.kbliCode,
+            title: item.kbliTitle || 'Aktivitas Usaha',
+            description: 'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
+            confidence: 'sangat_cocok',
+            suitableFor: ['Paling banyak dipilih', 'Tren UMKM'],
+          });
         }
 
         if (results.length < 3) {
-          for (const fallback of this.kbliList) {
+          console.log('[KBLI Agent] Backfilling default recommendations from TenderX API...');
+          const backfills = await this.queryTenderx('penyediaan makanan', 5);
+          for (const item of backfills) {
             if (results.length >= 3) break;
-            if (!results.some((r) => r.code === fallback.code)) {
-              results.push({ ...fallback, confidence: 'sangat_cocok' });
+            if (!results.some((r) => r.code === item.code)) {
+              results.push(item);
             }
           }
         }
 
         return results.slice(0, 3);
       } catch (error) {
-        console.error('[KBLI Agent] Error fetching default KBLIs from database, falling back to static list:', error);
-        return this.kbliList.slice(0, 3);
+        console.error('[KBLI Agent] Error fetching default KBLIs from database, falling back to TenderX search:', error);
+        return this.queryTenderx('penyediaan makanan', 3);
       }
     }
 
@@ -191,6 +84,10 @@ export class KbliService {
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
       process.env.GOOGLE_GENAI_API_KEY;
+
+    // Pre-fetch candidates from TenderX to supply to the LLMs as prompt context
+    const cleanedQuery = this.cleanQueryForTenderx(q);
+    const candidates = await this.queryTenderx(cleanedQuery, 5);
 
     if (vertexProject || apiKey) {
       try {
@@ -252,10 +149,10 @@ export class KbliService {
         const agent = new LlmAgent({
           name: 'kbli_search_agent',
           model: llmModel,
-          instruction: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) 2020 yang handal.
+          instruction: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) 2020/2025 yang handal.
 Tugas Anda adalah:
 1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
-2. Menggunakan tool pencarian KBLI (Vertex AI Search atau Google Search) untuk menemukan kecocokan kode KBLI 2020 resmi terbaru yang paling akurat dari BPS atau Lembaga OSS.
+2. Menggunakan tool pencarian KBLI (Vertex AI Search atau Google Search) untuk menemukan kecocokan kode KBLI resmi terbaru yang paling akurat dari BPS atau Lembaga OSS.
 3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON yang valid.
 
 Kriteria 'confidence' harus bernilai 'sangat_cocok' untuk 1-2 kecocokan utama, dan 'alternatif' untuk rekomendasi pendukung.
@@ -268,20 +165,23 @@ Pastikan HANYA menghasilkan JSON yang valid, tanpa penjelasan markdown lain di l
           appName: 'KBLIAssistant',
         });
 
-        const prompt = `Cari kode KBLI 2020 yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}".
+        const prompt = `Cari kode KBLI yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}".
+
+Berikut adalah daftar KBLI kandidat yang ditemukan dari registri lokal sebagai konteks awal:
+${JSON.stringify(candidates, null, 2)}
 
 Anda harus mengembalikan hasilnya dalam bentuk JSON array of objects yang valid tanpa penjelasan apapun di luar JSON block. Setiap objek dalam array harus memiliki skema berikut:
 [
   {
-    "code": "string (5 digit kode KBLI, contoh: '56103')",
-    "title": "string (Nama resmi KBLI 2020, contoh: 'Kedai Makanan')",
+    "code": "string (5 digit kode KBLI, contoh: '56101')",
+    "title": "string (Nama resmi KBLI, contoh: 'Penyediaan Makanan Di Bangunan Tetap')",
     "description": "string (Deskripsi resmi cakupan aktivitas KBLI tersebut)",
     "confidence": "string (Hanya boleh 'sangat_cocok' atau 'alternatif')",
     "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)]
   }
 ]
 
-Berikan minimal 3 dan maksimal 6 rekomendasi KBLI yang relevan. Prioritaskan kode KBLI 2020 yang paling mendekati deskripsi usaha pengguna.
+Berikan minimal 3 dan maksimal 6 rekomendasi KBLI yang relevan. Prioritaskan kode KBLI yang paling mendekati deskripsi usaha pengguna.
 Kembalikan HANYA array JSON tersebut saja!`;
 
         const stream = runner.runEphemeral({
@@ -348,7 +248,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
       } catch (error) {
         console.error('[KBLI Agent] Error executing ADK agent search:', error);
         console.log('[KBLI Agent] Trying Local LLM fallback...');
-        const localLlmRecords = await this.queryLocalLlm(query);
+        const localLlmRecords = await this.queryLocalLlm(query, candidates);
         if (localLlmRecords) {
           this.cache.set(q, localLlmRecords);
           return localLlmRecords;
@@ -358,32 +258,47 @@ Kembalikan HANYA array JSON tersebut saja!`;
       console.warn(
         '[KBLI Agent] Neither Vertex AI nor Gemini API Key is configured. Trying Local LLM fallback...',
       );
-      const localLlmRecords = await this.queryLocalLlm(query);
+      const localLlmRecords = await this.queryLocalLlm(query, candidates);
       if (localLlmRecords) {
         this.cache.set(q, localLlmRecords);
         return localLlmRecords;
       }
     }
 
-    // Filter list based on title, description, or tags matching keywords
-    const matches = this.kbliList.filter(
-      (k) =>
-        k.title.toLowerCase().includes(q) ||
-        k.description.toLowerCase().includes(q) ||
-        k.suitableFor.some((tag) => tag.includes(q)),
-    );
-
-    if (matches.length > 0) {
-      return matches;
+    // Final failsafe fallback: query TenderX directly and return
+    console.log('[KBLI Agent] Falling back to direct TenderX API search...');
+    let apiMatches = await this.queryTenderx(cleanedQuery, 6);
+    if (apiMatches.length === 0 && cleanedQuery !== q) {
+      apiMatches = await this.queryTenderx(q, 6);
     }
 
-    // If no direct matches, return general food suggestions
-    return this.kbliList.filter(
-      (k) => k.code === '56103' || k.code === '47711' || k.code === '96200',
-    );
+    if (apiMatches.length > 0) {
+      this.cache.set(q, apiMatches);
+      return apiMatches;
+    }
+
+    // Failsafe of failsafes: return a generic food/retail placeholder matching typical registrations
+    const baseline = [
+      {
+        code: '56101',
+        title: 'Aktivitas Penyediaan Makanan Di Bangunan Tetap',
+        description: 'Usaha warung makan, kedai, cafe, rumah makan menetap.',
+        confidence: 'sangat_cocok' as const,
+        suitableFor: ['warung makan', 'kedai', 'cafe'],
+      },
+      {
+        code: '47711',
+        title: 'Perdagangan Eceran Pakaian',
+        description: 'Perdagangan eceran berbagai jenis pakaian jadi.',
+        confidence: 'alternatif' as const,
+        suitableFor: ['butik pakaian', 'toko baju', 'reseller baju'],
+      },
+    ];
+    this.cache.set(q, baseline);
+    return baseline;
   }
 
-  private async queryLocalLlm(query: string): Promise<KBLIRecord[] | null> {
+  private async queryLocalLlm(query: string, candidates: KBLIRecord[]): Promise<KBLIRecord[] | null> {
     const host = process.env.LOCAL_LLM_HOST || 'http://localhost:20128/v1';
     const key = process.env.LOCAL_LLM_KEY || 'sk-be6dc08e77bc7a4a-pk6lq6-69274223';
     const model = process.env.LOCAL_LLM_MODEL || 'combo-max';
@@ -391,6 +306,11 @@ Kembalikan HANYA array JSON tersebut saja!`;
     console.log(
       `[KBLI Agent] Attempting fallback to Local LLM at ${host} using model ${model}...`,
     );
+
+    // If we have candidates from TenderX, provide them as verified catalog
+    const catalogContext = candidates.length > 0
+      ? `Berikut adalah daftar KBLI kandidat yang ditemukan dari registri:\n${JSON.stringify(candidates, null, 2)}`
+      : 'Gunakan pengetahuan Anda untuk merumuskan kode KBLI resmi yang valid.';
 
     try {
       const response = await fetch(`${host}/chat/completions`, {
@@ -404,32 +324,31 @@ Kembalikan HANYA array JSON tersebut saja!`;
           messages: [
             {
               role: 'system',
-              content: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) 2020 yang handal.
-Berikut adalah katalog KBLI lokal yang terverifikasi:
-${JSON.stringify(this.kbliList, null, 2)}
+              content: `Anda adalah agen AI pencari kode KBLI (Klasifikasi Baku Lapangan Usaha Indonesia) yang handal.
+${catalogContext}
 
 Tugas Anda adalah:
 1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
-2. Mencari kecocokan dari katalog KBLI lokal di atas. Jika ada yang cocok, gunakan data tersebut. Jika tidak ada yang cocok di katalog, gunakan pengetahuan Anda untuk merumuskan kode KBLI 2020 resmi lainnya yang valid.
+2. Mencari kecocokan dari daftar kandidat KBLI di atas (jika tersedia). Jika ada yang cocok, gunakan data tersebut. Jika tidak ada yang cocok, gunakan pengetahuan Anda untuk merumuskan kode KBLI resmi lainnya yang valid.
 3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON array of objects yang valid tanpa penjelasan apapun di luar JSON block.
 
 Setiap objek dalam array harus memiliki skema berikut:
 [
   {
-    "code": "string (5 digit kode KBLI, contoh: '56103')",
-    "title": "string (Nama resmi KBLI 2020, contoh: 'Kedai Makanan')",
+    "code": "string (5 digit kode KBLI, contoh: '56101')",
+    "title": "string (Nama resmi KBLI, contoh: 'Penyediaan Makanan Di Bangunan Tetap')",
     "description": "string (Deskripsi resmi cakupan aktivitas KBLI tersebut)",
     "confidence": "string (Hanya boleh 'sangat_cocok' atau 'alternatif')",
     "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)]
   }
 ]
 
-Berikan minimal 3 dan maksimal 6 rekomendasi KBLI yang relevan. Prioritaskan kode KBLI 2020 yang paling mendekati deskripsi usaha pengguna.
+Berikan minimal 3 dan maksimal 6 rekomendasi KBLI yang relevan. Prioritaskan kode KBLI yang paling mendekati deskripsi usaha pengguna.
 Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \`\`\`json atau penjelasan lainnya.`,
             },
             {
               role: 'user',
-              content: `Cari kode KBLI 2020 yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}"`,
+              content: `Cari kode KBLI yang paling sesuai untuk deskripsi usaha/aktivitas berikut: "${query}"`,
             },
           ],
           temperature: 0.1,
@@ -446,7 +365,6 @@ Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \
         throw new Error('Local LLM returned an empty response.');
       }
 
-      // Try to parse JSON array from response
       const match = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
       const jsonText = match ? match[0] : text;
       const records = JSON.parse(jsonText) as KBLIRecord[];
@@ -461,5 +379,62 @@ Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \
       console.error('[KBLI Agent] Local LLM query failed:', err);
       return null;
     }
+  }
+
+  private async queryTenderx(query: string, limit = 5): Promise<KBLIRecord[]> {
+    try {
+      const url = `https://tenderx.id/api/v1/kbli?q=${encodeURIComponent(query)}&limit=${limit}`;
+      console.log(`[KBLI Agent] Querying TenderX API: ${url}`);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`TenderX HTTP error! status: ${res.status}`);
+      }
+      const json = (await res.json()) as any;
+      if (json && json.status === 'success' && Array.isArray(json.data)) {
+        return json.data.map((item: any) => ({
+          code: item.kode,
+          title: this.capitalizeTitle(item.judul),
+          description: `Aktivitas bidang usaha untuk ${this.capitalizeTitle(item.judul)} (Kategori ${item.kategori_huruf}).`,
+          confidence: 'sangat_cocok' as const,
+          suitableFor: [this.capitalizeTitle(item.judul).toLowerCase(), `kategori ${item.kategori_huruf}`],
+        }));
+      }
+      return [];
+    } catch (err) {
+      console.error('[KBLI Agent] TenderX API query failed:', err);
+      return [];
+    }
+  }
+
+  private cleanQueryForTenderx(query: string): string {
+    const q = query.toLowerCase().trim();
+    const synonyms: Record<string, string> = {
+      laundry: 'pencucian',
+      warung: 'makanan',
+      catering: 'boga',
+      baju: 'pakaian',
+      sepatu: 'alas kaki',
+      toko: 'perdagangan',
+      online: 'media',
+      sembako: 'kelontong',
+      kopi: 'minuman',
+      kafe: 'minuman',
+    };
+
+    for (const key of Object.keys(synonyms)) {
+      if (q.includes(key)) {
+        return synonyms[key];
+      }
+    }
+    return q;
+  }
+
+  private capitalizeTitle(text: string): string {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 }

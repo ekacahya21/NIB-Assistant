@@ -46,6 +46,12 @@ interface DraftItem {
   luasTanah?: string | null;
   fotoLokasi?: string | null;
   ceritaUsaha?: string | null;
+  sumberPembiayaan?: string | null;
+  omzetTahunan?: string | null;
+  modalKerja?: string | null;
+  sudahBerjalan?: string | null;
+  tanggalMulaiUsaha?: string | null;
+  tanggalMulaiOperasional?: string | null;
 }
 
 interface ActivityEvent {

@@ -71,7 +71,13 @@ export default function WizardPage() {
     luasTanah: "",
     jumlahPekerjaLakiLaki: "0",
     jumlahPekerjaPerempuan: "0",
-    jumlahPekerja: "0"
+    jumlahPekerja: "0",
+    sumberPembiayaan: "modal_sendiri",
+    omzetTahunan: "0",
+    modalKerja: "0",
+    sudahBerjalan: "belum",
+    tanggalMulaiUsaha: "",
+    tanggalMulaiOperasional: ""
   });
 
   // Geocoding Coordinates State
@@ -777,7 +783,11 @@ export default function WizardPage() {
       field !== "kotaKabupatenKtp" &&
       field !== "kecamatanKtp" &&
       field !== "kelurahanKtp" &&
-      field !== "jumlahPekerja"
+      field !== "jumlahPekerja" &&
+      field !== "sumberPembiayaan" &&
+      field !== "sudahBerjalan" &&
+      field !== "tanggalMulaiUsaha" &&
+      field !== "tanggalMulaiOperasional"
     ) {
       processedValue = value.toUpperCase();
     }
@@ -888,6 +898,20 @@ export default function WizardPage() {
       }
       if (!formData.luasTanah || parseInt(formData.luasTanah) <= 0) {
         newErrors.luasTanah = "Masukkan luas lahan usaha yang valid.";
+      }
+      if (!formData.omzetTahunan || parseInt(formData.omzetTahunan) < 0) {
+        newErrors.omzetTahunan = "Masukkan estimasi hasil penjualan tahunan yang valid.";
+      }
+      if (!formData.modalKerja || parseInt(formData.modalKerja) < 0) {
+        newErrors.modalKerja = "Masukkan modal kerja 3 bulan yang valid.";
+      }
+      if (formData.sudahBerjalan === "sudah") {
+        if (!formData.tanggalMulaiUsaha) {
+          newErrors.tanggalMulaiUsaha = "Pilih tanggal mulai usaha.";
+        }
+        if (!formData.tanggalMulaiOperasional) {
+          newErrors.tanggalMulaiOperasional = "Pilih tanggal mulai operasional/komersial.";
+        }
       }
     }
 
@@ -2188,6 +2212,181 @@ export default function WizardPage() {
                       <span>Total Pekerja:</span>
                       <span className="text-sm font-extrabold">{formData.jumlahPekerja} Orang</span>
                     </div>
+                  </div>
+
+                  {/* Sumber Pembiayaan */}
+                  <div className="flex flex-col gap-2 border-t border-border-light pt-4">
+                    <label className="text-xs font-bold text-on-surface-variant">
+                      SUMBER PEMBIAYAAN
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange("sumberPembiayaan", "modal_sendiri")}
+                        className={`flex items-center gap-3 p-3.5 rounded border text-xs font-bold text-left transition-all ${
+                          formData.sumberPembiayaan === "modal_sendiri"
+                            ? "border-primary-container bg-primary-container/5 text-primary-container"
+                            : "border-border-light bg-white text-on-surface hover:bg-[#F3F4F6]"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">
+                          {formData.sumberPembiayaan === "modal_sendiri" ? "radio_button_checked" : "radio_button_unchecked"}
+                        </span>
+                        Modal Sendiri
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange("sumberPembiayaan", "pinjaman")}
+                        className={`flex items-center gap-3 p-3.5 rounded border text-xs font-bold text-left transition-all ${
+                          formData.sumberPembiayaan === "pinjaman"
+                            ? "border-primary-container bg-primary-container/5 text-primary-container"
+                            : "border-border-light bg-white text-on-surface hover:bg-[#F3F4F6]"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">
+                          {formData.sumberPembiayaan === "pinjaman" ? "radio_button_checked" : "radio_button_unchecked"}
+                        </span>
+                        Pinjaman
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Apakah kegiatan usaha ini sudah berjalan? */}
+                  <div className="flex flex-col gap-1.5 border-t border-border-light pt-4">
+                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="sudahBerjalan">
+                      APAKAH KEGIATAN USAHA INI SUDAH BERJALAN?
+                    </label>
+                    <select
+                      id="sudahBerjalan"
+                      value={formData.sudahBerjalan}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleInputChange("sudahBerjalan", val);
+                        if (val === "belum") {
+                          handleInputChange("tanggalMulaiUsaha", "");
+                          handleInputChange("tanggalMulaiOperasional", "");
+                        }
+                      }}
+                      className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                    >
+                      <option value="belum">Belum Berjalan</option>
+                      <option value="sudah">Sudah Berjalan</option>
+                    </select>
+                  </div>
+
+                  {/* Conditional datepicker fields for sudahBerjalan */}
+                  {formData.sudahBerjalan === "sudah" && (
+                    <div className="animate-fadeIn space-y-4 border-t border-border-light pt-4">
+                      {/* Usaha Berjalan Sejak */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalMulaiUsaha">
+                          USAHA BERJALAN SEJAK
+                        </label>
+                        <input
+                          type="date"
+                          id="tanggalMulaiUsaha"
+                          value={formData.tanggalMulaiUsaha}
+                          onChange={(e) => handleInputChange("tanggalMulaiUsaha", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.tanggalMulaiUsaha ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.tanggalMulaiUsaha && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.tanggalMulaiUsaha}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Jangka Waktu Perkiraan Mulai Operasional */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalMulaiOperasional">
+                          JANGKA WAKTU PERKIRAAN MULAI OPERASIONAL DAN/ATAU KOMERSIAL
+                        </label>
+                        <input
+                          type="date"
+                          id="tanggalMulaiOperasional"
+                          value={formData.tanggalMulaiOperasional}
+                          onChange={(e) => handleInputChange("tanggalMulaiOperasional", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.tanggalMulaiOperasional ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.tanggalMulaiOperasional && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.tanggalMulaiOperasional}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Hasil Penjualan Tahunan */}
+                  <div className="flex flex-col gap-1.5 border-t border-border-light pt-4">
+                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="omzetTahunan">
+                      HASIL PENJUALAN TAHUNAN (ESTIMASI OMZET KOTOR TAHUNAN)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="omzetTahunan"
+                        placeholder="Contoh: 120000000"
+                        value={formData.omzetTahunan}
+                        onChange={(e) => handleInputChange("omzetTahunan", e.target.value.replace(/\D/g, ""))}
+                        className={`w-full min-h-[48px] pl-10 pr-4 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                          errors.omzetTahunan ? "border-error" : ""
+                        }`}
+                      />
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-outline">
+                        Rp
+                      </span>
+                    </div>
+                    {formData.omzetTahunan && (
+                      <p className="text-[11px] text-primary-container font-bold">
+                        Terbaca: Rp {parseInt(formData.omzetTahunan).toLocaleString("id-ID")}
+                      </p>
+                    )}
+                    {errors.omzetTahunan && (
+                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">error</span>
+                        {errors.omzetTahunan}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Modal Kerja 3 Bulan */}
+                  <div className="flex flex-col gap-1.5 border-t border-border-light pt-4">
+                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="modalKerja">
+                      MODAL KERJA 3 BULAN
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="modalKerja"
+                        placeholder="Contoh: 30000000"
+                        value={formData.modalKerja}
+                        onChange={(e) => handleInputChange("modalKerja", e.target.value.replace(/\D/g, ""))}
+                        className={`w-full min-h-[48px] pl-10 pr-4 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                          errors.modalKerja ? "border-error" : ""
+                        }`}
+                      />
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-outline">
+                        Rp
+                      </span>
+                    </div>
+                    {formData.modalKerja && (
+                      <p className="text-[11px] text-primary-container font-bold">
+                        Terbaca: Rp {parseInt(formData.modalKerja).toLocaleString("id-ID")}
+                      </p>
+                    )}
+                    {errors.modalKerja && (
+                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">error</span>
+                        {errors.modalKerja}
+                      </p>
+                    )}
                   </div>
 
                 </div>

@@ -47,6 +47,12 @@ export default function ReviewPage() {
     modalUsaha: "",
     namaUsaha: "",
     ceritaUsaha: "",
+    sumberPembiayaan: "modal_sendiri",
+    omzetTahunan: "0",
+    modalKerja: "0",
+    sudahBerjalan: "belum",
+    tanggalMulaiUsaha: "",
+    tanggalMulaiOperasional: ""
   });
 
   const [downloadingNps, setDownloadingNps] = useState(false);
@@ -211,6 +217,12 @@ export default function ReviewPage() {
         kbliTitle: selectedKbli.title,
         luasTanah: formData.luasTanah || "0",
         fotoLokasi: formData.fotoLokasi || "",
+        sumberPembiayaan: formData.sumberPembiayaan,
+        omzetTahunan: formData.omzetTahunan,
+        modalKerja: formData.modalKerja,
+        sudahBerjalan: formData.sudahBerjalan,
+        tanggalMulaiUsaha: formData.tanggalMulaiUsaha,
+        tanggalMulaiOperasional: formData.tanggalMulaiOperasional,
         sessionId: getSessionId(),
       };
 
@@ -305,7 +317,7 @@ export default function ReviewPage() {
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary-container text-sm">person</span>
-                  01. IDENTITAS PEMILIK
+                  IDENTITAS PEMILIK
                 </span>
                 <button 
                   onClick={() => handleEditSection(1)} 
@@ -347,7 +359,7 @@ export default function ReviewPage() {
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary-container text-sm">badge</span>
-                  02. ALAMAT DOMISILI KTP
+                  ALAMAT DOMISILI KTP
                 </span>
                 <button 
                   onClick={() => handleEditSection(2)} 
@@ -367,7 +379,7 @@ export default function ReviewPage() {
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary-container text-sm">store</span>
-                  03. LOKASI USAHA & KOORDINAT
+                  LOKASI USAHA & KOORDINAT
                 </span>
                 <button 
                   onClick={() => handleEditSection(2)} 
@@ -412,10 +424,10 @@ export default function ReviewPage() {
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary-container text-sm">storefront</span>
-                  04. PROFIL USAHA & OPERASIONAL
+                  PROFIL USAHA & OPERASIONAL
                 </span>
                 <button 
-                  onClick={() => handleEditSection(3)} 
+                  onClick={() => handleEditSection(4)} 
                   className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-xs">edit</span> Ubah
@@ -436,6 +448,42 @@ export default function ReviewPage() {
                   <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Jumlah Pekerja</span>
                   <span className="block font-bold text-on-surface mt-0.5">{formData.jumlahPekerja || "0"} Orang</span>
                 </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Sumber Pembiayaan</span>
+                  <span className="block font-bold text-on-surface mt-0.5 capitalize">
+                    {formData.sumberPembiayaan === "pinjaman" ? "Pinjaman" : "Modal Sendiri"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Status Berjalan</span>
+                  <span className="block font-bold text-on-surface mt-0.5 capitalize">
+                    {formData.sudahBerjalan === "sudah" ? "Sudah Berjalan" : "Belum Berjalan"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Omzet Penjualan Tahunan</span>
+                  <span className="block font-bold text-on-surface mt-0.5">
+                    Rp {formData.omzetTahunan ? parseInt(formData.omzetTahunan).toLocaleString("id-ID") : "0"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Modal Kerja 3 Bulan</span>
+                  <span className="block font-bold text-on-surface mt-0.5">
+                    Rp {formData.modalKerja ? parseInt(formData.modalKerja).toLocaleString("id-ID") : "0"}
+                  </span>
+                </div>
+                {formData.sudahBerjalan === "sudah" && (
+                  <>
+                    <div>
+                      <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Usaha Berjalan Sejak</span>
+                      <span className="block font-bold text-on-surface mt-0.5">{formData.tanggalMulaiUsaha || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Perkiraan Mulai Operasional</span>
+                      <span className="block font-bold text-on-surface mt-0.5">{formData.tanggalMulaiOperasional || "-"}</span>
+                    </div>
+                  </>
+                )}
                 <div className="sm:col-span-2">
                   <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Deskripsi Aktivitas Usaha</span>
                   <p className="font-semibold text-on-surface-variant leading-relaxed mt-0.5 italic">
@@ -450,7 +498,7 @@ export default function ReviewPage() {
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary-container text-sm">category</span>
-                  05. KBLI TERPILIH
+                  KBLI TERPILIH
                 </span>
                 <button 
                   onClick={() => handleEditSection(3)} 

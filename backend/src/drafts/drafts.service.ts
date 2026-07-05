@@ -34,9 +34,14 @@ export class DraftData {
   fotoLokasi?: string;
   status?: string;
   automationDuration?: number;
-  sessionId?: string;
   errorMessage?: string | null;
   logs?: any;
+  sumberPembiayaan?: string;
+  omzetTahunan?: string;
+  modalKerja?: string;
+  sudahBerjalan?: string;
+  tanggalMulaiUsaha?: string;
+  tanggalMulaiOperasional?: string;
 }
 
 @Injectable()
@@ -87,9 +92,14 @@ export class DraftsService {
         fotoLokasi: data.fotoLokasi,
         status: data.status || 'DRAFT',
         automationDuration: data.automationDuration,
-        sessionId: data.sessionId,
         errorMessage: data.errorMessage,
         logs: data.logs,
+        sumberPembiayaan: data.sumberPembiayaan,
+        omzetTahunan: data.omzetTahunan,
+        modalKerja: data.modalKerja,
+        sudahBerjalan: data.sudahBerjalan,
+        tanggalMulaiUsaha: data.tanggalMulaiUsaha,
+        tanggalMulaiOperasional: data.tanggalMulaiOperasional,
         updatedAt: new Date(),
       },
     });
@@ -141,9 +151,14 @@ export class DraftsService {
         fotoLokasi: data.fotoLokasi,
         status: data.status,
         automationDuration: data.automationDuration,
-        sessionId: data.sessionId,
         errorMessage: data.errorMessage,
         logs: data.logs,
+        sumberPembiayaan: data.sumberPembiayaan,
+        omzetTahunan: data.omzetTahunan,
+        modalKerja: data.modalKerja,
+        sudahBerjalan: data.sudahBerjalan,
+        tanggalMulaiUsaha: data.tanggalMulaiUsaha,
+        tanggalMulaiOperasional: data.tanggalMulaiOperasional,
         updatedAt: new Date(),
       },
     });

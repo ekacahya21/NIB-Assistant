@@ -38,6 +38,12 @@ interface DraftItem {
   luasTanah?: string;
   fotoLokasi?: string;
   ceritaUsaha?: string;
+  sumberPembiayaan?: string;
+  omzetTahunan?: string;
+  modalKerja?: string;
+  sudahBerjalan?: string;
+  tanggalMulaiUsaha?: string;
+  tanggalMulaiOperasional?: string;
 }
 
 export default function DashboardPage() {
@@ -111,7 +117,13 @@ export default function DashboardPage() {
               longitude: item.longitude || "106.8456",
               fotoLokasi: item.fotoLokasi || "",
               ceritaUsaha: item.ceritaUsaha || "",
-              luasTanah: item.luasTanah || ""
+              luasTanah: item.luasTanah || "",
+              sumberPembiayaan: item.sumberPembiayaan,
+              omzetTahunan: item.omzetTahunan,
+              modalKerja: item.modalKerja,
+              sudahBerjalan: item.sudahBerjalan,
+              tanggalMulaiUsaha: item.tanggalMulaiUsaha,
+              tanggalMulaiOperasional: item.tanggalMulaiOperasional
             };
           });
 
@@ -168,7 +180,13 @@ export default function DashboardPage() {
         luasTanah: draft.luasTanah || "",
         jumlahPekerjaLakiLaki: draft.jumlahPekerja || "0",
         jumlahPekerjaPerempuan: "0",
-        jumlahPekerja: draft.jumlahPekerja || "0"
+        jumlahPekerja: draft.jumlahPekerja || "0",
+        sumberPembiayaan: draft.sumberPembiayaan || "modal_sendiri",
+        omzetTahunan: draft.omzetTahunan || "0",
+        modalKerja: draft.modalKerja || "0",
+        sudahBerjalan: draft.sudahBerjalan || "belum",
+        tanggalMulaiUsaha: draft.tanggalMulaiUsaha || "",
+        tanggalMulaiOperasional: draft.tanggalMulaiOperasional || ""
       };
 
       sessionStorage.setItem("draft_form_data", JSON.stringify(formData));
