@@ -2472,6 +2472,21 @@ export class AutomationService implements OnModuleDestroy {
         .catch(() => null);
     await submitPernyataanMandiriPromise;
     await page.waitForTimeout(1000);
+    
+    // wait for detailPerizinan
+    const detailPerizinanPromise = page
+        .waitForResponse(
+          (response: any) =>
+            (response.url().includes('/detailPerizinan')) &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+    await detailPerizinanPromise;
+    await page.waitForTimeout(1000);
 
+    // click lanjut to navigate to 'Perizinan Berusaha'
+    await page.getByRole('tab', { name: 'Perizinan Berusaha' }).click();
+    await page.getByRole('button', { name: 'Lanjut' }).click();
   }
 }
