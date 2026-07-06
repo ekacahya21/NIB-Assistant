@@ -519,6 +519,7 @@ export class AutomationService implements OnModuleDestroy {
       activeStep = 6;
       await this.executeManageBusinessDetailSteps(page, draft, subject);
 
+      throw new Error('Error');
       // Step 7: Selesai
       activeStep = 7;
       this.logStep(
@@ -2072,9 +2073,9 @@ export class AutomationService implements OnModuleDestroy {
         { timeout: 5000 },
       )
       .catch(() => null);
-    await page.getByRole('combobox', { name: 'Pilih provinsi' }).click();
-    await page
-      .getByRole('combobox', { name: 'Pilih provinsi' })
+    const provinsiSelect = page.getByRole('combobox', { name: 'Pilih provinsi' })
+    await provinsiSelect.click();
+    await provinsiSelect
       .fill(searchProvinsi);
     await provPromise;
     await page.waitForTimeout(200);
@@ -2406,6 +2407,7 @@ export class AutomationService implements OnModuleDestroy {
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
 
+    this.logStep(subject, 6, 'info', 'Memilih ruang lingkup kegiatan...');
     await page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' }).click();
     
     // check if 'Seluruh' ruang lingkup is exists, then click it
@@ -2453,15 +2455,18 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(1000);
 
     // check for pernyataan mandiri
+    this.logStep(subject, 6, 'info', 'Menyatakan pernyataan mandiri...');
     await page.getByText('Saya menyatakan pemberian ini').click();
 
     // click tombol proses
     await page.getByRole('button', { name: 'Proses' }).click();
 
     // process
+    this.logStep(subject, 6, 'info', 'Memproses...');
     await page.getByTestId('modal-proses').getByRole('button', { name: 'Proses' }).click();
 
     // wait for submitPernyataanMandiri
+    this.logStep(subject, 6, 'info', 'Menunggu submitPernyataanMandiri...');
     const submitPernyataanMandiriPromise = page
         .waitForResponse(
           (response: any) =>
@@ -2493,40 +2498,40 @@ export class AutomationService implements OnModuleDestroy {
     const isRunning = draft.sudahBerjalan === 'sudah';
     const runningOptionText = isRunning ? 'Sudah Berjalan' : 'Belum Berjalan';
     this.logStep(subject, 6, 'info', `Mengisi status berjalan: ${runningOptionText}`);
-    const runningCombobox = page.locator('div[role="combobox"]').filter({ hasText: /Berjalan/i }).first()
-      .or(page.getByRole('combobox', { name: /Apakah kegiatan usaha ini/i }))
-      .or(page.getByPlaceholder(/Pilih status/i));
+    const runningCombobox = page.getByTestId('select-box-flag-berjalan').first();
     
-    if (await runningCombobox.isVisible()) {
-      await runningCombobox.click();
-      await page.waitForTimeout(500);
-      await page.getByRole('option', { name: runningOptionText }).click().catch(async () => {
-        await page.getByText(runningOptionText, { exact: true }).first().click();
-      });
-      await page.waitForTimeout(500);
-    }
-
+    await runningCombobox.click();
+    await runningCombobox.locator('input').fill(runningOptionText);
+    await page.getByText(runningOptionText, { exact: true }).click();
+    await page.waitForTimeout(500);
+    
     // Conditional Date Pickers for Sudah Berjalan
     if (isRunning) {
       if (draft.tanggalMulaiUsaha) {
         const tglMulai = this.formatToDDMMYYYY(draft.tanggalMulaiUsaha);
         this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${tglMulai}`);
-        const dateInput = page.getByRole('textbox', { name: 'DD/MM/YYYY' });
-        if (await dateInput.isVisible()) {
-          await dateInput.fill(tglMulai);
-          await page.waitForTimeout(500);
-        }
+        const dateInputTglMulai = page.getByTestId('date-time-picker-tgl-berjalan').locator('input');
+        await dateInputTglMulai.focus();
+        await dateInputTglMulai.fill(tglMulai);
+        await dateInputTglMulai.dispatchEvent('input');
+        await dateInputTglMulai.dispatchEvent('change');
+        await dateInputTglMulai.press('Enter').catch(() => {});
+        await dateInputTglMulai.blur().catch(() => {});
+        await page.waitForTimeout(500);
       }
+    }
 
-      if (draft.tanggalMulaiOperasional) {
-        const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
-        this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
-        const dateInputOp = page.getByRole('textbox', { name: 'MM/YYYY', exact: true });
-        if (await dateInputOp.isVisible()) {
-          await dateInputOp.fill(tglOp);
-          await page.waitForTimeout(500);
-        }
-      }
+    if (draft.tanggalMulaiOperasional) {
+      const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
+      this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
+      const dateInputTglOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').locator('input');
+      await dateInputTglOp.focus();
+      await dateInputTglOp.fill(tglOp);
+      await dateInputTglOp.dispatchEvent('input');
+      await dateInputTglOp.dispatchEvent('change');
+      await dateInputTglOp.press('Enter').catch(() => {});
+      await dateInputTglOp.blur().catch(() => {});
+      await page.waitForTimeout(500);
     }
 
     // Modal Kerja 3 Bulan
