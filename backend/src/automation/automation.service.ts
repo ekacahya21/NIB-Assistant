@@ -2511,12 +2511,13 @@ export class AutomationService implements OnModuleDestroy {
         const tglMulai = this.formatToDDMMYYYY(draft.tanggalMulaiUsaha);
         this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${tglMulai}`);
         const dateInputTglMulai = page.getByTestId('date-time-picker-tgl-berjalan').locator('input');
-        await dateInputTglMulai.focus();
-        await dateInputTglMulai.fill(tglMulai);
-        await dateInputTglMulai.dispatchEvent('input');
-        await dateInputTglMulai.dispatchEvent('change');
-        await dateInputTglMulai.press('Enter').catch(() => {});
-        await dateInputTglMulai.blur().catch(() => {});
+        
+        await dateInputTglMulai.evaluate((el: any, val: string) => {
+          el.value = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, tglMulai);
+        
         await page.waitForTimeout(500);
       }
     }
@@ -2525,12 +2526,13 @@ export class AutomationService implements OnModuleDestroy {
       const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
       this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
       const dateInputTglOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').locator('input');
-      await dateInputTglOp.focus();
-      await dateInputTglOp.fill(tglOp);
-      await dateInputTglOp.dispatchEvent('input');
-      await dateInputTglOp.dispatchEvent('change');
-      await dateInputTglOp.press('Enter').catch(() => {});
-      await dateInputTglOp.blur().catch(() => {});
+      
+      await dateInputTglOp.evaluate((el: any, val: string) => {
+        el.value = val;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, tglOp);
+      
       await page.waitForTimeout(500);
     }
 
