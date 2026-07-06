@@ -59,4 +59,13 @@ export class AutomationController {
     this.automationService.submitPassword(draftId, body.password);
     return { success: true };
   }
+
+  @Post('product/:draftId')
+  submitProduct(
+    @Param('draftId') draftId: string,
+    @Body() body: { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+  ) {
+    this.automationService.submitProductInput(draftId, body);
+    return { success: true };
+  }
 }

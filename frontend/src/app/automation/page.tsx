@@ -31,6 +31,16 @@ export default function AutomationPage() {
   const [passwordError, setPasswordError] = useState<string>("");
   const [isSubmittingPassword, setIsSubmittingPassword] = useState<boolean>(false);
 
+  // Product Setup States
+  const [isPromptingProduct, setIsPromptingProduct] = useState<boolean>(false);
+  const [allowedUnitsList, setAllowedUnitsList] = useState<string[]>([]);
+  const [productName, setProductName] = useState<string>("");
+  const [productCoverage, setProductCoverage] = useState<string>("Tidak Mengajukan Fasilitas");
+  const [productCapacity, setProductCapacity] = useState<string>("");
+  const [productUnit, setProductUnit] = useState<string>("");
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState<boolean>(false);
+  const [productError, setProductError] = useState<string>("");
+
   const [userContact, setUserContact] = useState<{ nomorHp: string; email: string }>({ nomorHp: "", email: "" });
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
   const otpRefs = useRef<HTMLInputElement[]>([]);
@@ -158,7 +168,7 @@ export default function AutomationPage() {
 
   useEffect(() => {
     let timerId: any;
-    if (isPromptingOtp || isPromptingPassword) {
+    if (isPromptingOtp || isPromptingPassword || isPromptingProduct) {
       setTimeLeft(120);
       timerId = setInterval(() => {
         setTimeLeft((prev) => {
@@ -176,7 +186,7 @@ export default function AutomationPage() {
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isPromptingOtp, isPromptingPassword]);
+  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct]);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -278,6 +288,20 @@ export default function AutomationPage() {
               setStatusText("Mengelola Lokasi Usaha...");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
+            }
+            if (payload.step === 6 && failedStepRef.current === null) {
+              if (payload.text.includes("MENGISI_RINCIAN_PRODUK")) {
+                setStatusText("Menunggu Anda melengkapi rincian produk...");
+                setIsPromptingProduct(true);
+                setAllowedUnitsList(payload.data?.allowedUnits || ["Unit", "Kg", "Pcs"]);
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+              } else if (payload.text.includes("Menyimpan data Produk/Jasa")) {
+                setIsPromptingProduct(false);
+                setStatusText("Menyimpan produk...");
+              } else {
+                setStatusText("Merekam Rincian Produk/Jasa...");
+              }
             }
             if (payload.step === 7 && payload.status === "success" && failedStepRef.current === null) {
               setStatusText("Proses Otomatisasi Selesai!");
@@ -481,6 +505,48 @@ export default function AutomationPage() {
         setIsPromptingPassword(false);
         setNewPassword("");
         setConfirmPassword("");
+      });
+  };
+
+  const handleProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productName.trim()) {
+      setProductError("Jenis produk/jasa wajib diisi.");
+      return;
+    }
+    if (!productCapacity.trim() || isNaN(Number(productCapacity)) || Number(productCapacity) <= 0) {
+      setProductError("Kapasitas valid wajib diisi.");
+      return;
+    }
+    if (!productUnit) {
+      setProductError("Satuan wajib dipilih.");
+      return;
+    }
+
+    setProductError("");
+    setIsSubmittingProduct(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+
+    fetch(`${API_URL}/automation/product/${draftId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jenisProdukJasa: productName,
+        cangkupanProduk: productCoverage,
+        kapasitas: productCapacity,
+        satuan: productUnit,
+      })
+    })
+      .then(() => {
+        addLog("Rincian produk berhasil dikirim ke backend.", "success");
+      })
+      .catch((err) => console.log("Offline or connection error", err))
+      .finally(() => {
+        setIsSubmittingProduct(false);
+        setIsPromptingProduct(false);
+        setProductName("");
+        setProductCapacity("");
+        setProductUnit("");
       });
   };
 
@@ -983,6 +1049,89 @@ export default function AutomationPage() {
                         </button>
                       </form>
                     </div>
+                  ) : isPromptingProduct ? (
+                    <div className="p-8 bg-white space-y-6 animate-fadeIn text-left">
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto animate-bounce">
+                          <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                        </div>
+                        <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface text-center">Lengkapi Rincian Produk/Jasa</h3>
+                        <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed text-center">
+                          KBLI terpilih memerlukan detail rincian produk atau jasa agar pendaftaran dapat diselesaikan secara otomatis.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleProductSubmit} className="space-y-4 max-w-sm mx-auto">
+                        {/* 1. Nama/Jenis Produk */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-on-surface-variant uppercase">Jenis Produk / Jasa</label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: Furnitur Kayu, Pakaian Jadi, dll"
+                            value={productName}
+                            onChange={(e) => setProductName(e.target.value)}
+                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                            required
+                          />
+                        </div>
+
+                        {/* 2. Cangkupan Produk */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-on-surface-variant uppercase">Cangkupan Produk</label>
+                          <select
+                            value={productCoverage}
+                            onChange={(e) => setProductCoverage(e.target.value)}
+                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                          >
+                            <option value="Tidak Mengajukan Fasilitas">Tidak Mengajukan Fasilitas</option>
+                            <option value="Semua cakupan produk yang termasuk dalam KBLI ini">
+                              Semua cakupan produk yang termasuk dalam KBLI ini
+                            </option>
+                          </select>
+                        </div>
+
+                        {/* 3. Kapasitas & Satuan (Columns) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kapasitas</label>
+                            <input
+                              type="number"
+                              placeholder="100"
+                              value={productCapacity}
+                              onChange={(e) => setProductCapacity(e.target.value)}
+                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                              required
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">Satuan</label>
+                            <select
+                              value={productUnit}
+                              onChange={(e) => setProductUnit(e.target.value)}
+                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                              required
+                            >
+                              <option value="">Pilih Satuan</option>
+                              {allowedUnitsList.map((unit) => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {productError && (
+                          <p className="text-[9px] text-error font-semibold leading-normal">{productError}</p>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={isSubmittingProduct}
+                          className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all"
+                        >
+                          {isSubmittingProduct ? "Mengirim..." : "Kirim & Lanjutkan"}
+                        </button>
+                      </form>
+                    </div>
                   ) : (
                     <div className="p-8 text-center bg-white space-y-4">
                       <div className="w-14 h-14 bg-primary-container/10 text-primary-container rounded-full flex items-center justify-center mx-auto">
@@ -990,7 +1139,7 @@ export default function AutomationPage() {
                       </div>
                       <div>
                         <h4 className="text-xs font-extrabold uppercase tracking-wider text-on-surface">Proses Latar Belakang Aktif</h4>
-                        <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xs mx-auto mt-1">
+                        <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xs mx-auto mt-1 text-center">
                           NIB Assistant sedang mengisi data formulir secara otomatis di browser Chrome terenkripsi. Tolong jangan tutup halaman ini.
                         </p>
                       </div>

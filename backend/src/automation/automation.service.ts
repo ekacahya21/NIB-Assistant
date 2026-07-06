@@ -14,6 +14,7 @@ export interface AutomationEvent {
   step: number;
   status: 'info' | 'success' | 'warn' | 'error';
   text: string;
+  data?: any;
 }
 
 @Injectable()
@@ -22,6 +23,10 @@ export class AutomationService implements OnModuleDestroy {
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
   private readonly activePasswords = new Map<string, string>();
+  private readonly activeProductInputs = new Map<
+    string,
+    { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+  >();
   private readonly activeTokens = new Map<string, string>();
   private readonly subjectToDraftId = new Map<
     Subject<AutomationEvent>,
@@ -116,6 +121,14 @@ export class AutomationService implements OnModuleDestroy {
 
   submitPassword(draftId: string, password: string) {
     this.activePasswords.set(draftId, password);
+    this.userConfirmations.next(draftId);
+  }
+
+  submitProductInput(
+    draftId: string,
+    data: { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+  ) {
+    this.activeProductInputs.set(draftId, data);
     this.userConfirmations.next(draftId);
   }
 
@@ -337,6 +350,7 @@ export class AutomationService implements OnModuleDestroy {
     step: number,
     status: 'info' | 'success' | 'warn' | 'error',
     text: string,
+    data?: any,
   ) {
     const draftId = this.subjectToDraftId.get(subject) || 'unknown';
     const timers = this.executionTimers.get(draftId);
@@ -410,7 +424,7 @@ export class AutomationService implements OnModuleDestroy {
     }
 
     const richText = `${text}${timeSuffix}`;
-    subject.next({ step, status, text: richText });
+    subject.next({ step, status, text: richText, data });
 
     // Record log to session log array
     const logList = this.sessionLogs.get(draftId);
@@ -518,8 +532,6 @@ export class AutomationService implements OnModuleDestroy {
       // Step 6: Kelola detail Usaha
       activeStep = 6;
       await this.executeManageBusinessDetailSteps(page, draft, subject);
-
-      throw new Error('Error');
       // Step 7: Selesai
       activeStep = 7;
       this.logStep(
@@ -2592,126 +2604,159 @@ export class AutomationService implements OnModuleDestroy {
     }
 
     // Tambah Produk/Jasa
-    if (draft.jenisProdukJasa) {
-      // 1. Intercept the allowed units list from OSS API when the modal is opened
-      this.logStep(subject, 6, 'info', 'Membuka modal Tambah Produk/Jasa...');
-      const getSatuanPromise = page.waitForResponse(
-        (response: any) =>
-          response.url().includes('/getSatuanProduk/') &&
-          response.status() === 200,
-        { timeout: 15000 }
-      ).catch(() => null);
+    const draftId = draft.id;
+    this.logStep(subject, 6, 'info', 'Membuka modal Tambah Produk/Jasa...');
+    const getSatuanPromise = page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/getSatuanProduk/') &&
+        response.status() === 200,
+      { timeout: 15000 }
+    ).catch(() => null);
 
-      await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
-      const getSatuanResponse = await getSatuanPromise;
+    await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
+    const getSatuanResponse = await getSatuanPromise;
 
-      let allowedUnits: string[] = [];
-      if (getSatuanResponse) {
-        try {
-          const json = await getSatuanResponse.json();
-          if (json && Array.isArray(json.data)) {
-            allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
-            this.logStep(subject, 6, 'info', `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`);
-          }
-        } catch (e) {
-          console.error("Gagal mengurai response getSatuanProduk:", e);
+    let allowedUnits: string[] = [];
+    if (getSatuanResponse) {
+      try {
+        const json = await getSatuanResponse.json();
+        if (json && Array.isArray(json.data)) {
+          allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
+          this.logStep(subject, 6, 'info', `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`);
         }
+      } catch (e) {
+        console.error("Gagal mengurai response getSatuanProduk:", e);
       }
-      await page.waitForTimeout(1000);
+    }
+    await page.waitForTimeout(1000);
 
-      // 2. Fill Jenis Produk/Jasa
-      this.logStep(subject, 6, 'info', `Mengisi Jenis Produk/Jasa: ${draft.jenisProdukJasa}`);
-      const productTypeCombobox = page.getByTestId('product-service-card-product-type').locator('input').first();
-      await productTypeCombobox.click();
-      await productTypeCombobox.fill(draft.jenisProdukJasa);
-      await page.waitForTimeout(500);
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(1000);
+    // Check if we already have the product info in the draft (e.g. from previous runs)
+    let productInfo = {
+      jenisProdukJasa: draft.jenisProdukJasa,
+      cangkupanProduk: draft.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
+      kapasitas: draft.kapasitas,
+      satuan: draft.satuan,
+    };
 
-      // 3. Fill Cangkupan Produk
-      const coverageVal = draft.cangkupanProduk || 'Tidak Mengajukan Fasilitas';
-      this.logStep(subject, 6, 'info', `Mengisi Cangkupan Produk: ${coverageVal}`);
-      const coverageCombobox = page.locator('input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]');
-      if (await coverageCombobox.isVisible()) {
-        await coverageCombobox.click();
-        await coverageCombobox.fill(coverageVal);
-        await page.waitForTimeout(500);
+    if (!productInfo.jenisProdukJasa || !productInfo.kapasitas || !productInfo.satuan) {
+      // Prompt the user since it is missing!
+      this.logStep(subject, 6, 'warn', 'MENGISI_RINCIAN_PRODUK', { allowedUnits });
 
-        const option = page.getByRole('option', { name: coverageVal }).first();
-        const textOption = page.getByText(coverageVal, { exact: false }).first();
-        
-        if (await option.isVisible()) {
-          await option.click();
-        } else if (await textOption.isVisible()) {
-          await textOption.click();
-        } else {
-          // Fallback to 'Tidak Mengajukan Fasilitas' if no match
-          this.logStep(subject, 6, 'info', `Cangkupan "${coverageVal}" tidak cocok. Memilih "Tidak Mengajukan Fasilitas"...`);
-          await coverageCombobox.fill('Tidak Mengajukan Fasilitas');
-          await page.waitForTimeout(500);
-          
-          const fallbackOption = page.getByText('Tidak Mengajukan Fasilitas', { exact: false }).first();
-          if (await fallbackOption.isVisible()) {
-            await fallbackOption.click();
-          } else {
-            await page.keyboard.press('Enter');
-          }
+      // Wait up to 120 seconds for user response
+      let userInput: any = null;
+      const startTime = Date.now();
+      while (Date.now() - startTime < 120000) {
+        if (this.activeProductInputs.has(draftId)) {
+          userInput = this.activeProductInputs.get(draftId);
+          this.activeProductInputs.delete(draftId);
+          break;
         }
-        await page.waitForTimeout(1000);
-      }
-
-      // 4. Fill Kapasitas
-      if (draft.kapasitas) {
-        this.logStep(subject, 6, 'info', `Mengisi Kapasitas: ${draft.kapasitas}`);
-        const capacityInput = page.getByTestId('product-service-card-capacity').locator('input');
-        await capacityInput.fill(draft.kapasitas);
         await page.waitForTimeout(500);
       }
 
-      // 5. Fill Satuan (dynamically matched/corrected against allowed units from OSS)
-      let unitToFill = draft.satuan || 'Unit';
-      if (allowedUnits.length > 0) {
-        const matched = allowedUnits.find(u => u.toLowerCase() === unitToFill.toLowerCase());
-        if (matched) {
-          unitToFill = matched;
-        } else {
-          unitToFill = allowedUnits[0]; // Fallback to first permitted unit
-          this.logStep(subject, 6, 'info', `Satuan "${draft.satuan}" tidak diizinkan untuk KBLI ini. Menggunakan "${unitToFill}"...`);
-        }
+      if (!userInput) {
+        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian rincian produk habis.');
+        throw new Error('Batas waktu pengisian rincian produk habis.');
       }
 
-      this.logStep(subject, 6, 'info', `Mengisi Satuan: ${unitToFill}`);
-      const unitCombobox = page.getByTestId('product-service-card-unit').locator('input');
-      await unitCombobox.click();
-      await unitCombobox.fill(unitToFill);
+      productInfo = {
+        jenisProdukJasa: userInput.jenisProdukJasa,
+        cangkupanProduk: userInput.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
+        kapasitas: userInput.kapasitas,
+        satuan: userInput.satuan,
+      };
+
+      // Also save to database so next time it is cached/persisted
+      try {
+        await this.draftsService.update(draftId, {
+          jenisProdukJasa: productInfo.jenisProdukJasa,
+          cangkupanProduk: productInfo.cangkupanProduk,
+          kapasitas: productInfo.kapasitas,
+          satuan: productInfo.satuan,
+        });
+      } catch (dbErr) {
+        console.error("Gagal menyimpan rincian produk ke DB:", dbErr);
+      }
+    }
+
+    // Now fill the modal with productInfo!
+    this.logStep(subject, 6, 'info', `Mengisi Jenis Produk/Jasa: ${productInfo.jenisProdukJasa}`);
+    const productTypeCombobox = page.getByTestId('product-service-card-product-type').locator('input').first();
+    await productTypeCombobox.click();
+    await productTypeCombobox.fill(productInfo.jenisProdukJasa);
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(1000);
+
+    const coverageCombobox = page.locator('input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]');
+    if (await coverageCombobox.isVisible()) {
+      this.logStep(subject, 6, 'info', `Mengisi Cangkupan Produk: ${productInfo.cangkupanProduk}`);
+      await coverageCombobox.click();
+      await coverageCombobox.fill(productInfo.cangkupanProduk);
       await page.waitForTimeout(500);
 
-      const unitOption = page.getByRole('option', { name: unitToFill }).first();
-      const unitTextOption = page.getByText(unitToFill, { exact: false }).first();
-      if (await unitOption.isVisible()) {
-        await unitOption.click();
-      } else if (await unitTextOption.isVisible()) {
-        await unitTextOption.click();
+      const option = page.getByRole('option', { name: productInfo.cangkupanProduk }).first();
+      const textOption = page.getByText(productInfo.cangkupanProduk, { exact: false }).first();
+      if (await option.isVisible()) {
+        await option.click();
+      } else if (await textOption.isVisible()) {
+        await textOption.click();
       } else {
         await page.keyboard.press('Enter');
       }
       await page.waitForTimeout(1000);
-
-      // 6. Save Product/Service
-      this.logStep(subject, 6, 'info', 'Menyimpan data Produk/Jasa...');
-      await page.getByRole('button', { name: 'Simpan', exact: true }).click();
-      await page.waitForTimeout(2000);
-
-      // wait for getTableKBLIdanProduk
-      await page.waitForResponse(
-        (response: any) =>
-          response.url().includes('getTableKBLIdanProduk') &&
-          response.status() === 200,
-        { timeout: 15000 }
-      ).catch(() => null);
-
-      await page.getByRole('button', { name: 'Selanjutnya' }).click();
     }
+
+    this.logStep(subject, 6, 'info', `Mengisi Kapasitas: ${productInfo.kapasitas}`);
+    const capacityInput = page.getByTestId('product-service-card-capacity').locator('input');
+    await capacityInput.fill(productInfo.kapasitas);
+    await page.waitForTimeout(500);
+
+    // Resolve satuan value
+    let unitToFill = productInfo.satuan;
+    if (allowedUnits.length > 0) {
+      const matched = allowedUnits.find(u => u.toLowerCase() === unitToFill.toLowerCase());
+      if (matched) {
+        unitToFill = matched;
+      } else {
+        unitToFill = allowedUnits[0];
+        this.logStep(subject, 6, 'info', `Satuan "${productInfo.satuan}" tidak diizinkan. Menggunakan "${unitToFill}"...`);
+      }
+    }
+
+    this.logStep(subject, 6, 'info', `Mengisi Satuan: ${unitToFill}`);
+    const unitCombobox = page.getByTestId('product-service-card-unit').locator('input');
+    await unitCombobox.click();
+    await unitCombobox.fill(unitToFill);
+    await page.waitForTimeout(500);
+
+    const unitOption = page.getByRole('option', { name: unitToFill }).first();
+    const unitTextOption = page.getByText(unitToFill, { exact: false }).first();
+    if (await unitOption.isVisible()) {
+      await unitOption.click();
+    } else if (await unitTextOption.isVisible()) {
+      await unitTextOption.click();
+    } else {
+      await page.keyboard.press('Enter');
+    }
+    await page.waitForTimeout(1000);
+
+    // Save Product/Service
+    this.logStep(subject, 6, 'info', 'Menyimpan data Produk/Jasa...');
+    await page.getByRole('button', { name: 'Simpan', exact: true }).click();
+    await page.waitForTimeout(2000);
+
+    // Wait for getTableKBLIdanProduk response
+    await page.waitForResponse(
+      (response: any) =>
+        response.url().includes('getTableKBLIdanProduk') &&
+        response.status() === 200,
+      { timeout: 15000 }
+    ).catch(() => null);
+
+    await page.getByRole('button', { name: 'Selanjutnya' }).click();
+
+    await page.waitForTimeout(3000);
     
   }
 
