@@ -42,6 +42,10 @@ export class DraftData {
   sudahBerjalan?: string;
   tanggalMulaiUsaha?: string;
   tanggalMulaiOperasional?: string;
+  jenisProdukJasa?: string;
+  cangkupanProduk?: string;
+  kapasitas?: string;
+  satuan?: string;
 }
 
 @Injectable()
@@ -100,6 +104,10 @@ export class DraftsService {
         sudahBerjalan: data.sudahBerjalan,
         tanggalMulaiUsaha: data.tanggalMulaiUsaha,
         tanggalMulaiOperasional: data.tanggalMulaiOperasional,
+        jenisProdukJasa: data.jenisProdukJasa,
+        cangkupanProduk: data.cangkupanProduk,
+        kapasitas: data.kapasitas,
+        satuan: data.satuan,
         updatedAt: new Date(),
       },
     });
@@ -159,6 +167,10 @@ export class DraftsService {
         sudahBerjalan: data.sudahBerjalan,
         tanggalMulaiUsaha: data.tanggalMulaiUsaha,
         tanggalMulaiOperasional: data.tanggalMulaiOperasional,
+        jenisProdukJasa: data.jenisProdukJasa,
+        cangkupanProduk: data.cangkupanProduk,
+        kapasitas: data.kapasitas,
+        satuan: data.satuan,
         updatedAt: new Date(),
       },
     });

@@ -52,7 +52,11 @@ export default function ReviewPage() {
     modalKerja: "0",
     sudahBerjalan: "belum",
     tanggalMulaiUsaha: "",
-    tanggalMulaiOperasional: ""
+    tanggalMulaiOperasional: "",
+    jenisProdukJasa: "",
+    cangkupanProduk: "",
+    kapasitas: "0",
+    satuan: ""
   });
 
   const [downloadingNps, setDownloadingNps] = useState(false);
@@ -223,6 +227,10 @@ export default function ReviewPage() {
         sudahBerjalan: formData.sudahBerjalan,
         tanggalMulaiUsaha: formData.tanggalMulaiUsaha,
         tanggalMulaiOperasional: formData.tanggalMulaiOperasional,
+        jenisProdukJasa: formData.jenisProdukJasa,
+        cangkupanProduk: formData.cangkupanProduk,
+        kapasitas: formData.kapasitas,
+        satuan: formData.satuan,
         sessionId: getSessionId(),
       };
 
@@ -472,6 +480,24 @@ export default function ReviewPage() {
                     Rp {formData.modalKerja ? parseInt(formData.modalKerja).toLocaleString("id-ID") : "0"}
                   </span>
                 </div>
+                {formData.jenisProdukJasa && (
+                  <>
+                    <div>
+                      <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Jenis Produk/Jasa</span>
+                      <span className="block font-bold text-on-surface mt-0.5">{formData.jenisProdukJasa}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Cangkupan Produk</span>
+                      <span className="block font-bold text-on-surface mt-0.5">{formData.cangkupanProduk || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Kapasitas Produksi</span>
+                      <span className="block font-bold text-on-surface mt-0.5">
+                        {formData.kapasitas ? parseInt(formData.kapasitas).toLocaleString("id-ID") : "0"} {formData.satuan || "Unit"} / tahun
+                      </span>
+                    </div>
+                  </>
+                )}
                 {formData.sudahBerjalan === "sudah" && (
                   <>
                     <div>

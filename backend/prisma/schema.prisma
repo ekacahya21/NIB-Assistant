@@ -48,6 +48,10 @@ model Draft {
   sudahBerjalan           String?  @map("sudah_berjalan")
   tanggalMulaiUsaha       String?  @map("tanggal_mulai_usaha")
   tanggalMulaiOperasional String?  @map("tanggal_mulai_operasional")
+  jenisProdukJasa         String?  @map("jenis_produk_jasa")
+  cangkupanProduk         String?  @map("cangkupan_produk")
+  kapasitas               String?  @map("kapasitas")
+  satuan                  String?  @map("satuan")
   updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("drafts")

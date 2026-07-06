@@ -2592,7 +2592,126 @@ export class AutomationService implements OnModuleDestroy {
     }
 
     // Tambah Produk/Jasa
-    await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
+    if (draft.jenisProdukJasa) {
+      // 1. Intercept the allowed units list from OSS API when the modal is opened
+      this.logStep(subject, 6, 'info', 'Membuka modal Tambah Produk/Jasa...');
+      const getSatuanPromise = page.waitForResponse(
+        (response: any) =>
+          response.url().includes('/getSatuanProduk/') &&
+          response.status() === 200,
+        { timeout: 15000 }
+      ).catch(() => null);
+
+      await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
+      const getSatuanResponse = await getSatuanPromise;
+
+      let allowedUnits: string[] = [];
+      if (getSatuanResponse) {
+        try {
+          const json = await getSatuanResponse.json();
+          if (json && Array.isArray(json.data)) {
+            allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
+            this.logStep(subject, 6, 'info', `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`);
+          }
+        } catch (e) {
+          console.error("Gagal mengurai response getSatuanProduk:", e);
+        }
+      }
+      await page.waitForTimeout(1000);
+
+      // 2. Fill Jenis Produk/Jasa
+      this.logStep(subject, 6, 'info', `Mengisi Jenis Produk/Jasa: ${draft.jenisProdukJasa}`);
+      const productTypeCombobox = page.getByTestId('product-service-card-product-type').locator('input').first();
+      await productTypeCombobox.click();
+      await productTypeCombobox.fill(draft.jenisProdukJasa);
+      await page.waitForTimeout(500);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
+
+      // 3. Fill Cangkupan Produk
+      const coverageVal = draft.cangkupanProduk || 'Tidak Mengajukan Fasilitas';
+      this.logStep(subject, 6, 'info', `Mengisi Cangkupan Produk: ${coverageVal}`);
+      const coverageCombobox = page.locator('input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]');
+      if (await coverageCombobox.isVisible()) {
+        await coverageCombobox.click();
+        await coverageCombobox.fill(coverageVal);
+        await page.waitForTimeout(500);
+
+        const option = page.getByRole('option', { name: coverageVal }).first();
+        const textOption = page.getByText(coverageVal, { exact: false }).first();
+        
+        if (await option.isVisible()) {
+          await option.click();
+        } else if (await textOption.isVisible()) {
+          await textOption.click();
+        } else {
+          // Fallback to 'Tidak Mengajukan Fasilitas' if no match
+          this.logStep(subject, 6, 'info', `Cangkupan "${coverageVal}" tidak cocok. Memilih "Tidak Mengajukan Fasilitas"...`);
+          await coverageCombobox.fill('Tidak Mengajukan Fasilitas');
+          await page.waitForTimeout(500);
+          
+          const fallbackOption = page.getByText('Tidak Mengajukan Fasilitas', { exact: false }).first();
+          if (await fallbackOption.isVisible()) {
+            await fallbackOption.click();
+          } else {
+            await page.keyboard.press('Enter');
+          }
+        }
+        await page.waitForTimeout(1000);
+      }
+
+      // 4. Fill Kapasitas
+      if (draft.kapasitas) {
+        this.logStep(subject, 6, 'info', `Mengisi Kapasitas: ${draft.kapasitas}`);
+        const capacityInput = page.getByTestId('product-service-card-capacity').locator('input');
+        await capacityInput.fill(draft.kapasitas);
+        await page.waitForTimeout(500);
+      }
+
+      // 5. Fill Satuan (dynamically matched/corrected against allowed units from OSS)
+      let unitToFill = draft.satuan || 'Unit';
+      if (allowedUnits.length > 0) {
+        const matched = allowedUnits.find(u => u.toLowerCase() === unitToFill.toLowerCase());
+        if (matched) {
+          unitToFill = matched;
+        } else {
+          unitToFill = allowedUnits[0]; // Fallback to first permitted unit
+          this.logStep(subject, 6, 'info', `Satuan "${draft.satuan}" tidak diizinkan untuk KBLI ini. Menggunakan "${unitToFill}"...`);
+        }
+      }
+
+      this.logStep(subject, 6, 'info', `Mengisi Satuan: ${unitToFill}`);
+      const unitCombobox = page.getByTestId('product-service-card-unit').locator('input');
+      await unitCombobox.click();
+      await unitCombobox.fill(unitToFill);
+      await page.waitForTimeout(500);
+
+      const unitOption = page.getByRole('option', { name: unitToFill }).first();
+      const unitTextOption = page.getByText(unitToFill, { exact: false }).first();
+      if (await unitOption.isVisible()) {
+        await unitOption.click();
+      } else if (await unitTextOption.isVisible()) {
+        await unitTextOption.click();
+      } else {
+        await page.keyboard.press('Enter');
+      }
+      await page.waitForTimeout(1000);
+
+      // 6. Save Product/Service
+      this.logStep(subject, 6, 'info', 'Menyimpan data Produk/Jasa...');
+      await page.getByRole('button', { name: 'Simpan', exact: true }).click();
+      await page.waitForTimeout(2000);
+
+      // wait for getTableKBLIdanProduk
+      await page.waitForResponse(
+        (response: any) =>
+          response.url().includes('getTableKBLIdanProduk') &&
+          response.status() === 200,
+        { timeout: 15000 }
+      ).catch(() => null);
+
+      await page.getByRole('button', { name: 'Selanjutnya' }).click();
+    }
     
   }
 
