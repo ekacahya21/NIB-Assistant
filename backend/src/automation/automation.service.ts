@@ -2536,15 +2536,22 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(500);
     }
 
+    // Input investasi
+    const investasiLainVal = draft.modalUsaha || '0';
+    this.logStep(subject, 6, 'info', `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString('id-ID')}`);
+    const investasiLainInput = page.getByTestId('input-investasi-lain').locator('input');
+    if (await investasiLainInput.isVisible()) {
+      await investasiLainInput.fill(investasiLainVal);
+      await page.waitForTimeout(500);
+    }
+
     // Modal Kerja 3 Bulan
     const modalKerjaVal = draft.modalKerja || '0';
     this.logStep(subject, 6, 'info', `Mengisi modal kerja 3 bulan: Rp ${parseInt(modalKerjaVal).toLocaleString('id-ID')}`);
-    const workingCapitalInput = page.getByText('Modal Kerja 3 Bulan').locator('input').first();
+    const workingCapitalInput = page.getByTestId('input-modal-kerja').locator('input');
     if (await workingCapitalInput.isVisible()) {
       await workingCapitalInput.fill(modalKerjaVal);
       await page.waitForTimeout(500);
-    } else {
-      await page.getByRole('textbox', { name: /Modal Kerja/i }).fill(modalKerjaVal).catch(() => {});
     }
 
     // Sumber Pembiayaan
@@ -2565,6 +2572,28 @@ export class AutomationService implements OnModuleDestroy {
       await salesInput.fill(omzetVal);
       await page.waitForTimeout(500);
     }
+    
+    // Hasil Penjualan Tahunan
+    const maleLaborVal = draft.jumlahPekerjaLakiLaki || '0';
+    this.logStep(subject, 6, 'info', `Mengisi pekerja laki laki: ${maleLaborVal}`);
+    const maleLaborInput = page.getByTestId('laborcard-labor-male').locator('input').first();
+    if (await maleLaborInput.isVisible()) {
+      await maleLaborInput.fill(maleLaborVal);
+      await page.waitForTimeout(500);
+    }
+    
+    // Hasil Penjualan Tahunan
+    const femaleLaborVal = draft.jumlahPekerjaPerempuan || '0';
+    this.logStep(subject, 6, 'info', `Mengisi pekerja perempuan: ${femaleLaborVal}`);
+    const femaleLaborInput = page.getByTestId('laborcard-labor-female').locator('input').first();
+    if (await femaleLaborInput.isVisible()) {
+      await femaleLaborInput.fill(femaleLaborVal);
+      await page.waitForTimeout(500);
+    }
+
+    // Tambah Produk/Jasa
+    await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
+    
   }
 
   private formatToDDMMYYYY(dateStr?: string): string {
