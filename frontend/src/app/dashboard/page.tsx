@@ -20,6 +20,8 @@ interface DraftItem {
   alamatUsaha?: string;
   modalUsaha?: string;
   jumlahPekerja?: string;
+  jumlahPekerjaLakiLaki?: string;
+  jumlahPekerjaPerempuan?: string;
   tanggalLahir?: string;
   jenisKelamin?: string;
   alamatKtp?: string;
@@ -178,8 +180,8 @@ export default function DashboardPage() {
         ceritaUsaha: draft.ceritaUsaha || "",
         modalUsaha: draft.modalUsaha || "",
         luasTanah: draft.luasTanah || "",
-        jumlahPekerjaLakiLaki: draft.jumlahPekerja || "0",
-        jumlahPekerjaPerempuan: "0",
+        jumlahPekerjaLakiLaki: draft.jumlahPekerjaLakiLaki || "0",
+        jumlahPekerjaPerempuan: draft.jumlahPekerjaPerempuan || "0",
         jumlahPekerja: draft.jumlahPekerja || "0",
         sumberPembiayaan: draft.sumberPembiayaan || "modal_sendiri",
         omzetTahunan: draft.omzetTahunan || "0",

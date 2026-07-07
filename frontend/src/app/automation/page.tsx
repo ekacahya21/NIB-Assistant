@@ -41,6 +41,19 @@ export default function AutomationPage() {
   const [isSubmittingProduct, setIsSubmittingProduct] = useState<boolean>(false);
   const [productError, setProductError] = useState<string>("");
 
+  // Parameter & Risk States
+  const [isPromptingParameter, setIsPromptingParameter] = useState<boolean>(false);
+  const [riskData, setRiskData] = useState<{
+    tingkatRisiko: string;
+    skalaUsaha: string;
+    jenisPerizinan: string;
+    perizinanTunggal: boolean;
+  } | null>(null);
+  const [parameterOptions, setParameterOptions] = useState<string[]>([]);
+  const [selectedParameter, setSelectedParameter] = useState<string>("");
+  const [isSubmittingParameter, setIsSubmittingParameter] = useState<boolean>(false);
+  const [parameterError, setParameterError] = useState<string>("");
+
   const [userContact, setUserContact] = useState<{ nomorHp: string; email: string }>({ nomorHp: "", email: "" });
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
   const otpRefs = useRef<HTMLInputElement[]>([]);
@@ -168,7 +181,7 @@ export default function AutomationPage() {
 
   useEffect(() => {
     let timerId: any;
-    if (isPromptingOtp || isPromptingPassword || isPromptingProduct) {
+    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter) {
       setTimeLeft(120);
       timerId = setInterval(() => {
         setTimeLeft((prev) => {
@@ -186,7 +199,7 @@ export default function AutomationPage() {
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct]);
+  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter]);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -296,9 +309,26 @@ export default function AutomationPage() {
                 setAllowedUnitsList(payload.data?.allowedUnits || ["Unit", "Kg", "Pcs"]);
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
+                setIsPromptingParameter(false);
+              } else if (payload.text.includes("MENGISI_PARAMETER_RISIKO")) {
+                setStatusText("Menunggu Anda melengkapi parameter risiko...");
+                setIsPromptingParameter(true);
+                setRiskData({
+                  tingkatRisiko: payload.data?.tingkatRisiko || "Rendah",
+                  skalaUsaha: payload.data?.skalaUsaha || "Mikro",
+                  jenisPerizinan: payload.data?.jenisPerizinan || "NIB",
+                  perizinanTunggal: !!payload.data?.perizinanTunggal
+                });
+                setParameterOptions(payload.data?.parameterOptions || []);
+                setIsPromptingProduct(false);
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
               } else if (payload.text.includes("Menyimpan data Produk/Jasa")) {
                 setIsPromptingProduct(false);
                 setStatusText("Menyimpan produk...");
+              } else if (payload.text.includes("Menyimpan analisis Risiko")) {
+                setIsPromptingParameter(false);
+                setStatusText("Menyimpan parameter...");
               } else {
                 setStatusText("Merekam Rincian Produk/Jasa...");
               }
@@ -547,6 +577,33 @@ export default function AutomationPage() {
         setProductName("");
         setProductCapacity("");
         setProductUnit("");
+      });
+  };
+
+  const handleParameterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedParameter) {
+      setParameterError("Parameter wajib dipilih.");
+      return;
+    }
+
+    setParameterError("");
+    setIsSubmittingParameter(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+
+    fetch(`${API_URL}/automation/parameter/${draftId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parameter: selectedParameter })
+    })
+      .then(() => {
+        addLog("Parameter kewenangan berhasil dikirim ke backend.", "success");
+      })
+      .catch((err) => console.log("Offline or connection error", err))
+      .finally(() => {
+        setIsSubmittingParameter(false);
+        setIsPromptingParameter(false);
+        setSelectedParameter("");
       });
   };
 
@@ -1129,6 +1186,83 @@ export default function AutomationPage() {
                           className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all"
                         >
                           {isSubmittingProduct ? "Mengirim..." : "Kirim & Lanjutkan"}
+                        </button>
+                      </form>
+                    </div>
+                  ) : isPromptingParameter ? (
+                    <div className="p-6 bg-white space-y-5 animate-fadeIn text-left">
+                      <div className="text-center space-y-1">
+                        <div className="w-10 h-10 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto animate-bounce">
+                          <span className="material-symbols-outlined text-xl">gavel</span>
+                        </div>
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface text-center">Hasil Validasi Risiko</h3>
+                        <p className="text-[10px] text-on-surface-variant max-w-xs mx-auto leading-relaxed text-center">
+                          Hasil analisis risiko usaha berdasarkan KBLI dan parameter kegiatan usaha.
+                        </p>
+                      </div>
+
+                      {/* Risk Validation Cards */}
+                      {riskData && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="p-2.5 rounded border border-emerald-500 bg-emerald-50/20 text-center">
+                              <span className="material-symbols-outlined text-emerald-600 text-sm block mb-1">speed</span>
+                              <div className="text-[8px] font-bold text-on-surface-variant uppercase leading-none">Tingkat Risiko</div>
+                              <div className="text-[11px] font-extrabold text-emerald-800 mt-1">{riskData.tingkatRisiko}</div>
+                            </div>
+                            <div className="p-2.5 rounded border border-emerald-500 bg-emerald-50/20 text-center">
+                              <span className="material-symbols-outlined text-emerald-600 text-sm block mb-1">scale</span>
+                              <div className="text-[8px] font-bold text-on-surface-variant uppercase leading-none">Skala Usaha</div>
+                              <div className="text-[11px] font-extrabold text-emerald-800 mt-1">{riskData.skalaUsaha}</div>
+                            </div>
+                            <div className="p-2.5 rounded border border-emerald-500 bg-emerald-50/20 text-center">
+                              <span className="material-symbols-outlined text-emerald-600 text-sm block mb-1">description</span>
+                              <div className="text-[8px] font-bold text-on-surface-variant uppercase leading-none">Jenis Perizinan</div>
+                              <div className="text-[11px] font-extrabold text-emerald-800 mt-1">{riskData.jenisPerizinan}</div>
+                            </div>
+                          </div>
+
+                          {/* Perizinan Tunggal Alert Box */}
+                          {riskData.perizinanTunggal && (
+                            <div className="p-3 rounded border border-sky-200 bg-sky-50/50 flex gap-2.5 items-start">
+                              <span className="material-symbols-outlined text-sky-600 text-base mt-0.5">info</span>
+                              <div className="space-y-0.5">
+                                <div className="text-[10px] font-extrabold text-sky-950 leading-tight">Kegiatan Usaha Memerlukan Perizinan Tunggal</div>
+                                <div className="text-[9px] text-sky-700 leading-normal">
+                                  Berdasarkan Produk/Jasa dan Skala Usaha, kegiatan usaha ini perlu memproses Perizinan Tunggal setelah NIB Terbit.
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <form onSubmit={handleParameterSubmit} className="space-y-4 max-w-sm mx-auto">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-on-surface-variant uppercase">Parameter</label>
+                          <select
+                            value={selectedParameter}
+                            onChange={(e) => setSelectedParameter(e.target.value)}
+                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                            required
+                          >
+                            <option value="">Pilih Parameter Kewenangan</option>
+                            {parameterOptions.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {parameterError && (
+                          <p className="text-[9px] text-error font-semibold leading-normal">{parameterError}</p>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={isSubmittingParameter}
+                          className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all"
+                        >
+                          {isSubmittingParameter ? "Mengirim..." : "Kirim & Lanjutkan"}
                         </button>
                       </form>
                     </div>

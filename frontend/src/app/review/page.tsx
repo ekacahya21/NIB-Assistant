@@ -217,6 +217,8 @@ export default function ReviewPage() {
         ceritaUsaha: formData.ceritaUsaha,
         modalUsaha: formData.modalUsaha,
         jumlahPekerja: formData.jumlahPekerja,
+        jumlahPekerjaLakiLaki: formData.jumlahPekerjaLakiLaki || "0",
+        jumlahPekerjaPerempuan: formData.jumlahPekerjaPerempuan || "0",
         kbliCode: selectedKbli.code,
         kbliTitle: selectedKbli.title,
         luasTanah: formData.luasTanah || "0",

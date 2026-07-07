@@ -24,6 +24,8 @@ export class DraftData {
   ceritaUsaha!: string;
   modalUsaha!: string;
   jumlahPekerja!: string;
+  jumlahPekerjaLakiLaki?: string;
+  jumlahPekerjaPerempuan?: string;
   kbliCode?: string;
   kbliTitle?: string;
   jenisKelamin?: string;
@@ -87,6 +89,8 @@ export class DraftsService {
         ceritaUsaha: data.ceritaUsaha,
         modalUsaha: data.modalUsaha,
         jumlahPekerja: data.jumlahPekerja,
+        jumlahPekerjaLakiLaki: data.jumlahPekerjaLakiLaki,
+        jumlahPekerjaPerempuan: data.jumlahPekerjaPerempuan,
         kbliCode: data.kbliCode,
         kbliTitle: data.kbliTitle,
         jenisKelamin: data.jenisKelamin,
@@ -150,6 +154,8 @@ export class DraftsService {
         ceritaUsaha: data.ceritaUsaha,
         modalUsaha: data.modalUsaha,
         jumlahPekerja: data.jumlahPekerja,
+        jumlahPekerjaLakiLaki: data.jumlahPekerjaLakiLaki,
+        jumlahPekerjaPerempuan: data.jumlahPekerjaPerempuan,
         kbliCode: data.kbliCode,
         kbliTitle: data.kbliTitle,
         jenisKelamin: data.jenisKelamin,

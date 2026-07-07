@@ -30,6 +30,8 @@ model Draft {
   ceritaUsaha       String   @map("cerita_usaha")
   modalUsaha        String   @map("modal_usaha")
   jumlahPekerja     String   @map("jumlah_pekerja")
+  jumlahPekerjaLakiLaki  String?  @map("jumlah_pekerja_laki_laki")
+  jumlahPekerjaPerempuan String?  @map("jumlah_pekerja_perempuan")
   kbliCode          String?  @map("kbli_code")
   kbliTitle         String?  @map("kbli_title")
   jenisKelamin      String?  @map("jenis_kelamin")

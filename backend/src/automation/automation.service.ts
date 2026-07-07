@@ -27,6 +27,7 @@ export class AutomationService implements OnModuleDestroy {
     string,
     { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
   >();
+  private readonly activeParameterInputs = new Map<string, string>();
   private readonly activeTokens = new Map<string, string>();
   private readonly subjectToDraftId = new Map<
     Subject<AutomationEvent>,
@@ -129,6 +130,11 @@ export class AutomationService implements OnModuleDestroy {
     data: { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
   ) {
     this.activeProductInputs.set(draftId, data);
+    this.userConfirmations.next(draftId);
+  }
+
+  submitParameterInput(draftId: string, parameter: string) {
+    this.activeParameterInputs.set(draftId, parameter);
     this.userConfirmations.next(draftId);
   }
 
@@ -2522,30 +2528,81 @@ export class AutomationService implements OnModuleDestroy {
       if (draft.tanggalMulaiUsaha) {
         const tglMulai = this.formatToDDMMYYYY(draft.tanggalMulaiUsaha);
         this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${tglMulai}`);
-        const dateInputTglMulai = page.getByTestId('date-time-picker-tgl-berjalan').locator('input');
         
-        await dateInputTglMulai.evaluate((el: any, val: string) => {
-          el.value = val;
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }, tglMulai);
+        const container = page.getByTestId('date-time-picker-tgl-berjalan').filter({ visible: true }).first();
+        const dateInputTglMulai = container.locator('input').first();
         
-        await page.waitForTimeout(500);
+        // Click the .v-field element inside the container to open picker
+        const fieldMulai = container.locator('.v-field').first();
+        if (await fieldMulai.isVisible()) {
+          this.logStep(subject, 6, 'info', `Mengklik v-field wrapper datepicker...`);
+          await fieldMulai.click({ force: true });
+        } else {
+          // Fallback to icons
+          const icon = container.locator('.v-input__append-inner, .v-icon, i, svg').first();
+          if (await icon.isVisible()) {
+            this.logStep(subject, 6, 'info', `Mengklik ikon calendar datepicker...`);
+            await icon.click({ force: true }).catch(() => {});
+          } else {
+            this.logStep(subject, 6, 'info', `Mengklik wrapper/container datepicker...`);
+            await container.locator('div[name="date"]').first().click({ force: true }).catch(() => {});
+            await container.click({ force: true }).catch(() => {});
+          }
+          await dateInputTglMulai.click({ force: true }).catch(() => {});
+        }
+        await page.waitForTimeout(1000);
+        
+        const dayButton = page.locator('.v-date-picker-table--date button, button').filter({ hasText: /^\s*1\s*$/ }).first();
+        if (await dayButton.isVisible()) {
+          this.logStep(subject, 6, 'info', `Mengklik tombol tanggal 1...`);
+          await dayButton.click();
+        } else {
+          this.logStep(subject, 6, 'info', `Tombol tanggal 1 tidak visible, mencoba paksa klik...`);
+          await dayButton.click({ force: true });
+        }
+        await page.waitForTimeout(800);
       }
     }
 
     if (draft.tanggalMulaiOperasional) {
       const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
       this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
-      const dateInputTglOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').locator('input');
       
-      await dateInputTglOp.evaluate((el: any, val: string) => {
-        el.value = val;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, tglOp);
+      const containerOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').filter({ visible: true }).first();
+      const dateInputTglOp = containerOp.locator('input').first();
       
-      await page.waitForTimeout(500);
+      // Click the .v-field element inside containerOp to open month picker
+      const fieldOp = containerOp.locator('.v-field').first();
+      if (await fieldOp.isVisible()) {
+        this.logStep(subject, 6, 'info', `Mengklik v-field wrapper perkiraan operasional...`);
+        await fieldOp.click({ force: true });
+      } else {
+        // Fallback to icons
+        const iconOp = containerOp.locator('.v-input__append-inner, .v-icon, i, svg').first();
+        if (await iconOp.isVisible()) {
+          this.logStep(subject, 6, 'info', `Mengklik ikon calendar perkiraan operasional...`);
+          await iconOp.click({ force: true }).catch(() => {});
+        } else {
+          this.logStep(subject, 6, 'info', `Mengklik wrapper/container perkiraan operasional...`);
+          await containerOp.locator('div[name="date"]').first().click({ force: true }).catch(() => {});
+          await containerOp.click({ force: true }).catch(() => {});
+        }
+        await dateInputTglOp.click({ force: true }).catch(() => {});
+      }
+      await page.waitForTimeout(1000);
+      
+      const dateObj = new Date(draft.tanggalMulaiOperasional);
+      const monthIndex = dateObj.getMonth(); // 0 = Jan, 1 = Feb, etc.
+      
+      const monthButtons = page.locator('.v-date-picker-table--month button, .v-date-picker-months button, .v-date-picker-months .v-btn');
+      this.logStep(subject, 6, 'info', `Mengklik tombol bulan ke-${monthIndex + 1} (index ${monthIndex})...`);
+      
+      if (await monthButtons.nth(monthIndex).isVisible()) {
+        await monthButtons.nth(monthIndex).click();
+      } else {
+        await monthButtons.nth(monthIndex).click({ force: true }).catch(() => {});
+      }
+      await page.waitForTimeout(800);
     }
 
     // Input investasi
@@ -2585,8 +2642,19 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(500);
     }
     
-    // Hasil Penjualan Tahunan
-    const maleLaborVal = draft.jumlahPekerjaLakiLaki || '0';
+    // Jumlah pekerja laki-laki & perempuan
+    let maleLaborVal = draft.jumlahPekerjaLakiLaki;
+    let femaleLaborVal = draft.jumlahPekerjaPerempuan;
+
+    // ponytail: fallback to total workers if gender division is not set in old draft records
+    if (!maleLaborVal && !femaleLaborVal && draft.jumlahPekerja) {
+      maleLaborVal = draft.jumlahPekerja;
+      femaleLaborVal = '0';
+    }
+
+    maleLaborVal = maleLaborVal || '0';
+    femaleLaborVal = femaleLaborVal || '0';
+
     this.logStep(subject, 6, 'info', `Mengisi pekerja laki laki: ${maleLaborVal}`);
     const maleLaborInput = page.getByTestId('laborcard-labor-male').locator('input').first();
     if (await maleLaborInput.isVisible()) {
@@ -2594,8 +2662,6 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(500);
     }
     
-    // Hasil Penjualan Tahunan
-    const femaleLaborVal = draft.jumlahPekerjaPerempuan || '0';
     this.logStep(subject, 6, 'info', `Mengisi pekerja perempuan: ${femaleLaborVal}`);
     const femaleLaborInput = page.getByTestId('laborcard-labor-female').locator('input').first();
     if (await femaleLaborInput.isVisible()) {
@@ -2754,8 +2820,186 @@ export class AutomationService implements OnModuleDestroy {
       { timeout: 15000 }
     ).catch(() => null);
 
-    await page.getByRole('button', { name: 'Selanjutnya' }).click();
+    // Setup listeners for risk analysis and parameter validation APIs
+    const getResikoPromise = page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/getResikoNonPesorangan') &&
+        response.status() === 200,
+      { timeout: 20000 }
+    ).catch(() => null);
 
+    const getKriteriaPromise = page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/getKriteriaKegiatan') &&
+        response.status() === 200,
+      { timeout: 20000 }
+    ).catch(() => null);
+
+    // Click Selanjutnya to validate and load the Risk screen
+    this.logStep(subject, 6, 'info', 'Mengklik Selanjutnya untuk validasi Risiko Usaha...');
+    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click();
+    await page.waitForTimeout(1000);
+
+    // Check for validation errors on the page
+    const errorElements = page.locator('.error--text, .v-messages__message');
+    const errorCount = await errorElements.count();
+    const visibleErrors: string[] = [];
+    const uniqueErrors = new Set<string>();
+
+    for (let i = 0; i < errorCount; i++) {
+      const el = errorElements.nth(i);
+      if (await el.isVisible()) {
+        const errorText = (await el.innerText()).trim();
+        if (!errorText) continue;
+
+        // Trace up the DOM to find any associated label elements or header text
+        const labelText = await el.evaluate((node: any) => {
+          let current = node;
+          for (let level = 0; level < 5; level++) {
+            if (!current.parentElement) break;
+            current = current.parentElement;
+            
+            // Search standard label or Vuetify label
+            const labelEl = current.querySelector('label, .v-label');
+            if (labelEl && labelEl.innerText && labelEl.innerText.trim()) {
+              return labelEl.innerText.trim();
+            }
+            
+            // Search for a label in the previous sibling elements
+            let sibling = current.previousElementSibling;
+            while (sibling) {
+              const siblingLabel = sibling.querySelector('label, .v-label') || 
+                                   (sibling.tagName === 'LABEL' || sibling.classList.contains('v-label') ? sibling : null);
+              if (siblingLabel && siblingLabel.innerText && siblingLabel.innerText.trim()) {
+                return siblingLabel.innerText.trim();
+              }
+              sibling = sibling.previousElementSibling;
+            }
+          }
+          return null;
+        }).catch(() => null);
+
+        const formattedError = labelText ? `${labelText}: ${errorText}` : errorText;
+        if (!uniqueErrors.has(formattedError)) {
+          uniqueErrors.add(formattedError);
+          visibleErrors.push(formattedError);
+        }
+      }
+    }
+
+    if (visibleErrors.length > 0) {
+      const errorMsg = `Kesalahan pengisian formulir: ${visibleErrors.join(', ')}`;
+      this.logStep(subject, 6, 'error', `Pendaftaran GAGAL: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    // Await responses
+    const resikoResponse = await getResikoPromise;
+    const kriteriaResponse = await getKriteriaPromise;
+
+    let riskInfo: any = null;
+    let allowedParameters: string[] = [];
+
+    if (resikoResponse) {
+      try {
+        const json = await resikoResponse.json();
+        riskInfo = {
+          tingkatRisiko: json.keterangan_resiko,
+          skalaUsaha: json.keterangan_skala_usaha,
+          jenisPerizinan: json.jenis_perizinan,
+          perizinanTunggal: !!json.flag_perizinan_tunggal
+        };
+        this.logStep(
+          subject,
+          6,
+          'info',
+          `Analisis Risiko: ${riskInfo.tingkatRisiko} | Skala: ${riskInfo.skalaUsaha} | Perizinan: ${riskInfo.jenisPerizinan}`
+        );
+      } catch (e) {
+        console.error("Gagal mengurai response getResikoNonPesorangan:", e);
+      }
+    }
+
+    if (kriteriaResponse) {
+      try {
+        const json = await kriteriaResponse.json();
+        if (json && Array.isArray(json.data)) {
+          allowedParameters = json.data.map((item: any) => item.parameter_kewenangan).filter(Boolean);
+        }
+      } catch (e) {
+        console.error("Gagal mengurai response getKriteriaKegiatan:", e);
+      }
+    }
+
+    await page.waitForTimeout(2000); // wait for page animation/rendering
+
+    // If parameter dropdown exists and has options, prompt user
+    if (allowedParameters.length > 0) {
+      this.logStep(
+        subject,
+        6,
+        'warn',
+        'MENGISI_PARAMETER_RISIKO',
+        {
+          tingkatRisiko: riskInfo?.tingkatRisiko || 'Rendah',
+          skalaUsaha: riskInfo?.skalaUsaha || 'Mikro',
+          jenisPerizinan: riskInfo?.jenisPerizinan || 'NIB',
+          perizinanTunggal: riskInfo?.perizinanTunggal || false,
+          parameterOptions: allowedParameters
+        }
+      );
+
+      // Wait up to 120s for user parameter selection
+      let selectedParam: string = '';
+      const startTime = Date.now();
+      while (Date.now() - startTime < 120000) {
+        if (this.activeParameterInputs.has(draftId)) {
+          selectedParam = this.activeParameterInputs.get(draftId)!;
+          this.activeParameterInputs.delete(draftId);
+          break;
+        }
+        await page.waitForTimeout(500);
+      }
+
+      if (!selectedParam) {
+        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pemilihan parameter risiko habis.');
+        throw new Error('Batas waktu pemilihan parameter risiko habis.');
+      }
+
+      this.logStep(subject, 6, 'info', `Mengisi parameter kewenangan: ${selectedParam}`);
+      
+      // Target Parameter Dropdown on portal
+      const paramCombobox = page.locator('.v-input').filter({ hasText: 'Parameter' }).locator('input').first();
+      if (await paramCombobox.isVisible()) {
+        await paramCombobox.click();
+        await paramCombobox.fill(selectedParam);
+        await page.waitForTimeout(500);
+
+        const option = page.getByRole('option', { name: selectedParam }).first();
+        const textOption = page.getByText(selectedParam, { exact: false }).first();
+        if (await option.isVisible()) {
+          await option.click();
+        } else if (await textOption.isVisible()) {
+          await textOption.click();
+        } else {
+          await page.keyboard.press('Enter');
+        }
+        await page.waitForTimeout(1000);
+      } else {
+        // Fallback using keyboard press
+        await page.keyboard.press('Tab');
+        await page.keyboard.type(selectedParam);
+        await page.waitForTimeout(500);
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1000);
+      }
+    } else {
+      this.logStep(subject, 6, 'info', 'Tidak ada parameter tambahan yang perlu diisi.');
+    }
+
+    // Finally click Selanjutnya to save risk/parameter and complete Step 6
+    this.logStep(subject, 6, 'info', 'Menyimpan analisis Risiko & Parameter...');
+    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click();
     await page.waitForTimeout(3000);
     
   }

@@ -68,4 +68,13 @@ export class AutomationController {
     this.automationService.submitProductInput(draftId, body);
     return { success: true };
   }
+
+  @Post('parameter/:draftId')
+  submitParameter(
+    @Param('draftId') draftId: string,
+    @Body() body: { parameter: string }
+  ) {
+    this.automationService.submitParameterInput(draftId, body.parameter);
+    return { success: true };
+  }
 }
