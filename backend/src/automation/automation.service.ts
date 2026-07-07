@@ -48,6 +48,8 @@ export class AutomationService implements OnModuleDestroy {
   >();
   private readonly cancelledDrafts = new Set<string>();
   private readonly sessionLogs = new Map<string, Array<any>>();
+  private readonly redirectionUrls = new Map<string, string>();
+  private readonly kdIzins = new Map<string, string>();
 
 
   // Queue and browser management
@@ -610,6 +612,12 @@ export class AutomationService implements OnModuleDestroy {
           this.logger.error('Gagal mengambil path video rekaman', videoErr);
         }
       }
+      this.activeOtps.delete(draftId);
+      this.activePasswords.delete(draftId);
+      this.activeProductInputs.delete(draftId);
+      this.activeParameterInputs.delete(draftId);
+      this.redirectionUrls.delete(draftId);
+      this.kdIzins.delete(draftId);
       this.activeTokens.delete(draftId);
       this.executionTimers.delete(draftId);
       this.subjectToDraftId.delete(subject);
@@ -2966,23 +2974,71 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(1500);
       const page1 = await pageAmdalnet;
 
-      const proyekCheck = page1.locator('.sub-project-table-card').locator('.el-checkbox').first();
+      // Wait for the popup URL to load and redirect away from about:blank
+      await page1.waitForURL((url: URL) => url.href !== 'about:blank', { timeout: 10000 }).catch(() => null);
+      const redirectionUrl = page1.url();
+      this.logStep(subject, 6, 'info', `Redirection URL: ${redirectionUrl}`);
+      this.redirectionUrls.set(draftId, redirectionUrl);
+
+      const kdIzinMatch = redirectionUrl.match(/[?&]kd_izin=([^&]+)/);
+      const kdIzin = kdIzinMatch ? kdIzinMatch[1] : undefined;
+      if (kdIzin) {
+        this.logStep(subject, 6, 'info', `Parsed kd_izin: ${kdIzin}`);
+        this.kdIzins.set(draftId, kdIzin);
+      }
+
+      // Close popup tab and navigate the main page instead
+      await page1.close().catch(() => null);
+      this.logStep(subject, 6, 'info', 'Membuka redirection URL pada tab utama...');
+      await page.goto(redirectionUrl, {
+        waitUntil: 'networkidle',
+        timeout: 15000,
+      });
+      
+      // wait for response list-proyek
+      await page.waitForResponse(
+        (response: any) =>
+          response.url().includes('list-proyek') &&
+          response.status() === 200,
+        { timeout: 15000 }
+      ).catch(() => null);
+      this.logStep(subject, 6, 'info', 'Mendapatkan response list-proyek');
+
+      const proyekScope = page.locator(`#sub-project-card-${kdIzin}`)
+      const proyekCheck = proyekScope.locator('.el-checkbox').first();
       if (await proyekCheck.isVisible()) {
         this.logStep(subject, 6, 'info', 'Mencentang checkbox proyek...');
         await proyekCheck.click();
-        await page1.waitForTimeout(1000);
+        await page.waitForTimeout(1000);
 
-        await page1.locator('.sub-project-table-card').locator('.el-switch').first().click();
-        await page1.getByPlaceholder('Pilih jenis sektor').click();
-        const multiSectorOpt = page1.getByText('Multi Sektor');
+        // wait for response check-license-status
+        await page.waitForResponse(
+          (response: any) =>
+            response.url().includes('check-license-status') &&
+            response.status() === 200,
+          { timeout: 15000 }
+        ).catch(() => null);
+        this.logStep(subject, 6, 'info', 'Mendapatkan response check-license-status');
+
+        await proyekScope.locator('.el-switch').first().click();
+        await page.locator(`#sector-select-${kdIzin}`).click();
+        const multiSectorOpt = page.getByText('Multi Sektor');
         if (await multiSectorOpt.isVisible()) {
           await multiSectorOpt.click();
         } else {
-          await page1.getByRole('listitem').first().click();
+          await page.getByRole('listitem').first().click();
         }
       }
     }
     
+  }
+
+  getRedirectionUrl(draftId: string): string | undefined {
+    return this.redirectionUrls.get(draftId);
+  }
+
+  getKdIzin(draftId: string): string | undefined {
+    return this.kdIzins.get(draftId);
   }
 
   private formatToDDMMYYYY(dateStr?: string): string {

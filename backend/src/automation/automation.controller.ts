@@ -2,6 +2,7 @@ import {
   Controller,
   Sse,
   Post,
+  Get,
   Param,
   Body,
   Query,
@@ -76,5 +77,17 @@ export class AutomationController {
   ) {
     this.automationService.submitParameterInput(draftId, body.parameter);
     return { success: true };
+  }
+
+  @Get('redirection-url/:draftId')
+  getRedirectionUrl(@Param('draftId') draftId: string) {
+    const url = this.automationService.getRedirectionUrl(draftId);
+    return { redirectionUrl: url || null };
+  }
+
+  @Get('kd-izin/:draftId')
+  getKdIzin(@Param('draftId') draftId: string) {
+    const kdIzin = this.automationService.getKdIzin(draftId);
+    return { kdIzin: kdIzin || null };
   }
 }

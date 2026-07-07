@@ -54,6 +54,11 @@ export default function AutomationPage() {
   const [isSubmittingParameter, setIsSubmittingParameter] = useState<boolean>(false);
   const [parameterError, setParameterError] = useState<string>("");
 
+  // Dynamic Background Process UI States
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [activeActivity, setActiveActivity] = useState<'idle' | 'typing' | 'clicking' | 'waiting'>('idle');
+  const [activeSubStatus, setActiveSubStatus] = useState<string>("Bot sedang menginisialisasi otomatisasi...");
+
   const [userContact, setUserContact] = useState<{ nomorHp: string; email: string }>({ nomorHp: "", email: "" });
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
   const otpRefs = useRef<HTMLInputElement[]>([]);
@@ -167,6 +172,7 @@ export default function AutomationPage() {
   const [isLogsOpen, setIsLogsOpen] = useState<boolean>(false);
   
   const streamRef = useRef<EventSource | null>(null);
+  const elapsedTimerRef = useRef<any>(null);
   const failedStepRef = useRef<number | null>(null);
   
   // Countdown Timer State
@@ -177,6 +183,13 @@ export default function AutomationPage() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const clearElapsedTimer = () => {
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -230,16 +243,59 @@ export default function AutomationPage() {
 
       eventSource.onopen = () => {
         addLog("Koneksi SSE Backend Lokal BERHASIL. Mendengarkan stream otomatisasi...", "success");
+        setElapsedSeconds(0);
+        clearElapsedTimer();
+        elapsedTimerRef.current = setInterval(() => {
+          setElapsedSeconds((prev) => prev + 1);
+        }, 1000);
       };
 
       eventSource.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
           if (payload && typeof payload.step === "number") {
+            if (payload.text) {
+              let displayMsg = payload.text;
+              const suffixIndex = displayMsg.indexOf(" (+");
+              if (suffixIndex !== -1) {
+                displayMsg = displayMsg.substring(0, suffixIndex);
+              }
+              setActiveSubStatus(displayMsg);
+
+              const lowerText = displayMsg.toLowerCase();
+              if (
+                lowerText.includes("mengisi") || 
+                lowerText.includes("mengetik") || 
+                lowerText.includes("memasukkan") ||
+                lowerText.includes("fill")
+              ) {
+                setActiveActivity("typing");
+              } else if (
+                lowerText.includes("klik") || 
+                lowerText.includes("mengklik") || 
+                lowerText.includes("click")
+              ) {
+                setActiveActivity("clicking");
+              } else if (
+                lowerText.includes("menunggu") || 
+                lowerText.includes("wait") || 
+                lowerText.includes("mendapatkan response")
+              ) {
+                setActiveActivity("waiting");
+              } else {
+                setActiveActivity("idle");
+              }
+            }
+
             if (payload.status === "error") {
+              clearElapsedTimer();
               failedStepRef.current = payload.step;
               setFailedStep(payload.step);
               setErrorText(payload.text);
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+              setIsPromptingProduct(false);
+              setIsPromptingParameter(false);
               if (payload.text.toLowerCase().includes("ktp")) {
                 setErrorType("ktp_mismatch");
               } else if (payload.text.toLowerCase().includes("nik")) {
@@ -334,6 +390,7 @@ export default function AutomationPage() {
               }
             }
             if (payload.step === 7 && payload.status === "success" && failedStepRef.current === null) {
+              clearElapsedTimer();
               setStatusText("Proses Otomatisasi Selesai!");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
@@ -352,6 +409,11 @@ export default function AutomationPage() {
         if (eventSource) {
           eventSource.close();
         }
+        setIsPromptingOtp(false);
+        setIsPromptingPassword(false);
+        setIsPromptingProduct(false);
+        setIsPromptingParameter(false);
+        clearElapsedTimer();
         if (failedStepRef.current === null) {
           addLog("Koneksi backend terputus atau tidak terdeteksi.", "error");
           failedStepRef.current = 999;
@@ -388,6 +450,7 @@ export default function AutomationPage() {
     }
     connectStream();
     return () => {
+      clearElapsedTimer();
       if (streamRef.current) {
         streamRef.current.close();
       }
@@ -452,6 +515,10 @@ export default function AutomationPage() {
       setLogs([]);
       setIsPromptingOtp(false);
       setIsPromptingPassword(false);
+      setIsPromptingProduct(false);
+      setIsPromptingParameter(false);
+      clearElapsedTimer();
+      setElapsedSeconds(0);
 
       if (streamRef.current) {
         streamRef.current.close();
@@ -647,9 +714,9 @@ export default function AutomationPage() {
             <div className="text-outline italic">Mendengarkan output terminal...</div>
           ) : (
             logs.map((log, index) => (
-              <div key={index} className="flex gap-2 mb-1">
-                <span className="text-[#569CD6]">[{log.time}]</span>
-                <span className={
+              <div key={index} className="flex gap-2 mb-1 min-w-0">
+                <span className="text-[#569CD6] shrink-0">[{log.time}]</span>
+                <span className={`break-all ${
                   log.type === "success" 
                     ? "text-[#4EC9B0]" 
                     : log.type === "warn" 
@@ -657,7 +724,7 @@ export default function AutomationPage() {
                       : log.type === "error" 
                         ? "text-[#F48771]" 
                         : ""
-                }>
+                }`}>
                   {log.text}
                 </span>
               </div>
@@ -1267,13 +1334,52 @@ export default function AutomationPage() {
                       </form>
                     </div>
                   ) : (
-                    <div className="p-8 text-center bg-white space-y-4">
-                      <div className="w-14 h-14 bg-primary-container/10 text-primary-container rounded-full flex items-center justify-center mx-auto">
-                        <span className="material-symbols-outlined text-3xl animate-pulse">smart_toy</span>
+                    <div className="p-8 text-center bg-white space-y-5 flex flex-col items-center justify-center animate-fadeIn relative">
+                      {/* Live Timer Badge */}
+                      <div className="absolute top-4 right-4 bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 shadow-sm">
+                        <span className="material-symbols-outlined text-xs animate-pulse">schedule</span>
+                        {formatTime(elapsedSeconds)}
                       </div>
-                      <div>
-                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-on-surface">Proses Latar Belakang Aktif</h4>
-                        <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xs mx-auto mt-1 text-center">
+
+                      {/* Animated Activity Icon */}
+                      <div className="w-16 h-16 bg-primary-container/10 text-primary-container rounded-full flex items-center justify-center relative">
+                        {activeActivity === "typing" && (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="material-symbols-outlined text-3xl">keyboard</span>
+                            <div className="flex gap-0.5 items-center mt-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary-container animate-bounce [animation-delay:-0.3s]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary-container animate-bounce [animation-delay:-0.15s]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary-container animate-bounce" />
+                            </div>
+                          </div>
+                        )}
+                        {activeActivity === "clicking" && (
+                          <div className="relative flex items-center justify-center">
+                            <span className="material-symbols-outlined text-3xl z-10">touch_app</span>
+                            <span className="absolute w-12 h-12 rounded-full bg-primary-container/30 animate-ping" />
+                          </div>
+                        )}
+                        {activeActivity === "waiting" && (
+                          <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+                        )}
+                        {activeActivity === "idle" && (
+                          <span className="material-symbols-outlined text-3xl animate-pulse">smart_toy</span>
+                        )}
+                      </div>
+
+                      {/* Status Text Block */}
+                      <div className="space-y-1.5 max-w-sm">
+                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-on-surface">
+                          Proses Latar Belakang Aktif
+                        </h4>
+                        
+                        {/* Dynamic Active Action Sub-status */}
+                        <div className="bg-surface-container-low border border-border-light px-4 py-2.5 rounded-lg text-[11px] font-bold text-primary-container leading-relaxed flex items-center justify-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                          <span className="break-all">{activeSubStatus}</span>
+                        </div>
+
+                        <p className="text-[10px] text-on-surface-variant/80 font-medium">
                           NIB Assistant sedang mengisi data formulir secara otomatis di browser Chrome terenkripsi. Tolong jangan tutup halaman ini.
                         </p>
                       </div>
