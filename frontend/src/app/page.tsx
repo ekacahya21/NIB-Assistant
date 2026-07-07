@@ -1,21 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function OnboardingPage() {
   const router = useRouter();
-
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('init_test_session') === 'true') {
-      localStorage.setItem("nib_assistant_session_id", "SESS_jkyyrv918rfkl6gogufzu");
-      localStorage.setItem("draft_id", "LEJEWBRVA");
-      sessionStorage.setItem("draft_id", "LEJEWBRVA");
-      sessionStorage.setItem("automation_step", "start");
-      console.log("TEST SESSION SET SUCCESSFULLY");
-    }
-  }, []);
   
   // Navigation tab state: 'eligibility' | 'requirements'
   const [activeTab, setActiveTab] = useState<"eligibility" | "requirements">("eligibility");

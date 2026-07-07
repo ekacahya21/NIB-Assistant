@@ -2518,6 +2518,9 @@ export class AutomationService implements OnModuleDestroy {
     this.logStep(subject, 6, 'info', `Mengisi status berjalan: ${runningOptionText}`);
     const runningCombobox = page.getByTestId('select-box-flag-berjalan').first();
     
+    // Wait up to 60s for the page to load and the combobox to be visible
+    await runningCombobox.waitFor({ state: 'visible', timeout: 60000 }).catch(() => null);
+    
     await runningCombobox.click();
     await runningCombobox.locator('input').fill(runningOptionText);
     await page.getByText(runningOptionText, { exact: true }).click();
@@ -2532,24 +2535,10 @@ export class AutomationService implements OnModuleDestroy {
         const container = page.getByTestId('date-time-picker-tgl-berjalan').filter({ visible: true }).first();
         const dateInputTglMulai = container.locator('input').first();
         
-        // Click the .v-field element inside the container to open picker
-        const fieldMulai = container.locator('.v-field').first();
-        if (await fieldMulai.isVisible()) {
-          this.logStep(subject, 6, 'info', `Mengklik v-field wrapper datepicker...`);
-          await fieldMulai.click({ force: true });
-        } else {
-          // Fallback to icons
-          const icon = container.locator('.v-input__append-inner, .v-icon, i, svg').first();
-          if (await icon.isVisible()) {
-            this.logStep(subject, 6, 'info', `Mengklik ikon calendar datepicker...`);
-            await icon.click({ force: true }).catch(() => {});
-          } else {
-            this.logStep(subject, 6, 'info', `Mengklik wrapper/container datepicker...`);
-            await container.locator('div[name="date"]').first().click({ force: true }).catch(() => {});
-            await container.click({ force: true }).catch(() => {});
-          }
-          await dateInputTglMulai.click({ force: true }).catch(() => {});
-        }
+        // Click the datepicker trigger
+        const trigger = container.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"]').first();
+        this.logStep(subject, 6, 'info', `Mengklik trigger datepicker...`);
+        await (await trigger.isVisible() ? trigger : container).click({ force: true }).catch(() => {});
         await page.waitForTimeout(1000);
         
         const dayButton = page.locator('.v-date-picker-table--date button, button').filter({ hasText: /^\s*1\s*$/ }).first();
@@ -2571,24 +2560,10 @@ export class AutomationService implements OnModuleDestroy {
       const containerOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').filter({ visible: true }).first();
       const dateInputTglOp = containerOp.locator('input').first();
       
-      // Click the .v-field element inside containerOp to open month picker
-      const fieldOp = containerOp.locator('.v-field').first();
-      if (await fieldOp.isVisible()) {
-        this.logStep(subject, 6, 'info', `Mengklik v-field wrapper perkiraan operasional...`);
-        await fieldOp.click({ force: true });
-      } else {
-        // Fallback to icons
-        const iconOp = containerOp.locator('.v-input__append-inner, .v-icon, i, svg').first();
-        if (await iconOp.isVisible()) {
-          this.logStep(subject, 6, 'info', `Mengklik ikon calendar perkiraan operasional...`);
-          await iconOp.click({ force: true }).catch(() => {});
-        } else {
-          this.logStep(subject, 6, 'info', `Mengklik wrapper/container perkiraan operasional...`);
-          await containerOp.locator('div[name="date"]').first().click({ force: true }).catch(() => {});
-          await containerOp.click({ force: true }).catch(() => {});
-        }
-        await dateInputTglOp.click({ force: true }).catch(() => {});
-      }
+      // Click the datepicker trigger
+      const triggerOp = containerOp.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"]').first();
+      this.logStep(subject, 6, 'info', `Mengklik trigger perkiraan operasional...`);
+      await (await triggerOp.isVisible() ? triggerOp : containerOp).click({ force: true }).catch(() => {});
       await page.waitForTimeout(1000);
       
       const dateObj = new Date(draft.tanggalMulaiOperasional);
@@ -2844,45 +2819,13 @@ export class AutomationService implements OnModuleDestroy {
     const errorElements = page.locator('.error--text, .v-messages__message');
     const errorCount = await errorElements.count();
     const visibleErrors: string[] = [];
-    const uniqueErrors = new Set<string>();
 
     for (let i = 0; i < errorCount; i++) {
       const el = errorElements.nth(i);
       if (await el.isVisible()) {
         const errorText = (await el.innerText()).trim();
-        if (!errorText) continue;
-
-        // Trace up the DOM to find any associated label elements or header text
-        const labelText = await el.evaluate((node: any) => {
-          let current = node;
-          for (let level = 0; level < 5; level++) {
-            if (!current.parentElement) break;
-            current = current.parentElement;
-            
-            // Search standard label or Vuetify label
-            const labelEl = current.querySelector('label, .v-label');
-            if (labelEl && labelEl.innerText && labelEl.innerText.trim()) {
-              return labelEl.innerText.trim();
-            }
-            
-            // Search for a label in the previous sibling elements
-            let sibling = current.previousElementSibling;
-            while (sibling) {
-              const siblingLabel = sibling.querySelector('label, .v-label') || 
-                                   (sibling.tagName === 'LABEL' || sibling.classList.contains('v-label') ? sibling : null);
-              if (siblingLabel && siblingLabel.innerText && siblingLabel.innerText.trim()) {
-                return siblingLabel.innerText.trim();
-              }
-              sibling = sibling.previousElementSibling;
-            }
-          }
-          return null;
-        }).catch(() => null);
-
-        const formattedError = labelText ? `${labelText}: ${errorText}` : errorText;
-        if (!uniqueErrors.has(formattedError)) {
-          uniqueErrors.add(formattedError);
-          visibleErrors.push(formattedError);
+        if (errorText && !visibleErrors.includes(errorText)) {
+          visibleErrors.push(errorText);
         }
       }
     }
@@ -2941,9 +2884,9 @@ export class AutomationService implements OnModuleDestroy {
         'warn',
         'MENGISI_PARAMETER_RISIKO',
         {
-          tingkatRisiko: riskInfo?.tingkatRisiko || 'Rendah',
-          skalaUsaha: riskInfo?.skalaUsaha || 'Mikro',
-          jenisPerizinan: riskInfo?.jenisPerizinan || 'NIB',
+          tingkatRisiko: riskInfo?.tingkatRisiko || '',
+          skalaUsaha: riskInfo?.skalaUsaha || '',
+          jenisPerizinan: riskInfo?.jenisPerizinan || '',
           perizinanTunggal: riskInfo?.perizinanTunggal || false,
           parameterOptions: allowedParameters
         }
@@ -2969,38 +2912,76 @@ export class AutomationService implements OnModuleDestroy {
       this.logStep(subject, 6, 'info', `Mengisi parameter kewenangan: ${selectedParam}`);
       
       // Target Parameter Dropdown on portal
-      const paramCombobox = page.locator('.v-input').filter({ hasText: 'Parameter' }).locator('input').first();
+      const paramCombobox = page.getByRole('combobox').first();
       if (await paramCombobox.isVisible()) {
         await paramCombobox.click();
-        await paramCombobox.fill(selectedParam);
         await page.waitForTimeout(500);
 
-        const option = page.getByRole('option', { name: selectedParam }).first();
-        const textOption = page.getByText(selectedParam, { exact: false }).first();
-        if (await option.isVisible()) {
-          await option.click();
-        } else if (await textOption.isVisible()) {
-          await textOption.click();
-        } else {
-          await page.keyboard.press('Enter');
-        }
-        await page.waitForTimeout(1000);
-      } else {
-        // Fallback using keyboard press
-        await page.keyboard.press('Tab');
-        await page.keyboard.type(selectedParam);
-        await page.waitForTimeout(500);
-        await page.keyboard.press('Enter');
+        await page.getByText(selectedParam).first().click();
+        this.logStep(subject, 6, 'info', `Mengklik item list overlay: ${selectedParam}`);
         await page.waitForTimeout(1000);
       }
-    } else {
-      this.logStep(subject, 6, 'info', 'Tidak ada parameter tambahan yang perlu diisi.');
     }
 
     // Finally click Selanjutnya to save risk/parameter and complete Step 6
     this.logStep(subject, 6, 'info', 'Menyimpan analisis Risiko & Parameter...');
-    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click();
+    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click({ force: true });
     await page.waitForTimeout(3000);
+
+    this.logStep(subject, 6, 'info', "Memilih 'Belum' memiliki amdal..");
+    await page.getByRole('radio', { name: 'Belum' }).check();
+    
+    this.logStep(subject, 6, 'info', 'Klik tombol Proses..');
+    await page.getByRole('button', { name: 'Proses' }).click();
+    await page.waitForTimeout(1500)
+
+    this.logStep(subject, 6, 'info', 'Klik tombol Ya, Lanjut..');
+    await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
+    await page.waitForTimeout(1500);
+
+    // Wait for submitLingkungan response
+    await page.waitForResponse(
+      (response: any) =>
+        response.url().includes('submitLingkungan') &&
+        response.status() === 200,
+      { timeout: 15000 }
+    ).catch(() => null);
+    
+    // Wait for prosesProyek response
+    await page.waitForResponse(
+      (response: any) =>
+        response.url().includes('prosesProyek') &&
+        response.status() === 200,
+      { timeout: 15000 }
+    ).catch(() => null);
+
+    this.logStep(subject, 6, 'info', 'Klik tab Persyaratan Dasar..');
+    await page.getByRole('tab', { name: 'Persyaratan Dasar' }).click();
+
+    const btnProsesPenapisan = page.getByRole('button', { name: 'Proses Penapisan' });
+    if (await btnProsesPenapisan.isVisible()) {
+      this.logStep(subject, 6, 'info', 'Klik tombol Proses Penapisan..');
+      const pageAmdalnet = page.waitForEvent('popup');
+      await btnProsesPenapisan.click();
+      await page.waitForTimeout(1500);
+      const page1 = await pageAmdalnet;
+
+      const proyekCheck = page1.locator('.sub-project-table-card').locator('.el-checkbox').first();
+      if (await proyekCheck.isVisible()) {
+        this.logStep(subject, 6, 'info', 'Mencentang checkbox proyek...');
+        await proyekCheck.click();
+        await page1.waitForTimeout(1000);
+
+        await page1.locator('.sub-project-table-card').locator('.el-switch').first().click();
+        await page1.getByPlaceholder('Pilih jenis sektor').click();
+        const multiSectorOpt = page1.getByText('Multi Sektor');
+        if (await multiSectorOpt.isVisible()) {
+          await multiSectorOpt.click();
+        } else {
+          await page1.getByRole('listitem').first().click();
+        }
+      }
+    }
     
   }
 
