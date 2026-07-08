@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { getSessionId } from "../../utils/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -238,7 +239,7 @@ export default function AutomationPage() {
 
     try {
       addLog("Menghubungkan ke backend local NIB Assistant...", "info");
-      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?akunOss=${isBelum}`);
+      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?akunOss=${isBelum}&sessionId=${getSessionId()}`);
       streamRef.current = eventSource;
 
       eventSource.onopen = () => {

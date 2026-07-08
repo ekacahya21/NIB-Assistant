@@ -141,7 +141,7 @@ export class AutomationService implements OnModuleDestroy {
   }
 
   // Observable SSE stream for automation status
-  getStream(draftId: string, akunOss?: string): Observable<AutomationEvent> {
+  getStream(draftId: string, akunOss?: string, sessionId?: string): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
       // Prevent double session for the same draftId
       if (this.activeSubjects.has(draftId)) {
@@ -158,7 +158,7 @@ export class AutomationService implements OnModuleDestroy {
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);
 
-      this.enqueueRequest(draftId, akunOss, subject);
+      this.enqueueRequest(draftId, akunOss, subject, sessionId);
 
       const subscription = subject.subscribe({
         next: (val) => subscriber.next(val),
@@ -227,6 +227,7 @@ export class AutomationService implements OnModuleDestroy {
     draftId: string,
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
+    sessionId?: string,
   ) {
     const maxSessions = parseInt(
       process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3',
@@ -237,7 +238,7 @@ export class AutomationService implements OnModuleDestroy {
       this.activeSessionsCount++;
       // Update status to RUNNING
       await this.draftsService
-        .update(draftId, { status: 'RUNNING' })
+        .update(draftId, { status: 'RUNNING', sessionId })
         .catch(() => {});
 
       this.runPlaywrightAutomation(draftId, akunOss, subject)
@@ -253,7 +254,7 @@ export class AutomationService implements OnModuleDestroy {
     } else {
       // Update status to QUEUED
       await this.draftsService
-        .update(draftId, { status: 'QUEUED' })
+        .update(draftId, { status: 'QUEUED', sessionId })
         .catch(() => {});
 
       const avgDuration = await this.draftsService.getAverageDuration();
@@ -281,7 +282,7 @@ export class AutomationService implements OnModuleDestroy {
         .then(async () => {
           // Update status to RUNNING
           await this.draftsService
-            .update(draftId, { status: 'RUNNING' })
+            .update(draftId, { status: 'RUNNING', sessionId })
             .catch(() => {});
           return this.runPlaywrightAutomation(draftId, akunOss, subject);
         })

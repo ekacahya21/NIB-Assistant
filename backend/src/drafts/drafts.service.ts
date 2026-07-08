@@ -48,6 +48,7 @@ export class DraftData {
   cangkupanProduk?: string;
   kapasitas?: string;
   satuan?: string;
+  sessionId?: string;
 }
 
 @Injectable()
@@ -112,6 +113,7 @@ export class DraftsService {
         cangkupanProduk: data.cangkupanProduk,
         kapasitas: data.kapasitas,
         satuan: data.satuan,
+        sessionId: data.sessionId,
         updatedAt: new Date(),
       },
     });
@@ -177,6 +179,7 @@ export class DraftsService {
         cangkupanProduk: data.cangkupanProduk,
         kapasitas: data.kapasitas,
         satuan: data.satuan,
+        sessionId: data.sessionId,
         updatedAt: new Date(),
       },
     });
