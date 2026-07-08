@@ -42,6 +42,12 @@ export default function AutomationPage() {
   const [isSubmittingProduct, setIsSubmittingProduct] = useState<boolean>(false);
   const [productError, setProductError] = useState<string>("");
 
+  // KBLI 2025 states
+  const [isPromptingKbli2025, setIsPromptingKbli2025] = useState<boolean>(false);
+  const [kbli2025Options, setKbli2025Options] = useState<Array<{ code: string; title: string }>>([]);
+  const [selectedKbli2025, setSelectedKbli2025] = useState<string>( "");
+  const [isSubmittingKbli2025, setIsSubmittingKbli2025] = useState<boolean>(false);
+
   // Parameter & Risk States
   const [isPromptingParameter, setIsPromptingParameter] = useState<boolean>(false);
   const [riskData, setRiskData] = useState<{
@@ -195,7 +201,7 @@ export default function AutomationPage() {
 
   useEffect(() => {
     let timerId: any;
-    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter) {
+    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter || isPromptingKbli2025) {
       setTimeLeft(120);
       timerId = setInterval(() => {
         setTimeLeft((prev) => {
@@ -213,7 +219,7 @@ export default function AutomationPage() {
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter]);
+  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter, isPromptingKbli2025]);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -297,6 +303,7 @@ export default function AutomationPage() {
               setIsPromptingPassword(false);
               setIsPromptingProduct(false);
               setIsPromptingParameter(false);
+              setIsPromptingKbli2025(false);
               if (payload.text.toLowerCase().includes("ktp")) {
                 setErrorType("ktp_mismatch");
               } else if (payload.text.toLowerCase().includes("nik")) {
@@ -359,7 +366,7 @@ export default function AutomationPage() {
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
             }
-            if (payload.step === 6 && failedStepRef.current === null) {
+             if (payload.step === 6 && failedStepRef.current === null) {
               if (payload.text.includes("MENGISI_RINCIAN_PRODUK")) {
                 setStatusText("Menunggu Anda melengkapi rincian produk...");
                 setIsPromptingProduct(true);
@@ -367,6 +374,7 @@ export default function AutomationPage() {
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
                 setIsPromptingParameter(false);
+                setIsPromptingKbli2025(false);
               } else if (payload.text.includes("MENGISI_PARAMETER_RISIKO")) {
                 setStatusText("Menunggu Anda melengkapi parameter risiko...");
                 setIsPromptingParameter(true);
@@ -380,12 +388,24 @@ export default function AutomationPage() {
                 setIsPromptingProduct(false);
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
+                setIsPromptingKbli2025(false);
+              } else if (payload.text.includes("PILIH_KBLI_2025")) {
+                setStatusText("Menunggu konversi KBLI 2025...");
+                setIsPromptingKbli2025(true);
+                setKbli2025Options(payload.data?.options || []);
+                setIsPromptingProduct(false);
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+                setIsPromptingParameter(false);
               } else if (payload.text.includes("Menyimpan data Produk/Jasa")) {
                 setIsPromptingProduct(false);
                 setStatusText("Menyimpan produk...");
               } else if (payload.text.includes("Menyimpan analisis Risiko")) {
                 setIsPromptingParameter(false);
                 setStatusText("Menyimpan parameter...");
+              } else if (payload.text.includes("Memperbarui database ke KBLI 2025")) {
+                setIsPromptingKbli2025(false);
+                setStatusText("Menyimpan KBLI 2025...");
               } else {
                 setStatusText("Merekam Rincian Produk/Jasa...");
               }
@@ -410,10 +430,9 @@ export default function AutomationPage() {
         if (eventSource) {
           eventSource.close();
         }
-        setIsPromptingOtp(false);
-        setIsPromptingPassword(false);
         setIsPromptingProduct(false);
         setIsPromptingParameter(false);
+        setIsPromptingKbli2025(false);
         clearElapsedTimer();
         if (failedStepRef.current === null) {
           addLog("Koneksi backend terputus atau tidak terdeteksi.", "error");
@@ -514,10 +533,10 @@ export default function AutomationPage() {
       setCurrentStep(1);
       setStatusText("Memulai ulang otomatisasi...");
       setLogs([]);
-      setIsPromptingOtp(false);
-      setIsPromptingPassword(false);
       setIsPromptingProduct(false);
       setIsPromptingParameter(false);
+      setIsPromptingKbli2025(false);
+      setSelectedKbli2025("");
       clearElapsedTimer();
       setElapsedSeconds(0);
 
@@ -606,13 +625,18 @@ export default function AutomationPage() {
       });
   };
 
+  const formatThousand = (val: string) => {
+    return val.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
   const handleProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!productName.trim()) {
       setProductError("Jenis produk/jasa wajib diisi.");
       return;
     }
-    if (!productCapacity.trim() || isNaN(Number(productCapacity)) || Number(productCapacity) <= 0) {
+    const rawCapacity = productCapacity.replace(/\D/g, "");
+    if (!rawCapacity.trim() || isNaN(Number(rawCapacity)) || Number(rawCapacity) <= 0) {
       setProductError("Kapasitas valid wajib diisi.");
       return;
     }
@@ -631,7 +655,7 @@ export default function AutomationPage() {
       body: JSON.stringify({
         jenisProdukJasa: productName,
         cangkupanProduk: productCoverage,
-        kapasitas: productCapacity,
+        kapasitas: rawCapacity,
         satuan: productUnit,
       })
     })
@@ -672,6 +696,34 @@ export default function AutomationPage() {
         setIsSubmittingParameter(false);
         setIsPromptingParameter(false);
         setSelectedParameter("");
+      });
+  };
+
+  const handleSubmitKbli2025 = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedKbli2025) return;
+    setIsSubmittingKbli2025(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+    fetch(`${API_URL}/automation/parameter/${draftId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parameter: selectedKbli2025 })
+    })
+      .then((res) => {
+        if (res.ok) {
+          setIsPromptingKbli2025(false);
+          setStatusText("Mengirim konversi KBLI 2025...");
+          addLog(`KBLI 2025 terpilih ${selectedKbli2025} berhasil dikirim ke server.`, "success");
+        } else {
+          addLog("Gagal mengirim data KBLI 2025 ke server.", "error");
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        addLog("Kesalahan koneksi saat mengirim KBLI 2025.", "error");
+      })
+      .finally(() => {
+        setIsSubmittingKbli2025(false);
       });
   };
 
@@ -1220,10 +1272,10 @@ export default function AutomationPage() {
                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kapasitas</label>
                             <input
-                              type="number"
+                              type="text"
                               placeholder="100"
                               value={productCapacity}
-                              onChange={(e) => setProductCapacity(e.target.value)}
+                              onChange={(e) => setProductCapacity(formatThousand(e.target.value))}
                               className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
                               required
                             />
@@ -1254,6 +1306,45 @@ export default function AutomationPage() {
                           className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all"
                         >
                           {isSubmittingProduct ? "Mengirim..." : "Kirim & Lanjutkan"}
+                        </button>
+                      </form>
+                    </div>
+                  ) : isPromptingKbli2025 ? (
+                    <div className="p-8 bg-white space-y-6 animate-fadeIn text-left">
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto animate-bounce">
+                          <span className="material-symbols-outlined text-2xl animate-spin-slow text-[#1A4384]">category</span>
+                        </div>
+                        <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface text-center">Konversi KBLI 2025</h3>
+                        <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed text-center">
+                          KBLI 2020 yang Anda pilih memerlukan konversi ke KBLI 2025 pada portal OSS. Silakan pilih opsi konversi yang sesuai di bawah ini.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleSubmitKbli2025} className="space-y-4 max-w-sm mx-auto">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-on-surface-variant uppercase">Pilih KBLI 2025</label>
+                          <select
+                            value={selectedKbli2025}
+                            onChange={(e) => setSelectedKbli2025(e.target.value)}
+                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
+                            required
+                          >
+                            <option value="">Pilih KBLI 2025</option>
+                            {kbli2025Options.map((opt) => (
+                              <option key={opt.code} value={opt.code}>
+                                {opt.code} - {opt.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isSubmittingKbli2025 || !selectedKbli2025}
+                          className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                        >
+                          {isSubmittingKbli2025 ? "Mengirim..." : "Kirim & Lanjutkan"}
                         </button>
                       </form>
                     </div>
@@ -1375,9 +1466,9 @@ export default function AutomationPage() {
                         </h4>
                         
                         {/* Dynamic Active Action Sub-status */}
-                        <div className="bg-surface-container-low border border-border-light px-4 py-2.5 rounded-lg text-[11px] font-bold text-primary-container leading-relaxed flex items-center justify-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                          <span className="break-all">{activeSubStatus}</span>
+                        <div className="bg-surface-container-low border border-border-light px-4 py-2.5 rounded-lg text-[11px] font-bold text-primary-container leading-relaxed flex items-start text-left gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0 mt-1.5" />
+                          <span className="break-words">{activeSubStatus}</span>
                         </div>
 
                         <p className="text-[10px] text-on-surface-variant/80 font-medium">

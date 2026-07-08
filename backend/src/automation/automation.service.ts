@@ -23,6 +23,7 @@ export class AutomationService implements OnModuleDestroy {
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
   private readonly activePasswords = new Map<string, string>();
+  private readonly cachedPasswords = new Map<string, string>();
   private readonly activeProductInputs = new Map<
     string,
     { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
@@ -124,6 +125,7 @@ export class AutomationService implements OnModuleDestroy {
 
   submitPassword(draftId: string, password: string) {
     this.activePasswords.set(draftId, password);
+    this.cachedPasswords.set(draftId, password);
     this.userConfirmations.next(draftId);
   }
 
@@ -887,15 +889,20 @@ export class AutomationService implements OnModuleDestroy {
 
     // Wait for password submitted from Frontend!
     let passwordCode = '';
-    const startTimePass = Date.now();
-    while (Date.now() - startTimePass < 120000) {
-      // Timeout after 120 seconds
-      if (this.activePasswords.has(draftId)) {
-        passwordCode = this.activePasswords.get(draftId)!;
-        this.activePasswords.delete(draftId);
-        break;
+    if (this.cachedPasswords.has(draftId)) {
+      passwordCode = this.cachedPasswords.get(draftId)!;
+    } else {
+      const startTimePass = Date.now();
+      while (Date.now() - startTimePass < 120000) {
+        // Timeout after 120 seconds
+        if (this.activePasswords.has(draftId)) {
+          passwordCode = this.activePasswords.get(draftId)!;
+          this.cachedPasswords.set(draftId, passwordCode);
+          this.activePasswords.delete(draftId);
+          break;
+        }
+        await page.waitForTimeout(500);
       }
-      await page.waitForTimeout(500);
     }
 
     if (!passwordCode) {
@@ -1372,21 +1379,26 @@ export class AutomationService implements OnModuleDestroy {
     // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
     let finalPassword = passwordCode;
     if (!finalPassword) {
-      this.logStep(
-        subject,
-        4,
-        'warn',
-        'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.',
-      );
-      const startTimePass = Date.now();
-      while (Date.now() - startTimePass < 120000) {
-        // Timeout after 120 seconds
-        if (this.activePasswords.has(draftId)) {
-          finalPassword = this.activePasswords.get(draftId)!;
-          this.activePasswords.delete(draftId);
-          break;
+      if (this.cachedPasswords.has(draftId)) {
+        finalPassword = this.cachedPasswords.get(draftId)!;
+      } else {
+        this.logStep(
+          subject,
+          4,
+          'warn',
+          'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.',
+        );
+        const startTimePass = Date.now();
+        while (Date.now() - startTimePass < 120000) {
+          // Timeout after 120 seconds
+          if (this.activePasswords.has(draftId)) {
+            finalPassword = this.activePasswords.get(draftId)!;
+            this.cachedPasswords.set(draftId, finalPassword);
+            this.activePasswords.delete(draftId);
+            break;
+          }
+          await page.waitForTimeout(500);
         }
-        await page.waitForTimeout(500);
       }
     }
 
@@ -2377,6 +2389,7 @@ export class AutomationService implements OnModuleDestroy {
     draft: any,
     subject: Subject<AutomationEvent>,
   ) {
+    const draftId = draft.id;
     this.logStep(
       subject,
       6,
@@ -2428,11 +2441,101 @@ export class AutomationService implements OnModuleDestroy {
     const kbliSearchInput = page.getByPlaceholder('kode KBLI').locator('input');
     await kbliSearchInput.click();
     await kbliSearchInput.fill(searchKbli);
-    await page.getByText(searchKbli).first().click();
-    await page.waitForTimeout(1000);
+    const getListKbli2025Promise = page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/getListKBLI') &&
+        response.status() === 200,
+      { timeout: 20000 }
+    ).catch(() => null);
 
+    await page.getByText(searchKbli).first().click();
+    
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
+    await page.waitForTimeout(1000);
+    const listKbliResponse = await getListKbli2025Promise;
+    
+    const kbli2025Select = page.getByTestId('kbli-select').first();
+    if (await kbli2025Select.isVisible()) {
+      this.logStep(subject, 6, 'info', 'Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...');
+      
+      let kbliOptions: any[] = [];
+      if (listKbliResponse) {
+        try {
+          const json = await listKbliResponse.json();
+          if (json && Array.isArray(json.data)) {
+            kbliOptions = json.data.map((item: any) => ({
+              code: item.kode,
+              title: item.judul,
+            }));
+          }
+        } catch (err) {
+          this.logger.error("Failed to parse getListKBLI response", err);
+        }
+      }
+
+      if (kbliOptions.length === 0) {
+        // ponytail: fallback to scraping UI if interceptor failed
+        this.logStep(subject, 6, 'warn', 'Gagal memproses data konversi dari server. Mencoba membuka dropdown...');
+        await kbli2025Select.locator('input').click();
+        await page.waitForTimeout(1000);
+        const items = await page.locator('.ant-select-item-option-content').allInnerTexts().catch(() => []);
+        kbliOptions = items.map((text: string) => {
+          const parts = text.split('-');
+          const code = parts[0]?.trim() || '';
+          const title = parts.slice(1).join('-')?.trim() || '';
+          return { code, title };
+        }).filter((item: any) => item.code.length === 5);
+      }
+
+      if (kbliOptions.length > 0) {
+        this.logStep(subject, 6, 'warn', 'PILIH_KBLI_2025', { options: kbliOptions });
+
+        // Wait up to 120 seconds for user response
+        let chosenKbli: string | null = null;
+        const startTime = Date.now();
+        while (Date.now() - startTime < 120000) {
+          if (this.activeParameterInputs.has(draftId)) {
+            chosenKbli = this.activeParameterInputs.get(draftId)!;
+            this.activeParameterInputs.delete(draftId);
+            break;
+          }
+          await page.waitForTimeout(500);
+        }
+
+        if (!chosenKbli) {
+          this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.');
+          throw new Error('Batas waktu pemilihan KBLI 2025 habis.');
+        }
+
+        const option = kbliOptions.find(o => o.code === chosenKbli);
+        const chosenKbliTitle = option ? option.title : 'KBLI 2025 Terpilih';
+
+        this.logStep(subject, 6, 'info', `Memperbarui database ke KBLI 2025: ${chosenKbli}...`);
+        await this.draftsService.update(draftId, {
+          kbliCode: chosenKbli,
+          kbliTitle: chosenKbliTitle,
+        });
+
+        // Select KBLI 2025 in portal
+        const selectContainer = kbli2025Select.locator('input');
+        await selectContainer.click();
+        await page.waitForTimeout(1000);
+        await selectContainer.fill(chosenKbli);
+        await page.waitForTimeout(1000);
+
+        const optionLocator = page.locator('.ant-select-item-option-content').filter({ hasText: chosenKbli }).first();
+        if (await optionLocator.isVisible()) {
+          await optionLocator.click();
+        } else {
+          await page.getByText(chosenKbli).first().click();
+        }
+        await page.waitForTimeout(1000);
+      } else {
+        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Opsi konversi KBLI 2025 tidak ditemukan.');
+        throw new Error('Opsi konversi KBLI 2025 tidak ditemukan.');
+      }
+    }
 
     this.logStep(subject, 6, 'info', 'Memilih ruang lingkup kegiatan...');
     await page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' }).click();
@@ -2654,7 +2757,6 @@ export class AutomationService implements OnModuleDestroy {
     }
 
     // Tambah Produk/Jasa
-    const draftId = draft.id;
     this.logStep(subject, 6, 'info', 'Membuka modal Tambah Produk/Jasa...');
     const getSatuanPromise = page.waitForResponse(
       (response: any) =>
