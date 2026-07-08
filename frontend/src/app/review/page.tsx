@@ -127,10 +127,11 @@ export default function ReviewPage() {
     }
   };
 
-  const [selectedKbli, setSelectedKbli] = useState({
+  const [selectedKbli, setSelectedKbli] = useState<any>({
     code: "56103",
     title: "Kedai Makanan",
-    description: "Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap..."
+    description: "Usaha jasa pangan yang bertempat di sebagian atau seluruh bangunan tetap...",
+    version: "2020"
   });
 
   // Consent Checklist state
@@ -540,7 +541,18 @@ export default function ReviewPage() {
                   {selectedKbli.code}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-bold text-on-surface truncate">{selectedKbli.title}</h4>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="font-bold text-on-surface truncate">{selectedKbli.title}</h4>
+                    {selectedKbli.version && (
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide border shrink-0 ${
+                        selectedKbli.version === "2025"
+                          ? "bg-primary-container/10 border-primary-container/30 text-primary-container"
+                          : "bg-outline/10 border-outline/30 text-outline"
+                      }`}>
+                        KBLI {selectedKbli.version}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10.5px] text-on-surface-variant leading-relaxed mt-0.5">{selectedKbli.description}</p>
                 </div>
               </div>

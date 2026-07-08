@@ -9,6 +9,7 @@ interface KBLIRecommendation {
   description: string;
   confidence: "sangat_cocok" | "alternatif";
   suitableFor: string[];
+  version?: string;
 }
 
 interface KBLIUIDetails {
@@ -1919,7 +1920,7 @@ export default function WizardPage() {
                         {/* Segmented Risk Tag */}
                         <div className="flex rounded overflow-hidden border border-border-light w-fit">
                           <span className="bg-[#7C2D12] text-white font-extrabold text-[9px] px-2.5 py-1.5 uppercase tracking-wider">
-                            KBLI 2020
+                            KBLI 2020 / 2025
                           </span>
                           <span className="bg-[#1A4384] text-white font-extrabold text-[9px] px-2.5 py-1.5 uppercase tracking-wider border-l border-border-light">
                             Tingkat Risiko Rendah
@@ -1957,16 +1958,27 @@ export default function WizardPage() {
                                       <h3 className="font-bold text-xs md:text-sm text-on-surface truncate pr-2">
                                         {kbli.title}
                                       </h3>
-                                      <span className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold uppercase tracking-wider mt-1 ${
-                                        kbli.confidence === "sangat_cocok"
-                                          ? "text-success"
-                                          : "text-warning"
-                                      }`}>
-                                        <span className="material-symbols-outlined text-[10px] fill-current">
-                                          {kbli.confidence === "sangat_cocok" ? "verified" : "info"}
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold uppercase tracking-wider ${
+                                          kbli.confidence === "sangat_cocok"
+                                            ? "text-success"
+                                            : "text-warning"
+                                        }`}>
+                                          <span className="material-symbols-outlined text-[10px] fill-current">
+                                            {kbli.confidence === "sangat_cocok" ? "verified" : "info"}
+                                          </span>
+                                          {kbli.confidence === "sangat_cocok" ? "Sangat Cocok" : "Alternatif"}
                                         </span>
-                                        {kbli.confidence === "sangat_cocok" ? "Sangat Cocok" : "Alternatif"}
-                                      </span>
+                                        {kbli.version && (
+                                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide border shrink-0 ${
+                                            kbli.version === "2025"
+                                              ? "bg-[#1A4384]/10 border-[#1A4384]/30 text-[#1A4384]"
+                                              : "bg-[#7C2D12]/10 border-[#7C2D12]/30 text-[#7C2D12]"
+                                          }`}>
+                                            KBLI {kbli.version}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
 

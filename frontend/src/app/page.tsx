@@ -75,19 +75,6 @@ export default function OnboardingPage() {
             Dashboard
           </button>
         </nav>
-
-        {/* Right Section: Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 rounded text-xs font-bold border border-primary-container text-primary-container hover:bg-surface-container transition-all">
-            Daftar
-          </button>
-          <button 
-            onClick={() => router.push("/dashboard")}
-            className="px-3 py-1.5 rounded text-xs font-bold bg-primary-container text-white hover:bg-primary transition-all"
-          >
-            Masuk
-          </button>
-        </div>
       </header>
 
       {/* ── Main Container (Centered wizard grid, max 640px) ── */}

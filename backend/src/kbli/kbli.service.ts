@@ -7,6 +7,7 @@ export interface KBLIRecord {
   description: string;
   confidence: 'sangat_cocok' | 'alternatif';
   suitableFor: string[];
+  version?: string;
 }
 
 @Injectable()
@@ -50,6 +51,7 @@ export class KbliService {
             description: 'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
             confidence: 'sangat_cocok',
             suitableFor: ['Paling banyak dipilih', 'Tren UMKM'],
+            version: '2020',
           });
         }
 
@@ -154,6 +156,8 @@ Tugas Anda adalah:
 1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
 2. Menggunakan tool pencarian KBLI (Vertex AI Search atau Google Search) untuk menemukan kecocokan kode KBLI resmi terbaru yang paling akurat dari BPS atau Lembaga OSS.
 3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON yang valid.
+4. Digit kode KBLI yang diperbolehkan hanyalah 5 digit.
+5. Utamakan mencari kode KBLI versi tahun 2025, jika tidak ditemukan maka boleh menggunakan kode KBLI tahun 2020. namun jika ditemukan kode KBLI tahun 2025 maka gunakan kode KBLI tahun 2025.
 
 Kriteria 'confidence' harus bernilai 'sangat_cocok' untuk 1-2 kecocokan utama, dan 'alternatif' untuk rekomendasi pendukung.
 Pastikan HANYA menghasilkan JSON yang valid, tanpa penjelasan markdown lain di luar blok code JSON (atau langsung kembalikan raw JSON agar mudah diparsing).`,
@@ -177,7 +181,8 @@ Anda harus mengembalikan hasilnya dalam bentuk JSON array of objects yang valid 
     "title": "string (Nama resmi KBLI, contoh: 'Penyediaan Makanan Di Bangunan Tetap')",
     "description": "string (Deskripsi resmi cakupan aktivitas KBLI tersebut)",
     "confidence": "string (Hanya boleh 'sangat_cocok' atau 'alternatif')",
-    "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)]
+    "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)],
+    "version": "string (Tahun versi KBLI, hanya boleh '2020' atau '2025')"
   }
 ]
 
@@ -221,8 +226,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
               console.log(
                 `[KBLI Agent] Successfully retrieved ${records.length} records online.`,
               );
-              this.cache.set(q, records);
-              return records;
+              return this.cacheAndReturn(q, records);
             }
           } else {
             const records = JSON.parse(trimmedText) as KBLIRecord[];
@@ -230,8 +234,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
               console.log(
                 `[KBLI Agent] Successfully retrieved ${records.length} records online from raw text.`,
               );
-              this.cache.set(q, records);
-              return records;
+              return this.cacheAndReturn(q, records);
             }
           }
           throw new Error(
@@ -250,8 +253,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
         console.log('[KBLI Agent] Trying Local LLM fallback...');
         const localLlmRecords = await this.queryLocalLlm(query, candidates);
         if (localLlmRecords) {
-          this.cache.set(q, localLlmRecords);
-          return localLlmRecords;
+          return this.cacheAndReturn(q, localLlmRecords);
         }
       }
     } else {
@@ -260,8 +262,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
       );
       const localLlmRecords = await this.queryLocalLlm(query, candidates);
       if (localLlmRecords) {
-        this.cache.set(q, localLlmRecords);
-        return localLlmRecords;
+        return this.cacheAndReturn(q, localLlmRecords);
       }
     }
 
@@ -273,8 +274,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
     }
 
     if (apiMatches.length > 0) {
-      this.cache.set(q, apiMatches);
-      return apiMatches;
+      return this.cacheAndReturn(q, apiMatches);
     }
 
     // Failsafe of failsafes: return a generic food/retail placeholder matching typical registrations
@@ -321,6 +321,7 @@ Kembalikan HANYA array JSON tersebut saja!`;
         },
         body: JSON.stringify({
           model: model,
+          stream: false,
           messages: [
             {
               role: 'system',
@@ -331,6 +332,8 @@ Tugas Anda adalah:
 1. Menganalisis deskripsi usaha yang dimasukkan oleh pengguna.
 2. Mencari kecocokan dari daftar kandidat KBLI di atas (jika tersedia). Jika ada yang cocok, gunakan data tersebut. Jika tidak ada yang cocok, gunakan pengetahuan Anda untuk merumuskan kode KBLI resmi lainnya yang valid.
 3. Memberikan rekomendasi KBLI yang paling cocok dalam format JSON array of objects yang valid tanpa penjelasan apapun di luar JSON block.
+4. Digit kode KBLI yang diperbolehkan hanyalah 5 digit.
+5. Utamakan mencari kode KBLI versi tahun 2025, jika tidak ditemukan maka boleh menggunakan kode KBLI tahun 2020. namun jika ditemukan kode KBLI tahun 2025 maka gunakan kode KBLI tahun 2025.
 
 Setiap objek dalam array harus memiliki skema berikut:
 [
@@ -339,7 +342,8 @@ Setiap objek dalam array harus memiliki skema berikut:
     "title": "string (Nama resmi KBLI, contoh: 'Penyediaan Makanan Di Bangunan Tetap')",
     "description": "string (Deskripsi resmi cakupan aktivitas KBLI tersebut)",
     "confidence": "string (Hanya boleh 'sangat_cocok' atau 'alternatif')",
-    "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)]
+    "suitableFor": ["string", "string" (Contoh aktivitas/keyword populer yang cocok, minimal 3)],
+    "version": "string (Tahun versi KBLI, hanya boleh '2020' atau '2025')"
   }
 ]
 
@@ -397,6 +401,7 @@ Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \
           description: `Aktivitas bidang usaha untuk ${this.capitalizeTitle(item.judul)} (Kategori ${item.kategori_huruf}).`,
           confidence: 'sangat_cocok' as const,
           suitableFor: [this.capitalizeTitle(item.judul).toLowerCase(), `kategori ${item.kategori_huruf}`],
+          version: '2020',
         }));
       }
       return [];
@@ -436,5 +441,19 @@ Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \
       .split(' ')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  }
+
+  private sortKbliRecords(records: KBLIRecord[]): KBLIRecord[] {
+    return [...records].sort((a, b) => {
+      const scoreA = a.version === '2025' ? 2 : 1;
+      const scoreB = b.version === '2025' ? 2 : 1;
+      return scoreB - scoreA;
+    });
+  }
+
+  private cacheAndReturn(q: string, records: KBLIRecord[]): KBLIRecord[] {
+    const sorted = this.sortKbliRecords(records);
+    this.cache.set(q, sorted);
+    return sorted;
   }
 }
