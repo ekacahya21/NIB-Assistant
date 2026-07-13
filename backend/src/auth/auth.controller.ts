@@ -8,11 +8,11 @@ export class AuthController {
     const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
     const expectedPassword = process.env.ADMIN_PASSWORD || 'admin';
     const token = process.env.ADMIN_TOKEN || 'secret_admin_token_123';
-    
+
     if (username === expectedUsername && password === expectedPassword) {
       return { token };
     }
-    
+
     throw new UnauthorizedException('Username atau password salah.');
   }
 }

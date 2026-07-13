@@ -66,7 +66,13 @@ export class AutomationController {
   @Post('product/:draftId')
   submitProduct(
     @Param('draftId') draftId: string,
-    @Body() body: { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+    @Body()
+    body: {
+      jenisProdukJasa: string;
+      cangkupanProduk: string;
+      kapasitas: string;
+      satuan: string;
+    },
   ) {
     this.automationService.submitProductInput(draftId, body);
     return { success: true };
@@ -75,7 +81,7 @@ export class AutomationController {
   @Post('parameter/:draftId')
   submitParameter(
     @Param('draftId') draftId: string,
-    @Body() body: { parameter: string }
+    @Body() body: { parameter: string },
   ) {
     this.automationService.submitParameterInput(draftId, body.parameter);
     return { success: true };
@@ -105,8 +111,11 @@ export class AutomationController {
       return;
     }
 
-    const files = fs.readdirSync(recordingsDir)
-      .filter((f: string) => f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'));
+    const files = fs
+      .readdirSync(recordingsDir)
+      .filter(
+        (f: string) => f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'),
+      );
 
     if (files.length === 0) {
       res.status(404).send('Rekaman video tidak ditemukan.');

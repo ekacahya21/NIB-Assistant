@@ -26,7 +26,12 @@ export class AutomationService implements OnModuleDestroy {
   private readonly cachedPasswords = new Map<string, string>();
   private readonly activeProductInputs = new Map<
     string,
-    { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+    {
+      jenisProdukJasa: string;
+      cangkupanProduk: string;
+      kapasitas: string;
+      satuan: string;
+    }
   >();
   private readonly activeParameterInputs = new Map<string, string>();
   private readonly activeTokens = new Map<string, string>();
@@ -51,7 +56,6 @@ export class AutomationService implements OnModuleDestroy {
   private readonly sessionLogs = new Map<string, Array<any>>();
   private readonly redirectionUrls = new Map<string, string>();
   private readonly kdIzins = new Map<string, string>();
-
 
   // Queue and browser management
   private activeSessionsCount = 0;
@@ -131,7 +135,12 @@ export class AutomationService implements OnModuleDestroy {
 
   submitProductInput(
     draftId: string,
-    data: { jenisProdukJasa: string; cangkupanProduk: string; kapasitas: string; satuan: string }
+    data: {
+      jenisProdukJasa: string;
+      cangkupanProduk: string;
+      kapasitas: string;
+      satuan: string;
+    },
   ) {
     this.activeProductInputs.set(draftId, data);
     this.userConfirmations.next(draftId);
@@ -143,7 +152,11 @@ export class AutomationService implements OnModuleDestroy {
   }
 
   // Observable SSE stream for automation status
-  getStream(draftId: string, akunOss?: string, sessionId?: string): Observable<AutomationEvent> {
+  getStream(
+    draftId: string,
+    akunOss?: string,
+    sessionId?: string,
+  ): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
       // Prevent double session for the same draftId
       if (this.activeSubjects.has(draftId)) {
@@ -212,7 +225,6 @@ export class AutomationService implements OnModuleDestroy {
       this.logger.log(`Closing active browser for draft ID: ${draftId}`);
       activeBrowser.close().catch((err: any) => {
         this.logger.error(`Error closing browser on cancellation: ${err}`);
-
       });
       this.activeBrowsers.delete(draftId);
     }
@@ -510,12 +522,18 @@ export class AutomationService implements OnModuleDestroy {
     const recordingsDir = path.resolve('./recordings');
     if (fs.existsSync(recordingsDir)) {
       try {
-        const files = fs.readdirSync(recordingsDir)
-          .filter((f: string) => f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'));
+        const files = fs
+          .readdirSync(recordingsDir)
+          .filter(
+            (f: string) =>
+              f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'),
+          );
         for (const file of files) {
           fs.unlinkSync(path.join(recordingsDir, file));
         }
-        this.logger.log(`Deleted previous recordings for draft ${draftId} before retry.`);
+        this.logger.log(
+          `Deleted previous recordings for draft ${draftId} before retry.`,
+        );
       } catch (err) {
         this.logger.error(`Failed to delete previous recordings: ${err}`);
       }
@@ -586,17 +604,21 @@ export class AutomationService implements OnModuleDestroy {
       const duration = timers
         ? Math.round((Date.now() - timers.startTime) / 1000)
         : 0;
-      const finalStatus = activeStep === 7 
-        ? 'COMPLETED' 
-        : (activeStep > 2 ? 'FAILED_LATER' : 'FAILED');
+      const finalStatus =
+        activeStep === 7
+          ? 'COMPLETED'
+          : activeStep > 2
+            ? 'FAILED_LATER'
+            : 'FAILED';
       const isCancelled = this.cancelledDrafts.has(draftId);
       this.cancelledDrafts.delete(draftId);
 
-      const dbErrorMessage = finalStatus === 'COMPLETED'
-        ? null
-        : (isCancelled
+      const dbErrorMessage =
+        finalStatus === 'COMPLETED'
+          ? null
+          : isCancelled
             ? 'Sesi dibatalkan oleh pengguna.'
-            : (finalErrorMessage || 'Terjadi kesalahan tidak dikenal.'));
+            : finalErrorMessage || 'Terjadi kesalahan tidak dikenal.';
 
       const logsToSave = this.sessionLogs.get(draftId) || [];
       this.sessionLogs.delete(draftId);
@@ -641,7 +663,10 @@ export class AutomationService implements OnModuleDestroy {
         const fs = require('fs');
         const path = require('path');
         const timestamp = Date.now();
-        const targetPath = path.join('./recordings', `draft_${draftId}_${timestamp}.webm`);
+        const targetPath = path.join(
+          './recordings',
+          `draft_${draftId}_${timestamp}.webm`,
+        );
         try {
           if (!fs.existsSync('./recordings')) {
             fs.mkdirSync('./recordings', { recursive: true });
@@ -659,7 +684,10 @@ export class AutomationService implements OnModuleDestroy {
             );
           }
         } catch (renameErr) {
-          this.logger.error(`Gagal memindahkan file video rekaman dari ${tempVideoPath} ke ${targetPath}`, renameErr);
+          this.logger.error(
+            `Gagal memindahkan file video rekaman dari ${tempVideoPath} ke ${targetPath}`,
+            renameErr,
+          );
         }
       }
       subject.complete();
@@ -1535,7 +1563,9 @@ export class AutomationService implements OnModuleDestroy {
         const errorLocator = page
           .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
           .first();
-        const isErrorVisible = await errorLocator.isVisible().catch(() => false);
+        const isErrorVisible = await errorLocator
+          .isVisible()
+          .catch(() => false);
         if (isErrorVisible) {
           const errorMsg = await errorLocator
             .textContent()
@@ -2124,10 +2154,7 @@ export class AutomationService implements OnModuleDestroy {
       .fill(draft.alamatUsaha);
 
     // Select Provinsi
-    const cleanProvinsi = (
-      draft.provinsi ||
-      draft.provinsiKtp
-    ).trim();
+    const cleanProvinsi = (draft.provinsi || draft.provinsiKtp).trim();
     const searchProvinsi = this.getOptimalSearchQuery(cleanProvinsi);
     this.logStep(
       subject,
@@ -2144,10 +2171,11 @@ export class AutomationService implements OnModuleDestroy {
         { timeout: 5000 },
       )
       .catch(() => null);
-    const provinsiSelect = page.getByRole('combobox', { name: 'Pilih provinsi' })
+    const provinsiSelect = page.getByRole('combobox', {
+      name: 'Pilih provinsi',
+    });
     await provinsiSelect.click();
-    await provinsiSelect
-      .fill(searchProvinsi);
+    await provinsiSelect.fill(searchProvinsi);
     await provPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanProvinsi);
@@ -2430,33 +2458,39 @@ export class AutomationService implements OnModuleDestroy {
     );
 
     // check lokasi usaha questions, if exists, select 'Tidak'
-    const obvitnasQuestion = page.getByRole('radiogroup', { name: 'Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?' });
+    const obvitnasQuestion = page.getByRole('radiogroup', {
+      name: 'Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?',
+    });
     if (await obvitnasQuestion.isVisible()) {
       await obvitnasQuestion.getByLabel('Tidak').check();
       await page.waitForTimeout(500);
     }
-    const psnQuestion = page.getByRole('radiogroup', { name: 'Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?' });
+    const psnQuestion = page.getByRole('radiogroup', {
+      name: 'Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?',
+    });
     if (await psnQuestion.isVisible()) {
       await psnQuestion.getByLabel('Tidak').check();
       await page.waitForTimeout(500);
     }
 
     const getListKbliPromise = page
-        .waitForResponse(
-          (response: any) =>
-            (response.url().includes('/getListKBLI')) &&
-            response.status() === 200,
-          { timeout: 25000 },
-        )
-        .catch(() => null);
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/getListKBLI') && response.status() === 200,
+        { timeout: 25000 },
+      )
+      .catch(() => null);
 
     this.logStep(subject, 6, 'info', 'Memilih KBLI...');
-    await page.getByRole('button', {name: 'Selanjutnya'}).click();
+    await page.getByRole('button', { name: 'Selanjutnya' }).click();
     await getListKbliPromise;
     await page.waitForTimeout(1000);
 
     // select jenis kegiatan usaha
-    await page.getByPlaceholder('Pilih jenis kegiatan usaha').locator('input').click();
+    await page
+      .getByPlaceholder('Pilih jenis kegiatan usaha')
+      .locator('input')
+      .click();
     await page.getByText('Kegiatan Usaha Utama').click();
 
     // check if there's any popup message, close by clicking "Mengerti"
@@ -2473,24 +2507,30 @@ export class AutomationService implements OnModuleDestroy {
     const kbliSearchInput = page.getByPlaceholder('kode KBLI').locator('input');
     await kbliSearchInput.click();
     await kbliSearchInput.fill(searchKbli);
-    const getListKbli2025Promise = page.waitForResponse(
-      (response: any) =>
-        response.url().includes('/getListKBLI') &&
-        response.status() === 200,
-      { timeout: 20000 }
-    ).catch(() => null);
+    const getListKbli2025Promise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/getListKBLI') && response.status() === 200,
+        { timeout: 20000 },
+      )
+      .catch(() => null);
 
     await page.getByText(searchKbli).first().click();
-    
+
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
     await page.waitForTimeout(1000);
     const listKbliResponse = await getListKbli2025Promise;
-    
+
     const kbli2025Select = page.getByTestId('kbli-select').first();
     if (await kbli2025Select.isVisible()) {
-      this.logStep(subject, 6, 'info', 'Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...');
-      
+      this.logStep(
+        subject,
+        6,
+        'info',
+        'Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...',
+      );
+
       let kbliOptions: any[] = [];
       if (listKbliResponse) {
         try {
@@ -2502,12 +2542,14 @@ export class AutomationService implements OnModuleDestroy {
             }));
           }
         } catch (err) {
-          this.logger.error("Failed to parse getListKBLI response", err);
+          this.logger.error('Failed to parse getListKBLI response', err);
         }
       }
 
       if (kbliOptions.length > 0) {
-        this.logStep(subject, 6, 'warn', 'PILIH_KBLI_2025', { options: kbliOptions });
+        this.logStep(subject, 6, 'warn', 'PILIH_KBLI_2025', {
+          options: kbliOptions,
+        });
 
         // Wait up to 120 seconds for user response
         let chosenKbli: string | null = null;
@@ -2522,14 +2564,24 @@ export class AutomationService implements OnModuleDestroy {
         }
 
         if (!chosenKbli) {
-          this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.');
+          this.logStep(
+            subject,
+            6,
+            'error',
+            'Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.',
+          );
           throw new Error('Batas waktu pemilihan KBLI 2025 habis.');
         }
 
-        const option = kbliOptions.find(o => o.code === chosenKbli);
+        const option = kbliOptions.find((o) => o.code === chosenKbli);
         const chosenKbliTitle = option ? option.title : 'KBLI 2025 Terpilih';
 
-        this.logStep(subject, 6, 'info', `Memperbarui database ke KBLI 2025: ${chosenKbli}...`);
+        this.logStep(
+          subject,
+          6,
+          'info',
+          `Memperbarui database ke KBLI 2025: ${chosenKbli}...`,
+        );
         await this.draftsService.update(draftId, {
           kbliCode: chosenKbli,
           kbliTitle: chosenKbliTitle,
@@ -2542,7 +2594,10 @@ export class AutomationService implements OnModuleDestroy {
         await selectContainer.fill(chosenKbli);
         await page.waitForTimeout(1000);
 
-        const optionLocator = page.locator('.ant-select-item-option-content').filter({ hasText: chosenKbli }).first();
+        const optionLocator = page
+          .locator('.ant-select-item-option-content')
+          .filter({ hasText: chosenKbli })
+          .first();
         if (await optionLocator.isVisible()) {
           await optionLocator.click();
         } else {
@@ -2553,8 +2608,10 @@ export class AutomationService implements OnModuleDestroy {
     }
 
     this.logStep(subject, 6, 'info', 'Memilih ruang lingkup kegiatan...');
-    await page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' }).click();
-    
+    await page
+      .getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' })
+      .click();
+
     // check if 'Seluruh' ruang lingkup is exists, then click it
     const seluruhRuangLingkup = page.getByText('Seluruh');
     if (await seluruhRuangLingkup.isVisible()) {
@@ -2571,31 +2628,32 @@ export class AutomationService implements OnModuleDestroy {
 
     // click tombol tambah bidang usaha
     await page.getByRole('button', { name: 'Tambah Bidang Usaha' }).click();
-    
+
     // wait for prosesBidangUsaha
     const prosesBidangUsahaPromise = page
-        .waitForResponse(
-          (response: any) =>
-            (response.url().includes('/prosesBidangUsaha')) &&
-            response.status() === 200,
-          { timeout: 25000 },
-        )
-        .catch(() => null);
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/prosesBidangUsaha') &&
+          response.status() === 200,
+        { timeout: 25000 },
+      )
+      .catch(() => null);
     await prosesBidangUsahaPromise;
     await page.waitForTimeout(1000);
-    
-    await page.getByRole('textbox', { name: 'Contoh : Restoran' }).fill(draft.namaUsaha);
+
+    await page
+      .getByRole('textbox', { name: 'Contoh : Restoran' })
+      .fill(draft.namaUsaha);
     await page.getByRole('button', { name: 'Selanjutnya' }).click();
-    
+
     // wait for prosesProyek
     const prosesProyekPromise = page
-        .waitForResponse(
-          (response: any) =>
-            (response.url().includes('/prosesProyek')) &&
-            response.status() === 200,
-          { timeout: 25000 },
-        )
-        .catch(() => null);
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/prosesProyek') && response.status() === 200,
+        { timeout: 25000 },
+      )
+      .catch(() => null);
     await prosesProyekPromise;
     await page.waitForTimeout(1000);
 
@@ -2608,30 +2666,33 @@ export class AutomationService implements OnModuleDestroy {
 
     // process
     this.logStep(subject, 6, 'info', 'Memproses...');
-    await page.getByTestId('modal-proses').getByRole('button', { name: 'Proses' }).click();
+    await page
+      .getByTestId('modal-proses')
+      .getByRole('button', { name: 'Proses' })
+      .click();
 
     // wait for submitPernyataanMandiri
     this.logStep(subject, 6, 'info', 'Menunggu submitPernyataanMandiri...');
     const submitPernyataanMandiriPromise = page
-        .waitForResponse(
-          (response: any) =>
-            (response.url().includes('/submitPernyataanMandiri')) &&
-            response.status() === 200,
-          { timeout: 25000 },
-        )
-        .catch(() => null);
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/submitPernyataanMandiri') &&
+          response.status() === 200,
+        { timeout: 25000 },
+      )
+      .catch(() => null);
     await submitPernyataanMandiriPromise;
     await page.waitForTimeout(1000);
-    
+
     // wait for detailPerizinan
     const detailPerizinanPromise = page
-        .waitForResponse(
-          (response: any) =>
-            (response.url().includes('/detailPerizinan')) &&
-            response.status() === 200,
-          { timeout: 25000 },
-        )
-        .catch(() => null);
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/detailPerizinan') &&
+          response.status() === 200,
+        { timeout: 25000 },
+      )
+      .catch(() => null);
     await detailPerizinanPromise;
     await page.waitForTimeout(1000);
 
@@ -2642,61 +2703,108 @@ export class AutomationService implements OnModuleDestroy {
     // Apakah kegiatan usaha ini sudah berjalan?
     const isRunning = draft.sudahBerjalan === 'sudah';
     const runningOptionText = isRunning ? 'Sudah Berjalan' : 'Belum Berjalan';
-    this.logStep(subject, 6, 'info', `Mengisi status berjalan: ${runningOptionText}`);
-    const runningCombobox = page.getByTestId('select-box-flag-berjalan').first();
-    
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi status berjalan: ${runningOptionText}`,
+    );
+    const runningCombobox = page
+      .getByTestId('select-box-flag-berjalan')
+      .first();
+
     // Wait up to 60s for the page to load and the combobox to be visible
-    await runningCombobox.waitFor({ state: 'visible', timeout: 60000 }).catch(() => null);
-    
+    await runningCombobox
+      .waitFor({ state: 'visible', timeout: 60000 })
+      .catch(() => null);
+
     await runningCombobox.click();
     await runningCombobox.locator('input').fill(runningOptionText);
     await page.getByText(runningOptionText, { exact: true }).click();
     await page.waitForTimeout(500);
-    
+
     // Conditional Date Pickers for Sudah Berjalan
     if (isRunning) {
       if (draft.tanggalMulaiUsaha) {
         const dateObj = new Date(draft.tanggalMulaiUsaha);
         const targetYear = dateObj.getFullYear();
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthNames = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
         const targetMonth = monthNames[dateObj.getMonth()];
         const targetDay = dateObj.getDate().toString();
 
-        this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`);
-        
-        const container = page.getByTestId('date-time-picker-tgl-berjalan').first();
+        this.logStep(
+          subject,
+          6,
+          'info',
+          `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`,
+        );
+
+        const container = page
+          .getByTestId('date-time-picker-tgl-berjalan')
+          .first();
         await container.scrollIntoViewIfNeeded().catch(() => {});
         await container.click();
-        
+
         // 1. Click the datepicker trigger
-        const trigger = container.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"], input').first();
-        await (await trigger.isVisible() ? trigger : container).click({ force: true }).catch(() => {});
+        const trigger = container
+          .locator(
+            '.v-field, .v-input__append-inner, .v-icon, div[name="date"], input',
+          )
+          .first();
+        await ((await trigger.isVisible()) ? trigger : container)
+          .click({ force: true })
+          .catch(() => {});
         await page.waitForTimeout(1000);
 
         // picker locator
         const pickerContainer = page.locator('.v-picker');
-        
+
         // 2. Select Year (e.g. 2020)
-        const yearSelect = pickerContainer.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
+        const yearSelect = pickerContainer
+          .locator('button, div, span')
+          .filter({ hasText: /^\d{4}$/ })
+          .first();
         const currentYearText = await yearSelect.innerText().catch(() => '');
         let currentYear = parseInt(currentYearText) || new Date().getFullYear();
-        
+
         if (currentYear !== targetYear) {
           await yearSelect.click().catch(() => {});
           await page.waitForTimeout(1000);
-          
-          let targetYearOption = pickerContainer.locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
-          
-          if (!await targetYearOption.isVisible()) {
-            targetYearOption = pickerContainer.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+
+          let targetYearOption = pickerContainer
+            .locator('div, li, button, span')
+            .filter({ hasText: new RegExp(`^${targetYear}$`) })
+            .first();
+
+          if (!(await targetYearOption.isVisible())) {
+            targetYearOption = pickerContainer
+              .locator('button, div, li, span')
+              .filter({ hasText: new RegExp(`^${targetYear}$`) })
+              .first();
           }
-          
+
           if (await targetYearOption.isVisible()) {
             await targetYearOption.scrollIntoViewIfNeeded().catch(() => {});
             await targetYearOption.click({ force: true });
           } else {
             // Fallback: Click year decrement/increment button next to Year text
-            const leftArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const leftArrows = await pickerContainer
+              .locator('button, span, i')
+              .filter({ hasText: /^(<|chevron_left|left)$/i })
+              .all();
             const yearLeftArrow = leftArrows[1] || leftArrows[0];
             if (yearLeftArrow) {
               while (currentYear > targetYear) {
@@ -2706,7 +2814,10 @@ export class AutomationService implements OnModuleDestroy {
                 currentYear = parseInt(updatedYearText) || currentYear - 1;
               }
               while (currentYear < targetYear) {
-                const rightArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+                const rightArrows = await pickerContainer
+                  .locator('button, span, i')
+                  .filter({ hasText: /^(>|chevron_right|right)$/i })
+                  .all();
                 const yearRightArrow = rightArrows[1] || rightArrows[0];
                 if (yearRightArrow) {
                   await yearRightArrow.click();
@@ -2723,24 +2834,36 @@ export class AutomationService implements OnModuleDestroy {
         }
 
         // 3. Select Month (e.g. 'Apr')
-        const monthSelect = pickerContainer.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
+        const monthSelect = pickerContainer
+          .locator('button, div, span')
+          .filter({
+            hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
+          })
+          .first();
         const currentMonthText = await monthSelect.innerText().catch(() => '');
         if (currentMonthText.toLowerCase() !== targetMonth.toLowerCase()) {
           await monthSelect.click().catch(() => {});
           await page.waitForTimeout(500);
-          
-          const targetMonthOption = pickerContainer.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+
+          const targetMonthOption = pickerContainer
+            .locator('button, div, span')
+            .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
+            .first();
           if (await targetMonthOption.isVisible()) {
             await targetMonthOption.click();
           } else {
             // Fallback: Click month decrement button (the 1st left arrow)
-            const leftArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const leftArrows = await pickerContainer
+              .locator('button, span, i')
+              .filter({ hasText: /^(<|chevron_left|left)$/i })
+              .all();
             const monthLeftArrow = leftArrows[0];
             if (monthLeftArrow) {
               let limit = 0;
               while (limit < 12) {
                 const checkText = await monthSelect.innerText();
-                if (checkText.toLowerCase() === targetMonth.toLowerCase()) break;
+                if (checkText.toLowerCase() === targetMonth.toLowerCase())
+                  break;
                 await monthLeftArrow.click();
                 await page.waitForTimeout(200);
                 limit++;
@@ -2751,7 +2874,10 @@ export class AutomationService implements OnModuleDestroy {
         }
 
         // 4. Select Day (e.g. '8')
-        const dayButton = pickerContainer.locator('button, div, span').filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) }).first();
+        const dayButton = pickerContainer
+          .locator('button, div, span')
+          .filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) })
+          .first();
         if (await dayButton.isVisible()) {
           await dayButton.click();
         } else {
@@ -2764,41 +2890,84 @@ export class AutomationService implements OnModuleDestroy {
     if (draft.tanggalMulaiOperasional) {
       const dateObj = new Date(draft.tanggalMulaiOperasional);
       const targetYear = dateObj.getFullYear();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthNames = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       const targetMonth = monthNames[dateObj.getMonth()];
 
-      this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${targetMonth} ${targetYear}`);
-      
-      const containerOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').filter({ visible: true }).first();
+      this.logStep(
+        subject,
+        6,
+        'info',
+        `Mengisi perkiraan operasional: ${targetMonth} ${targetYear}`,
+      );
+
+      const containerOp = page
+        .getByTestId('date-time-picker-jangka-waktu-penyelesaian')
+        .filter({ visible: true })
+        .first();
       await containerOp.scrollIntoViewIfNeeded().catch(() => {});
-      
+
       // 1. Click the datepicker trigger
-      const triggerOp = containerOp.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"], input').first();
-      await (await triggerOp.isVisible() ? triggerOp : containerOp).click({ force: true }).catch(() => {});
+      const triggerOp = containerOp
+        .locator(
+          '.v-field, .v-input__append-inner, .v-icon, div[name="date"], input',
+        )
+        .first();
+      await ((await triggerOp.isVisible()) ? triggerOp : containerOp)
+        .click({ force: true })
+        .catch(() => {});
       await page.waitForTimeout(1000);
-      
+
       // 2. Select Year (e.g. 2020)
-      const yearSelectOp = page.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
+      const yearSelectOp = page
+        .locator('button, div, span')
+        .filter({ hasText: /^\d{4}$/ })
+        .first();
       const currentYearTextOp = await yearSelectOp.innerText().catch(() => '');
-      let currentYearOp = parseInt(currentYearTextOp) || new Date().getFullYear();
-      
+      let currentYearOp =
+        parseInt(currentYearTextOp) || new Date().getFullYear();
+
       if (currentYearOp !== targetYear) {
-        await yearSelectOp.getByTestId('year-btn').click().catch(() => {});
+        await yearSelectOp
+          .getByTestId('year-btn')
+          .click()
+          .catch(() => {});
         await page.waitForTimeout(1000);
-        
-        let targetYearOptionOp = page.locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
-            .locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
-        
-        if (!await targetYearOptionOp.isVisible()) {
-          targetYearOptionOp = page.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+
+        let targetYearOptionOp = page
+          .locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
+          .locator('div, li, button, span')
+          .filter({ hasText: new RegExp(`^${targetYear}$`) })
+          .first();
+
+        if (!(await targetYearOptionOp.isVisible())) {
+          targetYearOptionOp = page
+            .locator('button, div, li, span')
+            .filter({ hasText: new RegExp(`^${targetYear}$`) })
+            .first();
         }
-        
+
         if (await targetYearOptionOp.isVisible()) {
           await targetYearOptionOp.scrollIntoViewIfNeeded().catch(() => {});
           await targetYearOptionOp.click({ force: true });
         } else {
           // Fallback: Click year decrement/increment button next to Year text
-          const leftArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+          const leftArrowsOp = await page
+            .locator('button, span, i')
+            .filter({ hasText: /^(<|chevron_left|left)$/i })
+            .all();
           const yearLeftArrowOp = leftArrowsOp[1] || leftArrowsOp[0];
           if (yearLeftArrowOp) {
             while (currentYearOp > targetYear) {
@@ -2808,13 +2977,17 @@ export class AutomationService implements OnModuleDestroy {
               currentYearOp = parseInt(updatedYearTextOp) || currentYearOp - 1;
             }
             while (currentYearOp < targetYear) {
-              const rightArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+              const rightArrowsOp = await page
+                .locator('button, span, i')
+                .filter({ hasText: /^(>|chevron_right|right)$/i })
+                .all();
               const yearRightArrowOp = rightArrowsOp[1] || rightArrowsOp[0];
               if (yearRightArrowOp) {
                 await yearRightArrowOp.click().catch(() => {});
                 await page.waitForTimeout(200);
                 const updatedYearTextOp = await yearSelectOp.innerText();
-                currentYearOp = parseInt(updatedYearTextOp) || currentYearOp + 1;
+                currentYearOp =
+                  parseInt(updatedYearTextOp) || currentYearOp + 1;
               } else {
                 break;
               }
@@ -2825,24 +2998,38 @@ export class AutomationService implements OnModuleDestroy {
       }
 
       // 3. Select Month (e.g. 'Apr')
-      const monthSelectOp = page.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
-      const currentMonthTextOp = await monthSelectOp.innerText().catch(() => '');
+      const monthSelectOp = page
+        .locator('button, div, span')
+        .filter({
+          hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
+        })
+        .first();
+      const currentMonthTextOp = await monthSelectOp
+        .innerText()
+        .catch(() => '');
       if (currentMonthTextOp.toLowerCase() !== targetMonth.toLowerCase()) {
         await monthSelectOp.click().catch(() => {});
         await page.waitForTimeout(500);
-        
-        const targetMonthOptionOp = page.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+
+        const targetMonthOptionOp = page
+          .locator('button, div, span')
+          .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
+          .first();
         if (await targetMonthOptionOp.isVisible()) {
           await targetMonthOptionOp.click();
         } else {
           // Fallback: Click month decrement button (the 1st left arrow)
-          const leftArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+          const leftArrowsOp = await page
+            .locator('button, span, i')
+            .filter({ hasText: /^(<|chevron_left|left)$/i })
+            .all();
           const monthLeftArrowOp = leftArrowsOp[0];
           if (monthLeftArrowOp) {
             let limitOp = 0;
             while (limitOp < 12) {
               const checkTextOp = await monthSelectOp.innerText();
-              if (checkTextOp.toLowerCase() === targetMonth.toLowerCase()) break;
+              if (checkTextOp.toLowerCase() === targetMonth.toLowerCase())
+                break;
               await monthLeftArrowOp.click();
               await page.waitForTimeout(200);
               limitOp++;
@@ -2856,8 +3043,15 @@ export class AutomationService implements OnModuleDestroy {
 
     // Input investasi
     const investasiLainVal = draft.modalUsaha || '0';
-    this.logStep(subject, 6, 'info', `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString('id-ID')}`);
-    const investasiLainInput = page.getByTestId('input-investasi-lain').locator('input');
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString('id-ID')}`,
+    );
+    const investasiLainInput = page
+      .getByTestId('input-investasi-lain')
+      .locator('input');
     if (await investasiLainInput.isVisible()) {
       await investasiLainInput.fill(investasiLainVal);
       await page.waitForTimeout(500);
@@ -2865,8 +3059,15 @@ export class AutomationService implements OnModuleDestroy {
 
     // Modal Kerja 3 Bulan
     const modalKerjaVal = draft.modalKerja || '0';
-    this.logStep(subject, 6, 'info', `Mengisi modal kerja 3 bulan: Rp ${parseInt(modalKerjaVal).toLocaleString('id-ID')}`);
-    const workingCapitalInput = page.getByTestId('input-modal-kerja').locator('input');
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi modal kerja 3 bulan: Rp ${parseInt(modalKerjaVal).toLocaleString('id-ID')}`,
+    );
+    const workingCapitalInput = page
+      .getByTestId('input-modal-kerja')
+      .locator('input');
     if (await workingCapitalInput.isVisible()) {
       await workingCapitalInput.fill(modalKerjaVal);
       await page.waitForTimeout(500);
@@ -2874,23 +3075,42 @@ export class AutomationService implements OnModuleDestroy {
 
     // Sumber Pembiayaan
     const fundingSource = draft.sumberPembiayaan || 'modal_sendiri';
-    this.logStep(subject, 6, 'info', `Mengisi sumber pembiayaan: ${fundingSource === 'pinjaman' ? 'Pinjaman' : 'Modal Sendiri'}`);
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi sumber pembiayaan: ${fundingSource === 'pinjaman' ? 'Pinjaman' : 'Modal Sendiri'}`,
+    );
     if (fundingSource === 'pinjaman') {
-      await page.getByText('Pinjaman', { exact: true }).click().catch(() => {});
+      await page
+        .getByText('Pinjaman', { exact: true })
+        .click()
+        .catch(() => {});
     } else {
-      await page.getByText('Modal Sendiri', { exact: true }).click().catch(() => {});
+      await page
+        .getByText('Modal Sendiri', { exact: true })
+        .click()
+        .catch(() => {});
     }
     await page.waitForTimeout(500);
 
     // Hasil Penjualan Tahunan
     const omzetVal = draft.omzetTahunan || '0';
-    this.logStep(subject, 6, 'info', `Mengisi omzet tahunan: Rp ${parseInt(omzetVal).toLocaleString('id-ID')}`);
-    const salesInput = page.getByTestId('pendapatan_tahunan').locator('input').first();
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi omzet tahunan: Rp ${parseInt(omzetVal).toLocaleString('id-ID')}`,
+    );
+    const salesInput = page
+      .getByTestId('pendapatan_tahunan')
+      .locator('input')
+      .first();
     if (await salesInput.isVisible()) {
       await salesInput.fill(omzetVal);
       await page.waitForTimeout(500);
     }
-    
+
     // Jumlah pekerja laki-laki & perempuan
     let maleLaborVal = draft.jumlahPekerjaLakiLaki;
     let femaleLaborVal = draft.jumlahPekerjaPerempuan;
@@ -2904,15 +3124,31 @@ export class AutomationService implements OnModuleDestroy {
     maleLaborVal = maleLaborVal || '0';
     femaleLaborVal = femaleLaborVal || '0';
 
-    this.logStep(subject, 6, 'info', `Mengisi pekerja laki laki: ${maleLaborVal}`);
-    const maleLaborInput = page.getByTestId('laborcard-labor-male').locator('input').first();
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi pekerja laki laki: ${maleLaborVal}`,
+    );
+    const maleLaborInput = page
+      .getByTestId('laborcard-labor-male')
+      .locator('input')
+      .first();
     if (await maleLaborInput.isVisible()) {
       await maleLaborInput.fill(maleLaborVal);
       await page.waitForTimeout(500);
     }
-    
-    this.logStep(subject, 6, 'info', `Mengisi pekerja perempuan: ${femaleLaborVal}`);
-    const femaleLaborInput = page.getByTestId('laborcard-labor-female').locator('input').first();
+
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi pekerja perempuan: ${femaleLaborVal}`,
+    );
+    const femaleLaborInput = page
+      .getByTestId('laborcard-labor-female')
+      .locator('input')
+      .first();
     if (await femaleLaborInput.isVisible()) {
       await femaleLaborInput.fill(femaleLaborVal);
       await page.waitForTimeout(500);
@@ -2920,12 +3156,14 @@ export class AutomationService implements OnModuleDestroy {
 
     // Tambah Produk/Jasa
     this.logStep(subject, 6, 'info', 'Membuka modal Tambah Produk/Jasa...');
-    const getSatuanPromise = page.waitForResponse(
-      (response: any) =>
-        response.url().includes('/getSatuanProduk/') &&
-        response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => null);
+    const getSatuanPromise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/getSatuanProduk/') &&
+          response.status() === 200,
+        { timeout: 15000 },
+      )
+      .catch(() => null);
 
     await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
     const getSatuanResponse = await getSatuanPromise;
@@ -2935,11 +3173,18 @@ export class AutomationService implements OnModuleDestroy {
       try {
         const json = await getSatuanResponse.json();
         if (json && Array.isArray(json.data)) {
-          allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
-          this.logStep(subject, 6, 'info', `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`);
+          allowedUnits = json.data
+            .map((u: any) => u.satuan_ukur)
+            .filter(Boolean);
+          this.logStep(
+            subject,
+            6,
+            'info',
+            `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`,
+          );
         }
       } catch (e) {
-        console.error("Gagal mengurai response getSatuanProduk:", e);
+        console.error('Gagal mengurai response getSatuanProduk:', e);
       }
     }
     await page.waitForTimeout(1000);
@@ -2952,9 +3197,15 @@ export class AutomationService implements OnModuleDestroy {
       satuan: draft.satuan,
     };
 
-    if (!productInfo.jenisProdukJasa || !productInfo.kapasitas || !productInfo.satuan) {
+    if (
+      !productInfo.jenisProdukJasa ||
+      !productInfo.kapasitas ||
+      !productInfo.satuan
+    ) {
       // Prompt the user since it is missing!
-      this.logStep(subject, 6, 'warn', 'MENGISI_RINCIAN_PRODUK', { allowedUnits });
+      this.logStep(subject, 6, 'warn', 'MENGISI_RINCIAN_PRODUK', {
+        allowedUnits,
+      });
 
       // Wait up to 120 seconds for user response
       let userInput: any = null;
@@ -2969,13 +3220,19 @@ export class AutomationService implements OnModuleDestroy {
       }
 
       if (!userInput) {
-        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pengisian rincian produk habis.');
+        this.logStep(
+          subject,
+          6,
+          'error',
+          'Pendaftaran GAGAL: Batas waktu pengisian rincian produk habis.',
+        );
         throw new Error('Batas waktu pengisian rincian produk habis.');
       }
 
       productInfo = {
         jenisProdukJasa: userInput.jenisProdukJasa,
-        cangkupanProduk: userInput.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
+        cangkupanProduk:
+          userInput.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
         kapasitas: userInput.kapasitas,
         satuan: userInput.satuan,
       };
@@ -2989,28 +3246,47 @@ export class AutomationService implements OnModuleDestroy {
           satuan: productInfo.satuan,
         });
       } catch (dbErr) {
-        console.error("Gagal menyimpan rincian produk ke DB:", dbErr);
+        console.error('Gagal menyimpan rincian produk ke DB:', dbErr);
       }
     }
 
     // Now fill the modal with productInfo!
-    this.logStep(subject, 6, 'info', `Mengisi Jenis Produk/Jasa: ${productInfo.jenisProdukJasa}`);
-    const productTypeCombobox = page.getByTestId('product-service-card-product-type').locator('input').first();
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi Jenis Produk/Jasa: ${productInfo.jenisProdukJasa}`,
+    );
+    const productTypeCombobox = page
+      .getByTestId('product-service-card-product-type')
+      .locator('input')
+      .first();
     await productTypeCombobox.click();
     await productTypeCombobox.fill(productInfo.jenisProdukJasa);
     await page.waitForTimeout(500);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(1000);
 
-    const coverageCombobox = page.locator('input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]');
+    const coverageCombobox = page.locator(
+      'input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]',
+    );
     if (await coverageCombobox.isVisible()) {
-      this.logStep(subject, 6, 'info', `Mengisi Cangkupan Produk: ${productInfo.cangkupanProduk}`);
+      this.logStep(
+        subject,
+        6,
+        'info',
+        `Mengisi Cangkupan Produk: ${productInfo.cangkupanProduk}`,
+      );
       await coverageCombobox.click();
       await coverageCombobox.fill(productInfo.cangkupanProduk);
       await page.waitForTimeout(500);
 
-      const option = page.getByRole('option', { name: productInfo.cangkupanProduk }).first();
-      const textOption = page.getByText(productInfo.cangkupanProduk, { exact: false }).first();
+      const option = page
+        .getByRole('option', { name: productInfo.cangkupanProduk })
+        .first();
+      const textOption = page
+        .getByText(productInfo.cangkupanProduk, { exact: false })
+        .first();
       if (await option.isVisible()) {
         await option.click();
       } else if (await textOption.isVisible()) {
@@ -3021,25 +3297,41 @@ export class AutomationService implements OnModuleDestroy {
       await page.waitForTimeout(1000);
     }
 
-    this.logStep(subject, 6, 'info', `Mengisi Kapasitas: ${productInfo.kapasitas}`);
-    const capacityInput = page.getByTestId('product-service-card-capacity').locator('input');
+    this.logStep(
+      subject,
+      6,
+      'info',
+      `Mengisi Kapasitas: ${productInfo.kapasitas}`,
+    );
+    const capacityInput = page
+      .getByTestId('product-service-card-capacity')
+      .locator('input');
     await capacityInput.fill(productInfo.kapasitas);
     await page.waitForTimeout(500);
 
     // Resolve satuan value
     let unitToFill = productInfo.satuan;
     if (allowedUnits.length > 0) {
-      const matched = allowedUnits.find(u => u.toLowerCase() === unitToFill.toLowerCase());
+      const matched = allowedUnits.find(
+        (u) => u.toLowerCase() === unitToFill.toLowerCase(),
+      );
       if (matched) {
         unitToFill = matched;
       } else {
         unitToFill = allowedUnits[0];
-        this.logStep(subject, 6, 'info', `Satuan "${productInfo.satuan}" tidak diizinkan. Menggunakan "${unitToFill}"...`);
+        this.logStep(
+          subject,
+          6,
+          'info',
+          `Satuan "${productInfo.satuan}" tidak diizinkan. Menggunakan "${unitToFill}"...`,
+        );
       }
     }
 
     this.logStep(subject, 6, 'info', `Mengisi Satuan: ${unitToFill}`);
-    const unitCombobox = page.getByTestId('product-service-card-unit').locator('input');
+    const unitCombobox = page
+      .getByTestId('product-service-card-unit')
+      .locator('input');
     await unitCombobox.click();
     await unitCombobox.fill(unitToFill);
     await page.waitForTimeout(500);
@@ -3061,31 +3353,44 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(2000);
 
     // Wait for getTableKBLIdanProduk response
-    await page.waitForResponse(
-      (response: any) =>
-        response.url().includes('getTableKBLIdanProduk') &&
-        response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => null);
+    await page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('getTableKBLIdanProduk') &&
+          response.status() === 200,
+        { timeout: 15000 },
+      )
+      .catch(() => null);
 
     // Setup listeners for risk analysis and parameter validation APIs
-    const getResikoPromise = page.waitForResponse(
-      (response: any) =>
-        response.url().includes('/getResikoNonPesorangan') &&
-        response.status() === 200,
-      { timeout: 20000 }
-    ).catch(() => null);
+    const getResikoPromise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/getResikoNonPesorangan') &&
+          response.status() === 200,
+        { timeout: 20000 },
+      )
+      .catch(() => null);
 
-    const getKriteriaPromise = page.waitForResponse(
-      (response: any) =>
-        response.url().includes('/getKriteriaKegiatan') &&
-        response.status() === 200,
-      { timeout: 20000 }
-    ).catch(() => null);
+    const getKriteriaPromise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('/getKriteriaKegiatan') &&
+          response.status() === 200,
+        { timeout: 20000 },
+      )
+      .catch(() => null);
 
     // Click Selanjutnya to validate and load the Risk screen
-    this.logStep(subject, 6, 'info', 'Mengklik Selanjutnya untuk validasi Risiko Usaha...');
-    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click();
+    this.logStep(
+      subject,
+      6,
+      'info',
+      'Mengklik Selanjutnya untuk validasi Risiko Usaha...',
+    );
+    await page
+      .getByRole('button', { name: 'Selanjutnya', exact: true })
+      .click();
     await page.waitForTimeout(1000);
 
     // Check for validation errors on the page
@@ -3098,11 +3403,15 @@ export class AutomationService implements OnModuleDestroy {
     for (let i = 0; i < containerCount; i++) {
       const container = errorContainers.nth(i);
       if (await container.isVisible()) {
-        const outerHtml = await container.evaluate((el: any) => el.outerHTML).catch(() => '');
+        const outerHtml = await container
+          .evaluate((el: any) => el.outerHTML)
+          .catch(() => '');
         this.logger.error(`[Step 6 Error Container] Outer HTML: ${outerHtml}`);
 
         let labelText = '';
-        const possibleLabel = container.locator('.v-label, .v-field-label, label, .v-input__label').first();
+        const possibleLabel = container
+          .locator('.v-label, .v-field-label, label, .v-input__label')
+          .first();
         if (await possibleLabel.isVisible()) {
           labelText = (await possibleLabel.innerText()).trim();
         } else {
@@ -3110,7 +3419,9 @@ export class AutomationService implements OnModuleDestroy {
           labelText = innerText.split('\n')[0]?.trim() || '';
         }
 
-        const errorMsgEl = container.locator('.v-messages__message, .error--text').first();
+        const errorMsgEl = container
+          .locator('.v-messages__message, .error--text')
+          .first();
         let errorText = 'Wajib diisi';
         if (await errorMsgEl.isVisible()) {
           errorText = (await errorMsgEl.innerText()).trim();
@@ -3156,16 +3467,16 @@ export class AutomationService implements OnModuleDestroy {
           tingkatRisiko: json.keterangan_resiko,
           skalaUsaha: json.keterangan_skala_usaha,
           jenisPerizinan: json.jenis_perizinan,
-          perizinanTunggal: !!json.flag_perizinan_tunggal
+          perizinanTunggal: !!json.flag_perizinan_tunggal,
         };
         this.logStep(
           subject,
           6,
           'info',
-          `Analisis Risiko: ${riskInfo.tingkatRisiko} | Skala: ${riskInfo.skalaUsaha} | Perizinan: ${riskInfo.jenisPerizinan}`
+          `Analisis Risiko: ${riskInfo.tingkatRisiko} | Skala: ${riskInfo.skalaUsaha} | Perizinan: ${riskInfo.jenisPerizinan}`,
         );
       } catch (e) {
-        console.error("Gagal mengurai response getResikoNonPesorangan:", e);
+        console.error('Gagal mengurai response getResikoNonPesorangan:', e);
       }
     }
 
@@ -3173,10 +3484,12 @@ export class AutomationService implements OnModuleDestroy {
       try {
         const json = await kriteriaResponse.json();
         if (json && Array.isArray(json.data)) {
-          allowedParameters = json.data.map((item: any) => item.parameter_kewenangan).filter(Boolean);
+          allowedParameters = json.data
+            .map((item: any) => item.parameter_kewenangan)
+            .filter(Boolean);
         }
       } catch (e) {
-        console.error("Gagal mengurai response getKriteriaKegiatan:", e);
+        console.error('Gagal mengurai response getKriteriaKegiatan:', e);
       }
     }
 
@@ -3184,19 +3497,13 @@ export class AutomationService implements OnModuleDestroy {
 
     // If parameter dropdown exists and has options, prompt user
     if (allowedParameters.length > 0) {
-      this.logStep(
-        subject,
-        6,
-        'warn',
-        'MENGISI_PARAMETER_RISIKO',
-        {
-          tingkatRisiko: riskInfo?.tingkatRisiko || '',
-          skalaUsaha: riskInfo?.skalaUsaha || '',
-          jenisPerizinan: riskInfo?.jenisPerizinan || '',
-          perizinanTunggal: riskInfo?.perizinanTunggal || false,
-          parameterOptions: allowedParameters
-        }
-      );
+      this.logStep(subject, 6, 'warn', 'MENGISI_PARAMETER_RISIKO', {
+        tingkatRisiko: riskInfo?.tingkatRisiko || '',
+        skalaUsaha: riskInfo?.skalaUsaha || '',
+        jenisPerizinan: riskInfo?.jenisPerizinan || '',
+        perizinanTunggal: riskInfo?.perizinanTunggal || false,
+        parameterOptions: allowedParameters,
+      });
 
       // Wait up to 120s for user parameter selection
       let selectedParam: string = '';
@@ -3211,12 +3518,22 @@ export class AutomationService implements OnModuleDestroy {
       }
 
       if (!selectedParam) {
-        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Batas waktu pemilihan parameter risiko habis.');
+        this.logStep(
+          subject,
+          6,
+          'error',
+          'Pendaftaran GAGAL: Batas waktu pemilihan parameter risiko habis.',
+        );
         throw new Error('Batas waktu pemilihan parameter risiko habis.');
       }
 
-      this.logStep(subject, 6, 'info', `Mengisi parameter kewenangan: ${selectedParam}`);
-      
+      this.logStep(
+        subject,
+        6,
+        'info',
+        `Mengisi parameter kewenangan: ${selectedParam}`,
+      );
+
       // Target Parameter Dropdown on portal
       const paramCombobox = page.getByRole('combobox').first();
       if (await paramCombobox.isVisible()) {
@@ -3224,47 +3541,64 @@ export class AutomationService implements OnModuleDestroy {
         await page.waitForTimeout(500);
 
         await page.getByText(selectedParam).first().click();
-        this.logStep(subject, 6, 'info', `Mengklik item list overlay: ${selectedParam}`);
+        this.logStep(
+          subject,
+          6,
+          'info',
+          `Mengklik item list overlay: ${selectedParam}`,
+        );
         await page.waitForTimeout(1000);
       }
     }
 
     // Finally click Selanjutnya to save risk/parameter and complete Step 6
-    this.logStep(subject, 6, 'info', 'Menyimpan analisis Risiko & Parameter...');
-    await page.getByRole('button', { name: 'Selanjutnya', exact: true }).click({ force: true });
+    this.logStep(
+      subject,
+      6,
+      'info',
+      'Menyimpan analisis Risiko & Parameter...',
+    );
+    await page
+      .getByRole('button', { name: 'Selanjutnya', exact: true })
+      .click({ force: true });
     await page.waitForTimeout(3000);
 
     this.logStep(subject, 6, 'info', "Memilih 'Belum' memiliki amdal..");
     await page.getByRole('radio', { name: 'Belum' }).check();
-    
+
     this.logStep(subject, 6, 'info', 'Klik tombol Proses..');
     await page.getByRole('button', { name: 'Proses' }).click();
-    await page.waitForTimeout(1500)
+    await page.waitForTimeout(1500);
 
     this.logStep(subject, 6, 'info', 'Klik tombol Ya, Lanjut..');
     await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
     await page.waitForTimeout(1500);
 
     // Wait for submitLingkungan response
-    await page.waitForResponse(
-      (response: any) =>
-        response.url().includes('submitLingkungan') &&
-        response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => null);
-    
+    await page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('submitLingkungan') &&
+          response.status() === 200,
+        { timeout: 15000 },
+      )
+      .catch(() => null);
+
     // Wait for prosesProyek response
-    await page.waitForResponse(
-      (response: any) =>
-        response.url().includes('prosesProyek') &&
-        response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => null);
+    await page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('prosesProyek') && response.status() === 200,
+        { timeout: 15000 },
+      )
+      .catch(() => null);
 
     this.logStep(subject, 6, 'info', 'Klik tab Persyaratan Dasar..');
     await page.getByRole('tab', { name: 'Persyaratan Dasar' }).click();
 
-    const btnProsesPenapisan = page.getByRole('button', { name: 'Proses Penapisan' });
+    const btnProsesPenapisan = page.getByRole('button', {
+      name: 'Proses Penapisan',
+    });
     if (await btnProsesPenapisan.isVisible()) {
       this.logStep(subject, 6, 'info', 'Klik tombol Proses Penapisan..');
       const pageAmdalnet = page.waitForEvent('popup');
@@ -3273,7 +3607,11 @@ export class AutomationService implements OnModuleDestroy {
       const page1 = await pageAmdalnet;
 
       // Wait for the popup URL to load and redirect away from about:blank
-      await page1.waitForURL((url: URL) => url.href !== 'about:blank', { timeout: 10000 }).catch(() => null);
+      await page1
+        .waitForURL((url: URL) => url.href !== 'about:blank', {
+          timeout: 10000,
+        })
+        .catch(() => null);
       const redirectionUrl = page1.url();
       this.logStep(subject, 6, 'info', `Redirection URL: ${redirectionUrl}`);
       this.redirectionUrls.set(draftId, redirectionUrl);
@@ -3287,22 +3625,28 @@ export class AutomationService implements OnModuleDestroy {
 
       // Close popup tab and navigate the main page instead
       await page1.close().catch(() => null);
-      this.logStep(subject, 6, 'info', 'Membuka redirection URL pada tab utama...');
+      this.logStep(
+        subject,
+        6,
+        'info',
+        'Membuka redirection URL pada tab utama...',
+      );
       await page.goto(redirectionUrl, {
         waitUntil: 'networkidle',
         timeout: 15000,
       });
-      
+
       // wait for response list-proyek
-      await page.waitForResponse(
-        (response: any) =>
-          response.url().includes('list-proyek') &&
-          response.status() === 200,
-        { timeout: 15000 }
-      ).catch(() => null);
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes('list-proyek') && response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
       this.logStep(subject, 6, 'info', 'Mendapatkan response list-proyek');
 
-      const proyekScope = page.locator(`#sub-project-card-${kdIzin}`)
+      const proyekScope = page.locator(`#sub-project-card-${kdIzin}`);
       const proyekCheck = proyekScope.locator('.el-checkbox').first();
       if (await proyekCheck.isVisible()) {
         this.logStep(subject, 6, 'info', 'Mencentang checkbox proyek...');
@@ -3310,13 +3654,20 @@ export class AutomationService implements OnModuleDestroy {
         await page.waitForTimeout(1000);
 
         // wait for response check-license-status
-        await page.waitForResponse(
-          (response: any) =>
-            response.url().includes('check-license-status') &&
-            response.status() === 200,
-          { timeout: 15000 }
-        ).catch(() => null);
-        this.logStep(subject, 6, 'info', 'Mendapatkan response check-license-status');
+        await page
+          .waitForResponse(
+            (response: any) =>
+              response.url().includes('check-license-status') &&
+              response.status() === 200,
+            { timeout: 15000 },
+          )
+          .catch(() => null);
+        this.logStep(
+          subject,
+          6,
+          'info',
+          'Mendapatkan response check-license-status',
+        );
 
         await proyekScope.locator('.el-switch').first().click();
         await page.locator(`#sector-select-${kdIzin}`).click();
@@ -3328,7 +3679,6 @@ export class AutomationService implements OnModuleDestroy {
         }
       }
     }
-    
   }
 
   getRedirectionUrl(draftId: string): string | undefined {

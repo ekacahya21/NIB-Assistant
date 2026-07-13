@@ -20,7 +20,9 @@ export class KbliService {
     const q = (query || '').toLowerCase().trim();
     if (!q) {
       try {
-        console.log('[KBLI Agent] Fetching default KBLI recommendations based on most chosen database entries...');
+        console.log(
+          '[KBLI Agent] Fetching default KBLI recommendations based on most chosen database entries...',
+        );
         const grouped = await this.prisma.draft.groupBy({
           by: ['kbliCode', 'kbliTitle'],
           _count: {
@@ -48,7 +50,8 @@ export class KbliService {
           results.push({
             code: item.kbliCode,
             title: item.kbliTitle || 'Aktivitas Usaha',
-            description: 'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
+            description:
+              'Aktivitas usaha yang direkomendasikan berdasarkan tren pendaftaran UMKM sebelumnya.',
             confidence: 'sangat_cocok',
             suitableFor: ['Paling banyak dipilih', 'Tren UMKM'],
             version: '2020',
@@ -56,7 +59,9 @@ export class KbliService {
         }
 
         if (results.length < 3) {
-          console.log('[KBLI Agent] Backfilling default recommendations from TenderX API...');
+          console.log(
+            '[KBLI Agent] Backfilling default recommendations from TenderX API...',
+          );
           const backfills = await this.queryTenderx('penyediaan makanan', 5);
           for (const item of backfills) {
             if (results.length >= 3) break;
@@ -68,7 +73,10 @@ export class KbliService {
 
         return results.slice(0, 3);
       } catch (error) {
-        console.error('[KBLI Agent] Error fetching default KBLIs from database, falling back to TenderX search:', error);
+        console.error(
+          '[KBLI Agent] Error fetching default KBLIs from database, falling back to TenderX search:',
+          error,
+        );
         return this.queryTenderx('penyediaan makanan', 3);
       }
     }
@@ -298,9 +306,13 @@ Kembalikan HANYA array JSON tersebut saja!`;
     return baseline;
   }
 
-  private async queryLocalLlm(query: string, candidates: KBLIRecord[]): Promise<KBLIRecord[] | null> {
+  private async queryLocalLlm(
+    query: string,
+    candidates: KBLIRecord[],
+  ): Promise<KBLIRecord[] | null> {
     const host = process.env.LOCAL_LLM_HOST || 'http://localhost:20128/v1';
-    const key = process.env.LOCAL_LLM_KEY || 'sk-be6dc08e77bc7a4a-pk6lq6-69274223';
+    const key =
+      process.env.LOCAL_LLM_KEY || 'sk-be6dc08e77bc7a4a-pk6lq6-69274223';
     const model = process.env.LOCAL_LLM_MODEL || 'combo-max';
 
     console.log(
@@ -308,9 +320,10 @@ Kembalikan HANYA array JSON tersebut saja!`;
     );
 
     // If we have candidates from TenderX, provide them as verified catalog
-    const catalogContext = candidates.length > 0
-      ? `Berikut adalah daftar KBLI kandidat yang ditemukan dari registri:\n${JSON.stringify(candidates, null, 2)}`
-      : 'Gunakan pengetahuan Anda untuk merumuskan kode KBLI resmi yang valid.';
+    const catalogContext =
+      candidates.length > 0
+        ? `Berikut adalah daftar KBLI kandidat yang ditemukan dari registri:\n${JSON.stringify(candidates, null, 2)}`
+        : 'Gunakan pengetahuan Anda untuk merumuskan kode KBLI resmi yang valid.';
 
     try {
       const response = await fetch(`${host}/chat/completions`, {
@@ -393,14 +406,17 @@ Kembalikan HANYA array JSON tersebut saja! Jangan ada tulisan markdown seperti \
       if (!res.ok) {
         throw new Error(`TenderX HTTP error! status: ${res.status}`);
       }
-      const json = (await res.json()) as any;
+      const json = await res.json();
       if (json && json.status === 'success' && Array.isArray(json.data)) {
         return json.data.map((item: any) => ({
           code: item.kode,
           title: this.capitalizeTitle(item.judul),
           description: `Aktivitas bidang usaha untuk ${this.capitalizeTitle(item.judul)} (Kategori ${item.kategori_huruf}).`,
           confidence: 'sangat_cocok' as const,
-          suitableFor: [this.capitalizeTitle(item.judul).toLowerCase(), `kategori ${item.kategori_huruf}`],
+          suitableFor: [
+            this.capitalizeTitle(item.judul).toLowerCase(),
+            `kategori ${item.kategori_huruf}`,
+          ],
           version: '2020',
         }));
       }
