@@ -8,6 +8,7 @@ import {
   Query,
   MessageEvent,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { Observable, map } from 'rxjs';
@@ -90,5 +91,32 @@ export class AutomationController {
   getKdIzin(@Param('draftId') draftId: string) {
     const kdIzin = this.automationService.getKdIzin(draftId);
     return { kdIzin: kdIzin || null };
+  }
+
+  @Get('recordings/:draftId')
+  @UseGuards(AdminGuard)
+  getRecording(@Param('draftId') draftId: string, @Res() res: any) {
+    const fs = require('fs');
+    const path = require('path');
+    const recordingsDir = path.resolve('./recordings');
+
+    if (!fs.existsSync(recordingsDir)) {
+      res.status(404).send('Rekaman video tidak ditemukan.');
+      return;
+    }
+
+    const files = fs.readdirSync(recordingsDir)
+      .filter((f: string) => f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'));
+
+    if (files.length === 0) {
+      res.status(404).send('Rekaman video tidak ditemukan.');
+      return;
+    }
+
+    files.sort();
+    const latestFile = files[files.length - 1];
+    const recordingPath = path.join(recordingsDir, latestFile);
+
+    res.sendFile(recordingPath);
   }
 }

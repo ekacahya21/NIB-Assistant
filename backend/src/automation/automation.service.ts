@@ -504,6 +504,23 @@ export class AutomationService implements OnModuleDestroy {
     let passwordCode = '';
     let finalErrorMessage: string | null = null;
 
+    // Delete previous recordings if they exist to clear disk space for retry
+    const fs = require('fs');
+    const path = require('path');
+    const recordingsDir = path.resolve('./recordings');
+    if (fs.existsSync(recordingsDir)) {
+      try {
+        const files = fs.readdirSync(recordingsDir)
+          .filter((f: string) => f.startsWith(`draft_${draftId}_`) && f.endsWith('.webm'));
+        for (const file of files) {
+          fs.unlinkSync(path.join(recordingsDir, file));
+        }
+        this.logger.log(`Deleted previous recordings for draft ${draftId} before retry.`);
+      } catch (err) {
+        this.logger.error(`Failed to delete previous recordings: ${err}`);
+      }
+    }
+
     try {
       // Step 1: Initialize Browser
       const initResult = await this.initializeBrowser(draftId, subject);
@@ -597,20 +614,10 @@ export class AutomationService implements OnModuleDestroy {
           );
         });
 
+      let tempVideoPath: string | undefined;
       if (page) {
         try {
-          const videoPath = await page.video()?.path();
-          if (videoPath) {
-            this.logger.log(
-              `Otomatisasi selesai. Rekaman disimpan di: ${videoPath}`,
-            );
-            this.logStep(
-              subject,
-              5,
-              'info',
-              `Rekaman otomatisasi disimpan di: ${videoPath}`,
-            );
-          }
+          tempVideoPath = await page.video()?.path();
         } catch (videoErr) {
           this.logger.error('Gagal mengambil path video rekaman', videoErr);
         }
@@ -629,6 +636,31 @@ export class AutomationService implements OnModuleDestroy {
       this.draftMetadata.delete(draftId);
       if (browser) {
         await browser.close().catch(() => {});
+      }
+      if (tempVideoPath) {
+        const fs = require('fs');
+        const path = require('path');
+        const timestamp = Date.now();
+        const targetPath = path.join('./recordings', `draft_${draftId}_${timestamp}.webm`);
+        try {
+          if (!fs.existsSync('./recordings')) {
+            fs.mkdirSync('./recordings', { recursive: true });
+          }
+          if (fs.existsSync(tempVideoPath)) {
+            fs.renameSync(tempVideoPath, targetPath);
+            this.logger.log(
+              `Otomatisasi selesai. Rekaman disimpan di: ${targetPath}`,
+            );
+            this.logStep(
+              subject,
+              5,
+              'info',
+              `Rekaman otomatisasi disimpan di: ${targetPath}`,
+            );
+          }
+        } catch (renameErr) {
+          this.logger.error(`Gagal memindahkan file video rekaman dari ${tempVideoPath} ke ${targetPath}`, renameErr);
+        }
       }
       subject.complete();
     }
@@ -2632,15 +2664,20 @@ export class AutomationService implements OnModuleDestroy {
 
         this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`);
         
-        const container = page.getByTestId('date-time-picker-tgl-berjalan').filter({ visible: true }).first();
+        const container = page.getByTestId('date-time-picker-tgl-berjalan').first();
+        await container.scrollIntoViewIfNeeded().catch(() => {});
+        await container.click();
         
         // 1. Click the datepicker trigger
         const trigger = container.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"], input').first();
         await (await trigger.isVisible() ? trigger : container).click({ force: true }).catch(() => {});
         await page.waitForTimeout(1000);
+
+        // picker locator
+        const pickerContainer = page.locator('.v-picker');
         
         // 2. Select Year (e.g. 2020)
-        const yearSelect = page.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
+        const yearSelect = pickerContainer.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
         const currentYearText = await yearSelect.innerText().catch(() => '');
         let currentYear = parseInt(currentYearText) || new Date().getFullYear();
         
@@ -2648,11 +2685,10 @@ export class AutomationService implements OnModuleDestroy {
           await yearSelect.click().catch(() => {});
           await page.waitForTimeout(1000);
           
-          let targetYearOption = page.locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
-            .locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+          let targetYearOption = pickerContainer.locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
           
           if (!await targetYearOption.isVisible()) {
-            targetYearOption = page.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+            targetYearOption = pickerContainer.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
           }
           
           if (await targetYearOption.isVisible()) {
@@ -2660,7 +2696,7 @@ export class AutomationService implements OnModuleDestroy {
             await targetYearOption.click({ force: true });
           } else {
             // Fallback: Click year decrement/increment button next to Year text
-            const leftArrows = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const leftArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
             const yearLeftArrow = leftArrows[1] || leftArrows[0];
             if (yearLeftArrow) {
               while (currentYear > targetYear) {
@@ -2670,7 +2706,7 @@ export class AutomationService implements OnModuleDestroy {
                 currentYear = parseInt(updatedYearText) || currentYear - 1;
               }
               while (currentYear < targetYear) {
-                const rightArrows = await page.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+                const rightArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
                 const yearRightArrow = rightArrows[1] || rightArrows[0];
                 if (yearRightArrow) {
                   await yearRightArrow.click();
@@ -2687,18 +2723,18 @@ export class AutomationService implements OnModuleDestroy {
         }
 
         // 3. Select Month (e.g. 'Apr')
-        const monthSelect = page.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
+        const monthSelect = pickerContainer.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
         const currentMonthText = await monthSelect.innerText().catch(() => '');
         if (currentMonthText.toLowerCase() !== targetMonth.toLowerCase()) {
           await monthSelect.click().catch(() => {});
           await page.waitForTimeout(500);
           
-          const targetMonthOption = page.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+          const targetMonthOption = pickerContainer.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
           if (await targetMonthOption.isVisible()) {
             await targetMonthOption.click();
           } else {
             // Fallback: Click month decrement button (the 1st left arrow)
-            const leftArrows = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const leftArrows = await pickerContainer.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
             const monthLeftArrow = leftArrows[0];
             if (monthLeftArrow) {
               let limit = 0;
@@ -2715,7 +2751,7 @@ export class AutomationService implements OnModuleDestroy {
         }
 
         // 4. Select Day (e.g. '8')
-        const dayButton = page.locator('button, div, span').filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) }).first();
+        const dayButton = pickerContainer.locator('button, div, span').filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) }).first();
         if (await dayButton.isVisible()) {
           await dayButton.click();
         } else {

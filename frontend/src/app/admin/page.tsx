@@ -100,6 +100,7 @@ export default function AdminDashboardPage() {
   const [drawerDraftName, setDrawerDraftName] = useState<string>("");
   const [drawerDraftOwner, setDrawerDraftOwner] = useState<string>("");
   const [drawerIsActive, setDrawerIsActive] = useState<boolean>(false);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
   
   const drawerTerminalEndRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
@@ -398,6 +399,11 @@ export default function AdminDashboardPage() {
     setIsDrawerOpen(false);
     setDrawerDraftId(null);
     drawerDraftIdRef.current = null;
+  };
+
+  const handlePlayVideo = () => {
+    if (!drawerDraftId || !adminToken) return;
+    setPlayingVideoUrl(`${API_URL}/automation/recordings/${drawerDraftId}?token=${adminToken}`);
   };
 
   // Helper formats
@@ -914,13 +920,24 @@ export default function AdminDashboardPage() {
                   Pemilik: {drawerDraftOwner} | ID: {drawerDraftId}
                 </p>
               </div>
-              <button 
-                onClick={handleCloseDrawer}
-                className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
-                title="Tutup Panel"
-              >
-                <span className="material-symbols-outlined font-bold text-lg">close</span>
-              </button>
+              <div className="flex items-center gap-3">
+                {!drawerIsActive && (
+                  <button
+                    onClick={handlePlayVideo}
+                    className="flex items-center gap-1 bg-emerald-650 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-[10px] font-extrabold transition-all border border-emerald-500/20 uppercase tracking-wider cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-xs font-bold">play_circle</span>
+                    Putar Rekaman
+                  </button>
+                )}
+                <button 
+                  onClick={handleCloseDrawer}
+                  className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                  title="Tutup Panel"
+                >
+                  <span className="material-symbols-outlined font-bold text-lg">close</span>
+                </button>
+              </div>
             </div>
 
             {/* Terminal Body */}
@@ -1001,6 +1018,35 @@ export default function AdminDashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Video Player Modal */}
+      {playingVideoUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="relative w-full max-w-4xl bg-black rounded-lg overflow-hidden border border-zinc-800 shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#121216] border-b border-zinc-800 text-white">
+              <span className="font-bold text-sm uppercase tracking-wider">Rekaman Otomatisasi (ID: {drawerDraftId})</span>
+              <button 
+                onClick={() => setPlayingVideoUrl(null)} 
+                className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined font-bold text-lg">close</span>
+              </button>
+            </div>
+            <div className="aspect-video w-full bg-zinc-950 flex items-center justify-center">
+              <video 
+                src={playingVideoUrl} 
+                controls 
+                autoPlay 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  alert("Gagal memuat rekaman video. Pastikan otomatisasi telah menghasilkan rekaman dan backend aktif.");
+                  setPlayingVideoUrl(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
