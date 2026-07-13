@@ -343,8 +343,14 @@ export default function AutomationPage() {
               setStatusText("Mengisi detail akun & mendaftar...");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("akun_oss", "sudah");
+              }
             }
             if (payload.step === 4 && failedStepRef.current === null) {
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("akun_oss", "sudah");
+              }
               if (payload.text.includes("Silakan masukkan kata sandi")) {
                 setStatusText("Menunggu Anda memasukkan Kata Sandi...");
                 setIsPromptingPassword(true);
@@ -476,6 +482,37 @@ export default function AutomationPage() {
       }
     };
   }, []);
+
+  const isAutomationActive = () => {
+    return failedStep === null &&
+      statusText !== "Proses Otomatisasi Selesai!" &&
+      !statusText.includes("Terputus") &&
+      !statusText.includes("Gagal") &&
+      !statusText.includes("koneksi") &&
+      !statusText.includes("Gagal mendirikan koneksi");
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isAutomationActive()) {
+        e.preventDefault();
+        e.returnValue = "Proses otomatisasi sedang berjalan. Jika Anda menutup halaman ini, otomatisasi akan dibatalkan. Apakah Anda yakin ingin keluar?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [failedStep, statusText]);
+
+  const handleBackNavigation = () => {
+    if (isAutomationActive()) {
+      const confirmLeave = window.confirm("Proses otomatisasi sedang berjalan. Jika Anda keluar, otomatisasi akan dibatalkan. Apakah Anda yakin ingin keluar?");
+      if (!confirmLeave) return;
+    }
+    router.push("/review");
+  };
 
   const handleRestartAutomation = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -728,6 +765,10 @@ export default function AutomationPage() {
   };
 
   const handleManualRedirect = () => {
+    if (isAutomationActive()) {
+      const confirmStop = window.confirm("Apakah Anda yakin ingin menghentikan bot otomatisasi?");
+      if (!confirmStop) return;
+    }
     const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
     router.push(`/result?state=failed&draftId=${draftId}`);
   };
@@ -795,7 +836,7 @@ export default function AutomationPage() {
       {/* ── Top Flat AppBar ── */}
       <header className="sticky top-0 z-50 flex items-center justify-between px-4 md:px-8 h-16 w-full bg-white border-b border-border-light">
         <div className="flex items-center gap-2">
-          <button onClick={() => router.push("/review")} className="p-2 hover:bg-surface-container transition-all rounded text-on-surface-variant flex items-center justify-center" aria-label="Kembali">
+          <button onClick={handleBackNavigation} className="p-2 hover:bg-surface-container transition-all rounded text-on-surface-variant flex items-center justify-center" aria-label="Kembali">
             <span className="material-symbols-outlined text-xl">arrow_back</span>
           </button>
           <div className="flex flex-col">

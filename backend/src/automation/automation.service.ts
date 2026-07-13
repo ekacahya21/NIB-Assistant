@@ -868,12 +868,6 @@ export class AutomationService implements OnModuleDestroy {
 
     // 8. Setting up password
     await page.waitForTimeout(5000);
-    this.logStep(
-      subject,
-      2,
-      'warn',
-      'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.',
-    );
 
     try {
       await page.waitForSelector('input[type="password"]', { timeout: 30000 });
@@ -892,6 +886,12 @@ export class AutomationService implements OnModuleDestroy {
     if (this.cachedPasswords.has(draftId)) {
       passwordCode = this.cachedPasswords.get(draftId)!;
     } else {
+      this.logStep(
+        subject,
+        2,
+        'warn',
+        'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.',
+      );
       const startTimePass = Date.now();
       while (Date.now() - startTimePass < 120000) {
         // Timeout after 120 seconds
@@ -2474,20 +2474,6 @@ export class AutomationService implements OnModuleDestroy {
         }
       }
 
-      if (kbliOptions.length === 0) {
-        // ponytail: fallback to scraping UI if interceptor failed
-        this.logStep(subject, 6, 'warn', 'Gagal memproses data konversi dari server. Mencoba membuka dropdown...');
-        await kbli2025Select.locator('input').click();
-        await page.waitForTimeout(1000);
-        const items = await page.locator('.ant-select-item-option-content').allInnerTexts().catch(() => []);
-        kbliOptions = items.map((text: string) => {
-          const parts = text.split('-');
-          const code = parts[0]?.trim() || '';
-          const title = parts.slice(1).join('-')?.trim() || '';
-          return { code, title };
-        }).filter((item: any) => item.code.length === 5);
-      }
-
       if (kbliOptions.length > 0) {
         this.logStep(subject, 6, 'warn', 'PILIH_KBLI_2025', { options: kbliOptions });
 
@@ -2531,9 +2517,6 @@ export class AutomationService implements OnModuleDestroy {
           await page.getByText(chosenKbli).first().click();
         }
         await page.waitForTimeout(1000);
-      } else {
-        this.logStep(subject, 6, 'error', 'Pendaftaran GAGAL: Opsi konversi KBLI 2025 tidak ditemukan.');
-        throw new Error('Opsi konversi KBLI 2025 tidak ditemukan.');
       }
     }
 
@@ -2641,55 +2624,198 @@ export class AutomationService implements OnModuleDestroy {
     // Conditional Date Pickers for Sudah Berjalan
     if (isRunning) {
       if (draft.tanggalMulaiUsaha) {
-        const tglMulai = this.formatToDDMMYYYY(draft.tanggalMulaiUsaha);
-        this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${tglMulai}`);
+        const dateObj = new Date(draft.tanggalMulaiUsaha);
+        const targetYear = dateObj.getFullYear();
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const targetMonth = monthNames[dateObj.getMonth()];
+        const targetDay = dateObj.getDate().toString();
+
+        this.logStep(subject, 6, 'info', `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`);
         
         const container = page.getByTestId('date-time-picker-tgl-berjalan').filter({ visible: true }).first();
-        const dateInputTglMulai = container.locator('input').first();
         
-        // Click the datepicker trigger
-        const trigger = container.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"]').first();
-        this.logStep(subject, 6, 'info', `Mengklik trigger datepicker...`);
+        // 1. Click the datepicker trigger
+        const trigger = container.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"], input').first();
         await (await trigger.isVisible() ? trigger : container).click({ force: true }).catch(() => {});
         await page.waitForTimeout(1000);
         
-        const dayButton = page.locator('.v-date-picker-table--date button, button').filter({ hasText: /^\s*1\s*$/ }).first();
+        // 2. Select Year (e.g. 2020)
+        const yearSelect = page.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
+        const currentYearText = await yearSelect.innerText().catch(() => '');
+        let currentYear = parseInt(currentYearText) || new Date().getFullYear();
+        
+        if (currentYear !== targetYear) {
+          await yearSelect.click().catch(() => {});
+          await page.waitForTimeout(1000);
+          
+          let targetYearOption = page.locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
+            .locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+          
+          if (!await targetYearOption.isVisible()) {
+            targetYearOption = page.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+          }
+          
+          if (await targetYearOption.isVisible()) {
+            await targetYearOption.scrollIntoViewIfNeeded().catch(() => {});
+            await targetYearOption.click({ force: true });
+          } else {
+            // Fallback: Click year decrement/increment button next to Year text
+            const leftArrows = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const yearLeftArrow = leftArrows[1] || leftArrows[0];
+            if (yearLeftArrow) {
+              while (currentYear > targetYear) {
+                await yearLeftArrow.click();
+                await page.waitForTimeout(200);
+                const updatedYearText = await yearSelect.innerText();
+                currentYear = parseInt(updatedYearText) || currentYear - 1;
+              }
+              while (currentYear < targetYear) {
+                const rightArrows = await page.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+                const yearRightArrow = rightArrows[1] || rightArrows[0];
+                if (yearRightArrow) {
+                  await yearRightArrow.click();
+                  await page.waitForTimeout(200);
+                  const updatedYearText = await yearSelect.innerText();
+                  currentYear = parseInt(updatedYearText) || currentYear + 1;
+                } else {
+                  break;
+                }
+              }
+            }
+          }
+          await page.waitForTimeout(500);
+        }
+
+        // 3. Select Month (e.g. 'Apr')
+        const monthSelect = page.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
+        const currentMonthText = await monthSelect.innerText().catch(() => '');
+        if (currentMonthText.toLowerCase() !== targetMonth.toLowerCase()) {
+          await monthSelect.click().catch(() => {});
+          await page.waitForTimeout(500);
+          
+          const targetMonthOption = page.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+          if (await targetMonthOption.isVisible()) {
+            await targetMonthOption.click();
+          } else {
+            // Fallback: Click month decrement button (the 1st left arrow)
+            const leftArrows = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+            const monthLeftArrow = leftArrows[0];
+            if (monthLeftArrow) {
+              let limit = 0;
+              while (limit < 12) {
+                const checkText = await monthSelect.innerText();
+                if (checkText.toLowerCase() === targetMonth.toLowerCase()) break;
+                await monthLeftArrow.click();
+                await page.waitForTimeout(200);
+                limit++;
+              }
+            }
+          }
+          await page.waitForTimeout(500);
+        }
+
+        // 4. Select Day (e.g. '8')
+        const dayButton = page.locator('button, div, span').filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) }).first();
         if (await dayButton.isVisible()) {
-          this.logStep(subject, 6, 'info', `Mengklik tombol tanggal 1...`);
           await dayButton.click();
         } else {
-          this.logStep(subject, 6, 'info', `Tombol tanggal 1 tidak visible, mencoba paksa klik...`);
-          await dayButton.click({ force: true });
+          await dayButton.click({ force: true }).catch(() => {});
         }
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(1000);
       }
     }
 
     if (draft.tanggalMulaiOperasional) {
-      const tglOp = this.formatToMMYYYY(draft.tanggalMulaiOperasional);
-      this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${tglOp}`);
+      const dateObj = new Date(draft.tanggalMulaiOperasional);
+      const targetYear = dateObj.getFullYear();
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const targetMonth = monthNames[dateObj.getMonth()];
+
+      this.logStep(subject, 6, 'info', `Mengisi perkiraan operasional: ${targetMonth} ${targetYear}`);
       
       const containerOp = page.getByTestId('date-time-picker-jangka-waktu-penyelesaian').filter({ visible: true }).first();
-      const dateInputTglOp = containerOp.locator('input').first();
+      await containerOp.scrollIntoViewIfNeeded().catch(() => {});
       
-      // Click the datepicker trigger
-      const triggerOp = containerOp.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"]').first();
-      this.logStep(subject, 6, 'info', `Mengklik trigger perkiraan operasional...`);
+      // 1. Click the datepicker trigger
+      const triggerOp = containerOp.locator('.v-field, .v-input__append-inner, .v-icon, div[name="date"], input').first();
       await (await triggerOp.isVisible() ? triggerOp : containerOp).click({ force: true }).catch(() => {});
       await page.waitForTimeout(1000);
       
-      const dateObj = new Date(draft.tanggalMulaiOperasional);
-      const monthIndex = dateObj.getMonth(); // 0 = Jan, 1 = Feb, etc.
+      // 2. Select Year (e.g. 2020)
+      const yearSelectOp = page.locator('button, div, span').filter({ hasText: /^\d{4}$/ }).first();
+      const currentYearTextOp = await yearSelectOp.innerText().catch(() => '');
+      let currentYearOp = parseInt(currentYearTextOp) || new Date().getFullYear();
       
-      const monthButtons = page.locator('.v-date-picker-table--month button, .v-date-picker-months button, .v-date-picker-months .v-btn');
-      this.logStep(subject, 6, 'info', `Mengklik tombol bulan ke-${monthIndex + 1} (index ${monthIndex})...`);
-      
-      if (await monthButtons.nth(monthIndex).isVisible()) {
-        await monthButtons.nth(monthIndex).click();
-      } else {
-        await monthButtons.nth(monthIndex).click({ force: true }).catch(() => {});
+      if (currentYearOp !== targetYear) {
+        await yearSelectOp.getByTestId('year-btn').click().catch(() => {});
+        await page.waitForTimeout(1000);
+        
+        let targetYearOptionOp = page.locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
+            .locator('div, li, button, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+        
+        if (!await targetYearOptionOp.isVisible()) {
+          targetYearOptionOp = page.locator('button, div, li, span').filter({ hasText: new RegExp(`^${targetYear}$`) }).first();
+        }
+        
+        if (await targetYearOptionOp.isVisible()) {
+          await targetYearOptionOp.scrollIntoViewIfNeeded().catch(() => {});
+          await targetYearOptionOp.click({ force: true });
+        } else {
+          // Fallback: Click year decrement/increment button next to Year text
+          const leftArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+          const yearLeftArrowOp = leftArrowsOp[1] || leftArrowsOp[0];
+          if (yearLeftArrowOp) {
+            while (currentYearOp > targetYear) {
+              await yearLeftArrowOp.click().catch(() => {});
+              await page.waitForTimeout(200);
+              const updatedYearTextOp = await yearSelectOp.innerText();
+              currentYearOp = parseInt(updatedYearTextOp) || currentYearOp - 1;
+            }
+            while (currentYearOp < targetYear) {
+              const rightArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+              const yearRightArrowOp = rightArrowsOp[1] || rightArrowsOp[0];
+              if (yearRightArrowOp) {
+                await yearRightArrowOp.click().catch(() => {});
+                await page.waitForTimeout(200);
+                const updatedYearTextOp = await yearSelectOp.innerText();
+                currentYearOp = parseInt(updatedYearTextOp) || currentYearOp + 1;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+        await page.waitForTimeout(500);
       }
-      await page.waitForTimeout(800);
+
+      // 3. Select Month (e.g. 'Apr')
+      const monthSelectOp = page.locator('button, div, span').filter({ hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/ }).first();
+      const currentMonthTextOp = await monthSelectOp.innerText().catch(() => '');
+      if (currentMonthTextOp.toLowerCase() !== targetMonth.toLowerCase()) {
+        await monthSelectOp.click().catch(() => {});
+        await page.waitForTimeout(500);
+        
+        const targetMonthOptionOp = page.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+        if (await targetMonthOptionOp.isVisible()) {
+          await targetMonthOptionOp.click();
+        } else {
+          // Fallback: Click month decrement button (the 1st left arrow)
+          const leftArrowsOp = await page.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+          const monthLeftArrowOp = leftArrowsOp[0];
+          if (monthLeftArrowOp) {
+            let limitOp = 0;
+            while (limitOp < 12) {
+              const checkTextOp = await monthSelectOp.innerText();
+              if (checkTextOp.toLowerCase() === targetMonth.toLowerCase()) break;
+              await monthLeftArrowOp.click();
+              await page.waitForTimeout(200);
+              limitOp++;
+            }
+          }
+        }
+        await page.waitForTimeout(500);
+      }
+      await page.waitForTimeout(1000);
     }
 
     // Input investasi
@@ -2927,15 +3053,48 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(1000);
 
     // Check for validation errors on the page
-    const errorElements = page.locator('.error--text, .v-messages__message');
-    const errorCount = await errorElements.count();
+    // Check for validation errors on the page
+    const errorContainers = page.locator('.v-input--error');
+    const containerCount = await errorContainers.count();
     const visibleErrors: string[] = [];
 
-    for (let i = 0; i < errorCount; i++) {
-      const el = errorElements.nth(i);
+    const processedTexts = new Set<string>();
+    for (let i = 0; i < containerCount; i++) {
+      const container = errorContainers.nth(i);
+      if (await container.isVisible()) {
+        const outerHtml = await container.evaluate((el: any) => el.outerHTML).catch(() => '');
+        this.logger.error(`[Step 6 Error Container] Outer HTML: ${outerHtml}`);
+
+        let labelText = '';
+        const possibleLabel = container.locator('.v-label, .v-field-label, label, .v-input__label').first();
+        if (await possibleLabel.isVisible()) {
+          labelText = (await possibleLabel.innerText()).trim();
+        } else {
+          const innerText = await container.innerText().catch(() => '');
+          labelText = innerText.split('\n')[0]?.trim() || '';
+        }
+
+        const errorMsgEl = container.locator('.v-messages__message, .error--text').first();
+        let errorText = 'Wajib diisi';
+        if (await errorMsgEl.isVisible()) {
+          errorText = (await errorMsgEl.innerText()).trim();
+          processedTexts.add(errorText);
+        }
+        if (labelText) {
+          visibleErrors.push(`${labelText} (${errorText})`);
+        } else {
+          visibleErrors.push(errorText);
+        }
+      }
+    }
+    // Now find any other error messages not captured inside container errors
+    const orphanErrors = page.locator('.error--text, .v-messages__message');
+    const orphanCount = await orphanErrors.count();
+    for (let i = 0; i < orphanCount; i++) {
+      const el = orphanErrors.nth(i);
       if (await el.isVisible()) {
         const errorText = (await el.innerText()).trim();
-        if (errorText && !visibleErrors.includes(errorText)) {
+        if (errorText && !processedTexts.has(errorText)) {
           visibleErrors.push(errorText);
         }
       }
