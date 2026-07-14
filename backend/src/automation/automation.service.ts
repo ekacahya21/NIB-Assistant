@@ -2753,26 +2753,13 @@ export class AutomationService implements OnModuleDestroy {
           `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`,
         );
 
-        const container = page
-          .getByTestId('date-time-picker-tgl-berjalan')
-          .first();
+        // 1. Click the datepicker trigger
+        const container = page.getByTestId('date-time-picker-tgl-berjalan').nth(1);
         await container.scrollIntoViewIfNeeded().catch(() => {});
         await container.click();
 
         // picker locator
         const pickerContainer = page.locator('.v-picker');
-
-        // 1. Click the datepicker trigger
-        const trigger = pickerContainer
-          .locator(
-            '.v-field, .v-input__append-inner, .v-icon, div[name="date"], input',
-          )
-          .first();
-        await ((await trigger.isVisible()) ? trigger : container)
-          .click({ force: true })
-          .catch(() => {});
-        await page.waitForTimeout(1000);
-
 
         // 2. Select Year (e.g. 2020)
         const yearSelect = pickerContainer
@@ -2915,25 +2902,19 @@ export class AutomationService implements OnModuleDestroy {
         `Mengisi perkiraan operasional: ${targetMonth} ${targetYear}`,
       );
 
+      // 1. Click the datepicker trigger
       const containerOp = page
         .getByTestId('date-time-picker-jangka-waktu-penyelesaian')
         .filter({ visible: true })
         .first();
       await containerOp.scrollIntoViewIfNeeded().catch(() => {});
+      await containerOp.click();
 
-      // 1. Click the datepicker trigger
-      const triggerOp = containerOp
-        .locator(
-          '.v-field, .v-input__append-inner, .v-icon, div[name="date"], input',
-        )
-        .first();
-      await ((await triggerOp.isVisible()) ? triggerOp : containerOp)
-        .click({ force: true })
-        .catch(() => {});
-      await page.waitForTimeout(1000);
+      // picker locator
+      const pickerContainerOp = page.locator('.v-picker');
 
       // 2. Select Year (e.g. 2020)
-      const yearSelectOp = page
+      const yearSelectOp = pickerContainerOp
         .locator('button, div, span')
         .filter({ hasText: /^\d{4}$/ })
         .first();
@@ -2948,14 +2929,14 @@ export class AutomationService implements OnModuleDestroy {
           .catch(() => {});
         await page.waitForTimeout(1000);
 
-        let targetYearOptionOp = page
+        let targetYearOptionOp = pickerContainerOp
           .locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
           .locator('div, li, button, span')
           .filter({ hasText: new RegExp(`^${targetYear}$`) })
           .first();
 
         if (!(await targetYearOptionOp.isVisible())) {
-          targetYearOptionOp = page
+          targetYearOptionOp = pickerContainerOp
             .locator('button, div, li, span')
             .filter({ hasText: new RegExp(`^${targetYear}$`) })
             .first();
@@ -2966,7 +2947,7 @@ export class AutomationService implements OnModuleDestroy {
           await targetYearOptionOp.click({ force: true });
         } else {
           // Fallback: Click year decrement/increment button next to Year text
-          const leftArrowsOp = await page
+          const leftArrowsOp = await pickerContainerOp
             .locator('button, span, i')
             .filter({ hasText: /^(<|chevron_left|left)$/i })
             .all();
@@ -2979,7 +2960,7 @@ export class AutomationService implements OnModuleDestroy {
               currentYearOp = parseInt(updatedYearTextOp) || currentYearOp - 1;
             }
             while (currentYearOp < targetYear) {
-              const rightArrowsOp = await page
+              const rightArrowsOp = await pickerContainerOp
                 .locator('button, span, i')
                 .filter({ hasText: /^(>|chevron_right|right)$/i })
                 .all();
@@ -3000,7 +2981,7 @@ export class AutomationService implements OnModuleDestroy {
       }
 
       // 3. Select Month (e.g. 'Apr')
-      const monthSelectOp = page
+      const monthSelectOp = pickerContainerOp
         .locator('button, div, span')
         .filter({
           hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
@@ -3013,7 +2994,7 @@ export class AutomationService implements OnModuleDestroy {
         await monthSelectOp.click().catch(() => {});
         await page.waitForTimeout(500);
 
-        const targetMonthOptionOp = page
+        const targetMonthOptionOp = pickerContainerOp
           .locator('button, div, span')
           .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
           .first();
@@ -3021,7 +3002,7 @@ export class AutomationService implements OnModuleDestroy {
           await targetMonthOptionOp.click();
         } else {
           // Fallback: Click month decrement button (the 1st left arrow)
-          const leftArrowsOp = await page
+          const leftArrowsOp = await pickerContainerOp
             .locator('button, span, i')
             .filter({ hasText: /^(<|chevron_left|left)$/i })
             .all();
