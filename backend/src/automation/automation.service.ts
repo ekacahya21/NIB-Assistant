@@ -3416,9 +3416,29 @@ export class AutomationService implements OnModuleDestroy {
           .first();
         if (await possibleLabel.isVisible()) {
           labelText = (await possibleLabel.innerText()).trim();
-        } else {
-          const innerText = await container.innerText().catch(() => '');
-          labelText = innerText.split('\n')[0]?.trim() || '';
+        }
+
+        // Try to get input attributes inside the container as descriptive fallbacks
+        let fallbackLabel = '';
+        const inputEl = container.locator('input, textarea, select').first();
+        if (await inputEl.isVisible().catch(() => false)) {
+          const placeholder = await inputEl.getAttribute('placeholder').catch(() => null);
+          const ariaLabel = await inputEl.getAttribute('aria-label').catch(() => null);
+          const testIdAttr = await inputEl.getAttribute('data-testid').catch(() => null);
+          const nameAttr = await inputEl.getAttribute('name').catch(() => null);
+          const idAttr = await inputEl.getAttribute('id').catch(() => null);
+
+          if (placeholder && placeholder.trim()) {
+            fallbackLabel = placeholder.trim();
+          } else if (ariaLabel && ariaLabel.trim()) {
+            fallbackLabel = ariaLabel.trim();
+          } else if (testIdAttr && testIdAttr.trim()) {
+            fallbackLabel = testIdAttr.trim();
+          } else if (nameAttr && nameAttr.trim()) {
+            fallbackLabel = nameAttr.trim();
+          } else if (idAttr && idAttr.trim()) {
+            fallbackLabel = idAttr.trim();
+          }
         }
 
         const errorMsgEl = container
@@ -3429,6 +3449,36 @@ export class AutomationService implements OnModuleDestroy {
           errorText = (await errorMsgEl.innerText()).trim();
           processedTexts.add(errorText);
         }
+
+        // If labelText is empty, matches errorText, or is generic "Wajib diisi", use fallbackLabel
+        const isInvalidLabel = !labelText || 
+          labelText.toLowerCase() === errorText.toLowerCase() || 
+          labelText.toLowerCase() === 'wajib diisi';
+
+        if (isInvalidLabel && fallbackLabel) {
+          labelText = fallbackLabel;
+        }
+
+        // Clean up common technical suffixes/prefixes or action verbs from labels/placeholders
+        if (labelText) {
+          labelText = labelText
+            .replace(/Masukkan\s+/gi, '')
+            .replace(/Pilih\s+/gi, '')
+            .replace(/Contoh\s*:\s*/gi, '')
+            .replace(/Contoh\s+/gi, '')
+            .trim();
+          labelText = labelText.charAt(0).toUpperCase() + labelText.slice(1);
+        }
+
+        if (!labelText) {
+          // Last resort fallback: check innerText first line if not generic error
+          const innerText = await container.innerText().catch(() => '');
+          const firstLine = innerText.split('\n')[0]?.trim() || '';
+          if (firstLine && firstLine.toLowerCase() !== errorText.toLowerCase() && firstLine.toLowerCase() !== 'wajib diisi') {
+            labelText = firstLine;
+          }
+        }
+
         if (labelText) {
           visibleErrors.push(`${labelText} (${errorText})`);
         } else {

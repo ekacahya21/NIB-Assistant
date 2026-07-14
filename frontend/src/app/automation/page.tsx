@@ -378,7 +378,7 @@ export default function AutomationPage() {
               if (payload.text.includes("MENGISI_RINCIAN_PRODUK")) {
                 setStatusText("Menunggu Anda melengkapi rincian produk...");
                 setIsPromptingProduct(true);
-                setAllowedUnitsList(payload.data?.allowedUnits || ["Unit", "Kg", "Pcs"]);
+                setAllowedUnitsList(Array.from(new Set(payload.data?.allowedUnits || ["Unit", "Kg", "Pcs"])));
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
                 setIsPromptingParameter(false);
@@ -1315,19 +1315,17 @@ export default function AutomationPage() {
                               required
                             />
                           </div>
-                          <div className="flex flex-col gap-1">
+                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-bold text-on-surface-variant uppercase">Satuan</label>
-                            <select
+                            <SearchableSelect
+                              options={Array.from(new Set(allowedUnitsList)).map((unit) => ({
+                                value: unit,
+                                label: unit,
+                              }))}
                               value={productUnit}
-                              onChange={(e) => setProductUnit(e.target.value)}
-                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
-                              required
-                            >
-                              <option value="">Pilih Satuan</option>
-                              {allowedUnitsList.map((unit) => (
-                                <option key={unit} value={unit}>{unit}</option>
-                              ))}
-                            </select>
+                              onChange={setProductUnit}
+                              placeholder="Pilih Satuan"
+                            />
                           </div>
                         </div>
 
