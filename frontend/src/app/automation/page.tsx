@@ -31,6 +31,8 @@ export default function AutomationPage() {
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
   const [isSubmittingPassword, setIsSubmittingPassword] = useState<boolean>(false);
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
   // Product Setup States
   const [isPromptingProduct, setIsPromptingProduct] = useState<boolean>(false);
@@ -567,6 +569,8 @@ export default function AutomationPage() {
       setNewPassword("");
       setConfirmPassword("");
       setPasswordError("");
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
       setCurrentStep(1);
       setStatusText("Memulai ulang otomatisasi...");
       setLogs([]);
@@ -659,6 +663,8 @@ export default function AutomationPage() {
         setIsPromptingPassword(false);
         setNewPassword("");
         setConfirmPassword("");
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
       });
   };
 
@@ -1229,27 +1235,49 @@ export default function AutomationPage() {
                             <label className="text-[9px] font-bold text-on-surface-variant uppercase">
                               {isBelumAkun() ? "Kata Sandi Baru" : "Kata Sandi"}
                             </label>
-                            <input
-                              type="password"
-                              placeholder={isBelumAkun() ? "Minimal 8 karakter" : "Masukkan kata sandi Anda"}
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
-                              required
-                            />
+                            <div className="relative w-full">
+                              <input
+                                type={showNewPassword ? "text" : "password"}
+                                placeholder={isBelumAkun() ? "Minimal 8 karakter" : "Masukkan kata sandi Anda"}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                              >
+                                <span className="material-symbols-outlined text-lg select-none">
+                                  {showNewPassword ? "visibility_off" : "visibility"}
+                                </span>
+                              </button>
+                            </div>
                           </div>
 
                           {isBelumAkun() && (
                             <div className="flex flex-col gap-1">
                               <label className="text-[9px] font-bold text-on-surface-variant uppercase">Konfirmasi Kata Sandi</label>
-                              <input
-                                type="password"
-                                placeholder="Ulangi kata sandi"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
-                                required
-                              />
+                              <div className="relative w-full">
+                                <input
+                                  type={showConfirmPassword ? "text" : "password"}
+                                  placeholder="Ulangi kata sandi"
+                                  value={confirmPassword}
+                                  onChange={(e) => setConfirmPassword(e.target.value)}
+                                  className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                                  required
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                                >
+                                  <span className="material-symbols-outlined text-lg select-none">
+                                    {showConfirmPassword ? "visibility_off" : "visibility"}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
                           )}
 

@@ -715,7 +715,7 @@ export default function AdminDashboardPage() {
               }`}
             >
               <span className="material-symbols-outlined text-xs">history</span>
-              Riwayat Selesai & Gagal ({historySessions.length})
+              Riwayat ({historySessions.length})
             </button>
           </div>
         </section>
