@@ -2759,8 +2759,11 @@ export class AutomationService implements OnModuleDestroy {
         await container.scrollIntoViewIfNeeded().catch(() => {});
         await container.click();
 
+        // picker locator
+        const pickerContainer = page.locator('.v-picker');
+
         // 1. Click the datepicker trigger
-        const trigger = container
+        const trigger = pickerContainer
           .locator(
             '.v-field, .v-input__append-inner, .v-icon, div[name="date"], input',
           )
@@ -2770,8 +2773,6 @@ export class AutomationService implements OnModuleDestroy {
           .catch(() => {});
         await page.waitForTimeout(1000);
 
-        // picker locator
-        const pickerContainer = page.locator('.v-picker');
 
         // 2. Select Year (e.g. 2020)
         const yearSelect = pickerContainer
