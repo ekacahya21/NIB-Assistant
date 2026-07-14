@@ -1417,44 +1417,42 @@ export default function WizardPage() {
                     </div>
                   )}
 
+                  {/* Latitude and Longitude Grid Inputs (both Desktop and Mobile) */}
+                  <div className="grid grid-cols-2 gap-3 w-full">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-on-surface-variant uppercase">Latitude</label>
+                      <input
+                        type="text"
+                        value={formData.latitude}
+                        onChange={(e) => handleInputChange("latitude", e.target.value)}
+                        className="w-full min-h-[40px] px-3 py-1.5 rounded border border-border-light bg-white text-xs font-mono focus:border-primary-container focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-on-surface-variant uppercase">Longitude</label>
+                      <input
+                        type="text"
+                        value={formData.longitude}
+                        onChange={(e) => handleInputChange("longitude", e.target.value)}
+                        className="w-full min-h-[40px] px-3 py-1.5 rounded border border-border-light bg-white text-xs font-mono focus:border-primary-container focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
                   {/* Mobile Trigger Button for Bottom Sheet Modal */}
-                  <div className="md:hidden">
+                  <div className="md:hidden w-full">
                     <button
                       type="button"
                       onClick={() => setIsMapModalOpen(true)}
-                      className="w-full py-3 px-4 border border-primary-container text-primary-container hover:bg-primary-container/5 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                      className="w-full py-3 px-4 border border-primary-container text-primary-container hover:bg-primary-container/5 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-base">map</span>
                       Pilih Lokasi di Peta
                     </button>
-                    <div className="mt-2 text-center text-[10px] text-on-surface-variant font-mono">
-                      Posisi: Lat: {formData.latitude}, Lng: {formData.longitude}
-                    </div>
                   </div>
 
                   {/* Desktop Inline Map View */}
                   <div className="hidden md:flex flex-col gap-4 w-full">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Latitude</label>
-                        <input
-                          type="text"
-                          value={formData.latitude}
-                          onChange={(e) => handleInputChange("latitude", e.target.value)}
-                          className="w-full min-h-[40px] px-3 py-1.5 rounded border border-border-light bg-white text-xs font-mono focus:border-primary-container focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Longitude</label>
-                        <input
-                          type="text"
-                          value={formData.longitude}
-                          onChange={(e) => handleInputChange("longitude", e.target.value)}
-                          className="w-full min-h-[40px] px-3 py-1.5 rounded border border-border-light bg-white text-xs font-mono focus:border-primary-container focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
                     <div className="relative w-full rounded overflow-hidden border border-border-light flex flex-col">
                       <div className="w-full" style={{ height: "200px", minHeight: "200px" }}>
                         <LeafletMap
@@ -1544,69 +1542,6 @@ export default function WizardPage() {
                   )}
                 </div>
 
-                {/* ── MOBILE FULL SCREEN MAP BOTTOM SHEET MODAL ── */}
-                {isMapModalOpen && (
-                  <div className="fixed inset-0 z-[9999] bg-white flex flex-col animate-fadeIn">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 h-16 border-b border-border-light">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsMapModalOpen(false)}
-                          className="p-2 hover:bg-surface-container rounded text-on-surface-variant flex items-center justify-center"
-                        >
-                          <span className="material-symbols-outlined text-xl">arrow_back</span>
-                        </button>
-                        <span className="text-sm font-extrabold text-primary-container uppercase">Pilih Lokasi Usaha</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsMapModalOpen(false)}
-                        className="px-4 py-2 bg-primary-container text-white text-xs font-bold rounded uppercase tracking-wider"
-                      >
-                        Simpan Lokasi
-                      </button>
-                    </div>
-
-                    {/* Geocoding and Coord Panel */}
-                    <div className="bg-[#F3F4F6] p-3 border-b border-border-light flex flex-col gap-2">
-                      <div className="flex justify-between items-center gap-2">
-                        <div className="text-[10px] font-mono text-on-surface-variant font-bold">
-                          Lat: {formData.latitude} | Lng: {formData.longitude}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={searchCoordinates}
-                          disabled={isGeocoding}
-                          className="px-2.5 py-1 bg-white border border-border-light rounded text-[9px] font-bold text-primary-container uppercase"
-                        >
-                          {isGeocoding ? "..." : "Autofill dari Alamat"}
-                        </button>
-                      </div>
-                      {geocodeError && (
-                        <p className="text-[9px] text-error font-semibold leading-normal">{geocodeError}</p>
-                      )}
-                    </div>
-
-                    {/* Map Area */}
-                    <div className="flex-1 relative">
-                      <LeafletMap
-                        latitude={formData.latitude}
-                        longitude={formData.longitude}
-                        onChange={(lat, lng) => {
-                          setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
-                          if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
-                        }}
-                        isMobile={true}
-                      />
-                    </div>
-
-                    {/* Bottom Instructions */}
-                    <div className="p-4 bg-white border-t border-border-light text-center text-[10px] text-on-surface-variant leading-relaxed font-bold">
-                      Geser peta dan ketuk lokasi presisi tempat usaha Anda untuk menjatuhkan pin merah.
-                    </div>
-                  </div>
-                )}
 
               </div>
             )}
@@ -2321,6 +2256,69 @@ export default function WizardPage() {
         </div>
       </div>
 
+      {/* MOBILE FULL SCREEN MAP BOTTOM SHEET MODAL */}
+      {isMapModalOpen && (
+        <div className="fixed inset-0 z-[9999] bg-white flex flex-col animate-fadeIn">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 h-16 border-b border-border-light">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsMapModalOpen(false)}
+                className="p-2 hover:bg-surface-container rounded text-on-surface-variant flex items-center justify-center cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">arrow_back</span>
+              </button>
+              <span className="text-sm font-extrabold text-primary-container uppercase">Pilih Lokasi Usaha</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMapModalOpen(false)}
+              className="px-4 py-2 bg-primary-container text-white text-xs font-bold rounded uppercase tracking-wider cursor-pointer"
+            >
+              Simpan Lokasi
+            </button>
+          </div>
+
+          {/* Geocoding and Coord Panel */}
+          <div className="bg-[#F3F4F6] p-3 border-b border-border-light flex flex-col gap-2">
+            <div className="flex justify-between items-center gap-2">
+              <div className="text-[10px] font-mono text-on-surface-variant font-bold">
+                Lat: {formData.latitude} | Lng: {formData.longitude}
+              </div>
+              <button
+                type="button"
+                onClick={searchCoordinates}
+                disabled={isGeocoding}
+                className="px-2.5 py-1 bg-white border border-border-light rounded text-[9px] font-bold text-primary-container uppercase cursor-pointer"
+              >
+                {isGeocoding ? "..." : "Autofill dari Alamat"}
+              </button>
+            </div>
+            {geocodeError && (
+              <p className="text-[9px] text-error font-semibold leading-normal">{geocodeError}</p>
+            )}
+          </div>
+
+          {/* Map Area */}
+          <div className="flex-1 relative">
+            <LeafletMap
+              latitude={formData.latitude}
+              longitude={formData.longitude}
+              onChange={(lat, lng) => {
+                setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
+                if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
+              }}
+              isMobile={true}
+            />
+          </div>
+
+          {/* Bottom Instructions */}
+          <div className="p-4 bg-white border-t border-border-light text-center text-[10px] text-on-surface-variant leading-relaxed font-bold select-none">
+            Geser peta dan ketuk lokasi presisi tempat usaha Anda untuk menjatuhkan pin merah.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
