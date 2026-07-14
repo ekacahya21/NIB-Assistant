@@ -294,6 +294,9 @@ export default function AutomationPage() {
             }
 
             if (payload.status === "error") {
+              if (eventSource) {
+                eventSource.close();
+              }
               clearElapsedTimer();
               failedStepRef.current = payload.step;
               setFailedStep(payload.step);
@@ -416,6 +419,9 @@ export default function AutomationPage() {
               }
             }
             if (payload.step === 7 && payload.status === "success" && failedStepRef.current === null) {
+              if (eventSource) {
+                eventSource.close();
+              }
               clearElapsedTimer();
               setStatusText("Proses Otomatisasi Selesai!");
               setIsPromptingOtp(false);
