@@ -701,7 +701,7 @@ export class AutomationService implements OnModuleDestroy {
     this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
     const browser = await chromium.launch({
       headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
-      slowMo: 1000,
+      slowMo: process.env.PLAYWRIGHT_SLOW_MO ? parseInt(process.env.PLAYWRIGHT_SLOW_MO) : 200,
     });
     this.activeBrowsers.set(draftId, browser);
 
@@ -2179,7 +2179,7 @@ export class AutomationService implements OnModuleDestroy {
     await provPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanProvinsi);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(200);
 
     // Select Kota/Kabupaten (combobox index 1)
     const rawKota = draft.kotaKabupaten || draft.kotaKabupatenKtp;
@@ -2201,10 +2201,9 @@ export class AutomationService implements OnModuleDestroy {
       )
       .catch(() => null);
     await page.getByPlaceholder('Kabupaten').locator('input').fill(searchKota);
-    await kotaPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKota);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(200);
 
     // Select Kecamatan (combobox index 2)
     const cleanKecamatan = (draft.kecamatan || draft.kecamatanKtp).trim();
@@ -2229,10 +2228,9 @@ export class AutomationService implements OnModuleDestroy {
       .getByPlaceholder('Kecamatan')
       .locator('input')
       .fill(searchKecamatan);
-    await kecPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKecamatan);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(200);
 
     // Select Desa / Kelurahan (combobox index 3)
     const cleanKelurahan = (draft.kelurahan || draft.kelurahanKtp).trim();
@@ -2257,10 +2255,9 @@ export class AutomationService implements OnModuleDestroy {
       .getByPlaceholder('Kelurahan')
       .locator('input')
       .fill(searchKelurahan);
-    await kelPromise;
     await page.waitForTimeout(200);
     await this.selectOptionRobust(page, cleanKelurahan);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(200);
 
     // input kode pos
     await page
@@ -2509,8 +2506,12 @@ export class AutomationService implements OnModuleDestroy {
     await kbliSearchInput.fill(searchKbli);
     const getListKbli2025Promise = page
       .waitForResponse(
-        (response: any) =>
-          response.url().includes('/getListKBLI') && response.status() === 200,
+        (response: any) => {
+          const matches = response.url().includes('/getListKBLI') && response.status() === 200;
+          if (!matches) return false;
+          const postData = response.request().postData();
+          return !!(postData && postData.includes('kbli_2020'));
+        },
         { timeout: 20000 },
       )
       .catch(() => null);
@@ -2658,7 +2659,7 @@ export class AutomationService implements OnModuleDestroy {
     await page.waitForTimeout(1000);
 
     // check for pernyataan mandiri
-    this.logStep(subject, 6, 'info', 'Menyatakan pernyataan mandiri...');
+    this.logStep(subject, 6, 'info', 'Menyetujui pernyataan mandiri...');
     await page.getByText('Saya menyatakan pemberian ini').click();
 
     // click tombol proses
