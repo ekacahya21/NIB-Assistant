@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getSessionId } from "../../utils/session";
+import SearchableSelect from "@/components/molecules/SearchableSelect";
+import LiveConsole from "@/components/organisms/LiveConsole";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -17,7 +19,6 @@ export default function AutomationPage() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [statusText, setStatusText] = useState<string>("Sistem sedang bersiap...");
   const [logs, setLogs] = useState<LogMessage[]>([]);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
   
   // Registration and OTP States
   const [akunOss, setAkunOss] = useState<string>("belum");
@@ -177,8 +178,7 @@ export default function AutomationPage() {
   const [updatedNama, setUpdatedNama] = useState<string>("");
   const [isUpdatingDraft, setIsUpdatingDraft] = useState<boolean>(false);
   
-  // Accordion open state for technical logs
-  const [isLogsOpen, setIsLogsOpen] = useState<boolean>(false);
+
   
   const streamRef = useRef<EventSource | null>(null);
   const elapsedTimerRef = useRef<any>(null);
@@ -234,10 +234,7 @@ export default function AutomationPage() {
     setLogs((prev) => [...prev, { time, type, text }]);
   };
 
-  // Scroll to bottom of terminal
-  useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+
 
   // Handle step timers and real-time SSE stream
   const connectStream = () => {
@@ -796,44 +793,7 @@ export default function AutomationPage() {
   ];
 
   const renderTechnicalLogs = () => (
-    <div className="border border-border-light rounded-lg overflow-hidden bg-white">
-      <button
-        onClick={() => setIsLogsOpen(!isLogsOpen)}
-        type="button"
-        className="w-full px-4 py-3 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container transition-all"
-      >
-        <span>[ Developer Mode ] Log Teknis Bot</span>
-        <span className="material-symbols-outlined text-lg transition-transform duration-200" style={{ transform: isLogsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-          expand_more
-        </span>
-      </button>
-      
-      {isLogsOpen && (
-        <div className="bg-[#1E1E1E] text-[#D4D4D4] font-mono text-[11px] p-4 h-48 overflow-y-auto border-t border-[#333] scrollbar-thin">
-          {logs.length === 0 ? (
-            <div className="text-outline italic">Mendengarkan output terminal...</div>
-          ) : (
-            logs.map((log, index) => (
-              <div key={index} className="flex gap-2 mb-1 min-w-0">
-                <span className="text-[#569CD6] shrink-0">[{log.time}]</span>
-                <span className={`break-all ${
-                  log.type === "success" 
-                    ? "text-[#4EC9B0]" 
-                    : log.type === "warn" 
-                      ? "text-[#DCDCAA]" 
-                      : log.type === "error" 
-                        ? "text-[#F48771]" 
-                        : ""
-                }`}>
-                  {log.text}
-                </span>
-              </div>
-            ))
-          )}
-          <div ref={consoleEndRef} />
-        </div>
-      )}
-    </div>
+    <LiveConsole logs={logs} />
   );
 
   return (
@@ -1393,19 +1353,15 @@ export default function AutomationPage() {
                       <form onSubmit={handleSubmitKbli2025} className="space-y-4 max-w-sm mx-auto">
                         <div className="flex flex-col gap-1">
                           <label className="text-[9px] font-bold text-on-surface-variant uppercase">Pilih KBLI 2025</label>
-                          <select
+                          <SearchableSelect
+                            options={kbli2025Options.map((opt) => ({
+                              value: opt.code,
+                              label: `${opt.code} - ${opt.title}`,
+                            }))}
                             value={selectedKbli2025}
-                            onChange={(e) => setSelectedKbli2025(e.target.value)}
-                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
-                            required
-                          >
-                            <option value="">Pilih KBLI 2025</option>
-                            {kbli2025Options.map((opt) => (
-                              <option key={opt.code} value={opt.code}>
-                                {opt.code} - {opt.title}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setSelectedKbli2025}
+                            placeholder="Pilih KBLI 2025"
+                          />
                         </div>
 
                         <button
@@ -1468,17 +1424,15 @@ export default function AutomationPage() {
                       <form onSubmit={handleParameterSubmit} className="space-y-4 max-w-sm mx-auto">
                         <div className="flex flex-col gap-1">
                           <label className="text-[9px] font-bold text-on-surface-variant uppercase">Parameter</label>
-                          <select
+                          <SearchableSelect
+                            options={parameterOptions.map((opt) => ({
+                              value: opt,
+                              label: opt,
+                            }))}
                             value={selectedParameter}
-                            onChange={(e) => setSelectedParameter(e.target.value)}
-                            className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none text-on-surface"
-                            required
-                          >
-                            <option value="">Pilih Parameter Kewenangan</option>
-                            {parameterOptions.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                            onChange={setSelectedParameter}
+                            placeholder="Pilih Parameter Kewenangan"
+                          />
                         </div>
 
                         {parameterError && (

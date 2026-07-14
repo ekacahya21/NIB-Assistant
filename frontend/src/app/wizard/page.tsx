@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import SearchableSelect from "@/components/molecules/SearchableSelect";
+import LeafletMap from "@/components/organisms/LeafletMap";
 
 interface KBLIRecommendation {
   code: string;
@@ -32,10 +34,7 @@ export default function WizardPage() {
   const [saveStatus, setSaveStatus] = useState<"draft" | "saving" | "saved">("saved");
 
   // Leaflet Map states & references
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
   const hasResolvedInitialRegions = useRef(false);
 
   // Form State
@@ -325,112 +324,6 @@ export default function WizardPage() {
     districtsKtpList,
     villagesKtpList
   ]);
-
-  // Load Leaflet resources dynamically on mount
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    if ((window as any).L) {
-      setLeafletLoaded(true);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.async = true;
-    script.onload = () => {
-      setLeafletLoaded(true);
-    };
-    document.head.appendChild(script);
-  }, []);
-
-  // Initialize Leaflet Map
-  useEffect(() => {
-    if (!leafletLoaded || currentStep !== 2) return;
-    
-    // On mobile, only initialize if the modal sheet is actually open
-    const isMobile = window.innerWidth < 768;
-    if (isMobile && !isMapModalOpen) return;
-
-    const L = (window as any).L;
-    if (!L) return;
-
-    const lat = parseFloat(formData.latitude) || -6.2088;
-    const lng = parseFloat(formData.longitude) || 106.8456;
-
-    const containerId = isMobile ? "leaflet-map-modal" : "leaflet-map-inline";
-    const mapContainer = document.getElementById(containerId);
-    if (!mapContainer) return;
-
-    const customIcon = L.divIcon({
-      className: "custom-leaflet-pin",
-      html: `<span class="material-symbols-outlined text-primary text-3xl" style="transform: translate(-14px, -28px); filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3)); position: absolute; font-weight: bold; pointer-events: none;">pin_drop</span>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 28]
-    });
-
-    if (!mapRef.current) {
-      const map = L.map(containerId, {
-        zoomControl: true,
-        scrollWheelZoom: !isMobile // Disable on mobile to prevent scrolling
-      }).setView([lat, lng], 14);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
-
-      const marker = L.marker([lat, lng], { draggable: true, icon: customIcon }).addTo(map);
-      markerRef.current = marker;
-
-      marker.on("dragend", () => {
-        const position = marker.getLatLng();
-        setFormData((prev) => ({
-          ...prev,
-          latitude: position.lat.toFixed(6),
-          longitude: position.lng.toFixed(6)
-        }));
-        if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
-      });
-
-      map.on("click", (e: any) => {
-        const { lat: clickLat, lng: clickLng } = e.latlng;
-        marker.setLatLng([clickLat, clickLng]);
-        setFormData((prev) => ({
-          ...prev,
-          latitude: clickLat.toFixed(6),
-          longitude: clickLng.toFixed(6)
-        }));
-        if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
-      });
-
-      mapRef.current = map;
-    } else {
-      const map = mapRef.current;
-      const marker = markerRef.current;
-      if (map && marker) {
-        const currentPos = marker.getLatLng();
-        if (Math.abs(currentPos.lat - lat) > 0.0001 || Math.abs(currentPos.lng - lng) > 0.0001) {
-          marker.setLatLng([lat, lng]);
-          map.setView([lat, lng], map.getZoom());
-        }
-      }
-    }
-
-    // Trigger map invalidation to correct size issues inside modal / container
-    setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 200);
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        markerRef.current = null;
-      }
-    };
-  }, [leafletLoaded, currentStep, isMapModalOpen, formData.latitude, formData.longitude]);
 
   // Fetch provinces on mount
   useEffect(() => {
@@ -1312,32 +1205,24 @@ export default function WizardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
-                      <select
+                      <SearchableSelect
+                        options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
                         value={selectedKtpProvId}
-                        onChange={(e) => handleKtpProvinceChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
-                      >
-                        <option value="">{loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}</option>
-                        {provincesList.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleKtpProvinceChange}
+                        placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
-                      <select
+                      <SearchableSelect
+                        options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
                         value={selectedKtpCityId}
                         disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
-                        onChange={(e) => handleKtpCityChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="">{loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}</option>
-                        {citiesKtpList.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleKtpCityChange}
+                        placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
                     </div>
                   </div>
@@ -1345,33 +1230,25 @@ export default function WizardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
-                      <select
+                      <SearchableSelect
+                        options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
                         value={selectedKtpDistId}
                         disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
-                        onChange={(e) => handleKtpDistrictChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="">{loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}</option>
-                        {districtsKtpList.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleKtpDistrictChange}
+                        placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
-                      <select
+                      <SearchableSelect
+                        options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
                         value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
                         disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
-                        onChange={(e) => handleKtpVillageChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="">{loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}</option>
-                        {villagesKtpList.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleKtpVillageChange}
+                        placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
                     </div>
                   </div>
@@ -1451,33 +1328,25 @@ export default function WizardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
-                      <select
+                      <SearchableSelect
+                        options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
                         value={selectedProvId}
                         disabled={formData.isAddressSame}
-                        onChange={(e) => handleProvinceChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50 disabled:bg-surface-container"
-                      >
-                        <option value="">{loadingRegions.provinsi ? "Memuat..." : "-- Pilih --"}</option>
-                        {provincesList.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleProvinceChange}
+                        placeholder={loadingRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.provinsi && <p className="text-[10px] text-error font-semibold">{errors.provinsi}</p>}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
-                      <select
+                      <SearchableSelect
+                        options={citiesList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
                         value={selectedCityId}
                         disabled={formData.isAddressSame || !selectedProvId || loadingRegions.kotaKabupaten}
-                        onChange={(e) => handleCityChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50 disabled:bg-surface-container"
-                      >
-                        <option value="">{loadingRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}</option>
-                        {citiesList.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleCityChange}
+                        placeholder={loadingRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kotaKabupaten && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupaten}</p>}
                     </div>
                   </div>
@@ -1485,33 +1354,25 @@ export default function WizardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
-                      <select
+                      <SearchableSelect
+                        options={districtsList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
                         value={selectedDistId}
                         disabled={formData.isAddressSame || !selectedCityId || loadingRegions.kecamatan}
-                        onChange={(e) => handleDistrictChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50 disabled:bg-surface-container"
-                      >
-                        <option value="">{loadingRegions.kecamatan ? "Memuat..." : "-- Pilih --"}</option>
-                        {districtsList.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleDistrictChange}
+                        placeholder={loadingRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kecamatan && <p className="text-[10px] text-error font-semibold">{errors.kecamatan}</p>}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
-                      <select
+                      <SearchableSelect
+                        options={villagesList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
                         value={villagesList.find((v) => v.name.toUpperCase() === formData.kelurahan)?.id || ""}
                         disabled={formData.isAddressSame || !selectedDistId || loadingRegions.kelurahan}
-                        onChange={(e) => handleVillageChange(e.target.value)}
-                        className="w-full min-h-[48px] px-3 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none disabled:opacity-50 disabled:bg-surface-container"
-                      >
-                        <option value="">{loadingRegions.kelurahan ? "Memuat..." : "-- Pilih --"}</option>
-                        {villagesList.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>
-                        ))}
-                      </select>
+                        onChange={handleVillageChange}
+                        placeholder={loadingRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
+                      />
                       {errors.kelurahan && <p className="text-[10px] text-error font-semibold">{errors.kelurahan}</p>}
                     </div>
                   </div>
@@ -1595,13 +1456,16 @@ export default function WizardPage() {
                     </div>
 
                     <div className="relative w-full rounded overflow-hidden border border-border-light flex flex-col">
-                      {!leafletLoaded && (
-                        <div className="absolute inset-0 bg-[#ECEEF0] flex flex-col items-center justify-center gap-2 z-10 min-h-[200px]">
-                          <span className="material-symbols-outlined text-outline animate-spin text-2xl">sync</span>
-                          <p className="text-[10px] text-on-surface-variant font-bold">Memuat Peta...</p>
-                        </div>
-                      )}
-                      <div id="leaflet-map-inline" className="w-full" style={{ height: "200px", minHeight: "200px" }} />
+                      <div className="w-full" style={{ height: "200px", minHeight: "200px" }}>
+                        <LeafletMap
+                          latitude={formData.latitude}
+                          longitude={formData.longitude}
+                          onChange={(lat, lng) => {
+                            setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
+                            if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
+                          }}
+                        />
+                      </div>
                       <div className="bg-[#F3F4F6] px-3 py-1.5 border-t border-border-light text-[9px] text-on-surface-variant font-bold text-center">
                         Geser pin / klik peta untuk menentukan titik koordinat presisi.
                       </div>
@@ -1726,13 +1590,15 @@ export default function WizardPage() {
 
                     {/* Map Area */}
                     <div className="flex-1 relative">
-                      {!leafletLoaded && (
-                        <div className="absolute inset-0 bg-[#ECEEF0] flex flex-col items-center justify-center gap-2 z-10">
-                          <span className="material-symbols-outlined text-outline animate-spin text-2xl">sync</span>
-                          <p className="text-xs text-on-surface-variant font-bold">Memuat Peta...</p>
-                        </div>
-                      )}
-                      <div id="leaflet-map-modal" className="w-full h-full" />
+                      <LeafletMap
+                        latitude={formData.latitude}
+                        longitude={formData.longitude}
+                        onChange={(lat, lng) => {
+                          setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
+                          if (errors.coordinates) setErrors((prev) => ({ ...prev, coordinates: "" }));
+                        }}
+                        isMobile={true}
+                      />
                     </div>
 
                     {/* Bottom Instructions */}

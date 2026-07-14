@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
+import StatusBadge from "@/components/atoms/StatusBadge";
+import SearchBar from "@/components/molecules/SearchBar";
+import LogDrawer from "@/components/organisms/LogDrawer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -102,7 +105,6 @@ export default function AdminDashboardPage() {
   const [drawerIsActive, setDrawerIsActive] = useState<boolean>(false);
   const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
   
-  const drawerTerminalEndRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
   const drawerDraftIdRef = useRef<string | null>(null);
   const loadedDraftIdsRef = useRef<Set<string>>(new Set());
@@ -116,13 +118,6 @@ export default function AdminDashboardPage() {
       }
     }
   }, []);
-
-  // Auto scroll drawer terminal to bottom when new logs arrive
-  useEffect(() => {
-    if (isDrawerOpen && drawerTerminalEndRef.current) {
-      drawerTerminalEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [activities, isDrawerOpen, drawerDraftId]);
 
   // Load all drafts from the local backend
   const fetchDrafts = async () => {
@@ -422,19 +417,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const getLogStyle = (status: string) => {
-    switch (status) {
-      case "success":
-        return "text-emerald-400 font-semibold";
-      case "error":
-        return "text-rose-400 font-bold bg-rose-950/20 px-1.5 py-0.5 rounded border border-rose-900/30";
-      case "warn":
-        return "text-amber-400 font-semibold";
-      case "info":
-      default:
-        return "text-cyan-400";
-    }
-  };
+
 
   // Filter & Search drafts
   const searchedDrafts = drafts.filter((draft) => {
@@ -676,18 +659,12 @@ export default function AdminDashboardPage() {
         {/* ── Search & Tab Controls ── */}
         <section className="flex flex-col md:flex-row gap-4 items-center justify-between mt-2">
           {/* Search Input */}
-          <div className="relative w-full md:max-w-md">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">
-              search
-            </span>
-            <input
-              type="text"
-              placeholder="Cari pemilik, nama usaha, NIK, ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded border border-border-light bg-white text-xs font-semibold focus:border-primary focus:outline-none placeholder:text-outline shadow-sm"
-            />
-          </div>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Cari pemilik, nama usaha, NIK, ID..."
+            className="w-full md:max-w-md"
+          />
 
           {/* Tabs Selector */}
           <div className="flex overflow-x-auto w-full md:w-auto pb-1 gap-1.5 scrollbar-thin">
@@ -774,19 +751,7 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="px-5 py-4 font-mono font-semibold text-zinc-600">{draft.nik}</td>
                           <td className="px-5 py-4">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider border shrink-0 ${
-                              draft.status === "Sukses"
-                                ? "bg-success/5 border-success/20 text-success"
-                                : draft.status === "Gagal"
-                                  ? "bg-error/5 border-error/20 text-error"
-                                  : draft.status === "Butuh OTP"
-                                    ? "bg-warning/5 border-warning/20 text-warning"
-                                    : draft.status === "Proses"
-                                      ? "bg-primary/5 border-primary/20 text-primary"
-                                      : "bg-tertiary/5 border-tertiary/20 text-tertiary"
-                            }`}>
-                              {draft.status}
-                            </span>
+                            <StatusBadge status={draft.status} />
                           </td>
                           <td className="px-5 py-4 text-outline font-semibold">{formatDate(draft.updatedAt)}</td>
                           <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
@@ -889,103 +854,16 @@ export default function AdminDashboardPage() {
       </main>
 
       {/* ── Right Slide-out Terminal Log Drawer ── */}
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Translucent Backdrop */}
-          <div 
-            onClick={handleCloseDrawer}
-            className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300"
-          />
-
-          {/* Drawer Console Content */}
-          <div className="relative w-full max-w-lg md:max-w-2xl bg-[#17171C] shadow-2xl h-full flex flex-col border-l border-zinc-800 animate-fadeIn z-10">
-            
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-[#121216] text-white">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  {drawerIsActive ? (
-                    <span className="relative flex h-2.5 w-2.5 shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
-                    </span>
-                  ) : (
-                    <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span>
-                  )}
-                  <h3 className="font-extrabold text-sm md:text-base uppercase tracking-wider truncate text-[#ECEEF0]">
-                    {drawerDraftName}
-                  </h3>
-                </div>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mt-0.5">
-                  Pemilik: {drawerDraftOwner} | ID: {drawerDraftId}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {!drawerIsActive && (
-                  <button
-                    onClick={handlePlayVideo}
-                    className="flex items-center gap-1 bg-emerald-650 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-[10px] font-extrabold transition-all border border-emerald-500/20 uppercase tracking-wider cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-xs font-bold">play_circle</span>
-                    Putar Rekaman
-                  </button>
-                )}
-                <button 
-                  onClick={handleCloseDrawer}
-                  className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
-                  title="Tutup Panel"
-                >
-                  <span className="material-symbols-outlined font-bold text-lg">close</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Terminal Body */}
-            <div className="flex-grow overflow-y-auto px-6 py-5 font-mono text-[10px] md:text-xs leading-relaxed space-y-2 bg-[#17171C] text-zinc-300 scrollbar-thin">
-              <div className="text-zinc-600 select-none pb-2 border-b border-zinc-900/60 mb-2 italic">
-                --- AWAL LOG TRANSAKSI ({drawerIsActive ? "SESI RUNNING LIVE" : "SESI SELESAI"}) ---
-              </div>
-              
-              {getDrawerLogs().length === 0 ? (
-                <div className="text-zinc-500 italic py-10 text-center select-none">
-                  {drawerIsActive 
-                    ? "Menghubungkan ke logs stream... Menunggu baris baru."
-                    : "Tidak ada data riwayat log yang tersimpan."}
-                </div>
-              ) : (
-                getDrawerLogs().map((log, idx) => {
-                  const time = new Date(log.timestamp).toLocaleTimeString("id-ID");
-                  const style = getLogStyle(log.status);
-
-                  return (
-                    <div key={idx} className={`flex items-start gap-1.5 ${style} animate-fadeIn`}>
-                      <span className="text-zinc-600 shrink-0 select-none">[{time}]</span>
-                      <span className="font-extrabold shrink-0 select-none">
-                        {log.status === "error" ? "❌ [ERR]" : log.status === "success" ? "✅ [OK]" : log.status === "warn" ? "⚠️ [WRN]" : "ℹ️ [MSG]"}
-                      </span>
-                      <span className="break-all">{log.text}</span>
-                    </div>
-                  );
-                })
-              )}
-              
-              <div ref={drawerTerminalEndRef} />
-            </div>
-
-            {/* Terminal Footer */}
-            <div className="px-6 py-3 border-t border-zinc-850 bg-[#121216] flex items-center justify-between text-[10px] text-zinc-500 font-bold uppercase select-none">
-              <span>NIB Assistant Console v1.0</span>
-              {drawerIsActive && (
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold animate-pulse">
-                  <span className="material-symbols-outlined text-xs">radio_button_checked</span>
-                  STREAMING LIVE...
-                </span>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
+      <LogDrawer
+        isOpen={isDrawerOpen}
+        onClose={handleCloseDrawer}
+        isActive={drawerIsActive}
+        draftName={drawerDraftName}
+        draftOwner={drawerDraftOwner}
+        draftId={drawerDraftId || ""}
+        logs={getDrawerLogs()}
+        onPlayVideo={handlePlayVideo}
+      />
 
       {/* ── Floating Error Notification Toasts (Bottom Left) ── */}
       <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">

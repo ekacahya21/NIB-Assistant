@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSessionId } from "../../utils/session";
+import StatusBadge from "@/components/atoms/StatusBadge";
+import SearchBar from "@/components/molecules/SearchBar";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -324,18 +326,12 @@ export default function DashboardPage() {
           </div>
 
           {/* Search Bar Input */}
-          <div className="relative w-full">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">
-              search
-            </span>
-            <input
-              type="text"
-              placeholder="Cari nama pemilik, nama usaha, atau ID draft..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded border border-border-light bg-white text-xs font-semibold focus:border-primary-container focus:outline-none placeholder:text-outline"
-            />
-          </div>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Cari nama pemilik, nama usaha, atau ID draft..."
+            className="w-full"
+          />
 
           {/* Filter Tabs (Flat Selector Layout) */}
           <div className="flex overflow-x-auto pb-1 gap-1.5 scrollbar-thin">
@@ -401,19 +397,7 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Status badges mapping */}
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border shrink-0 ${
-                      draft.status === "Sukses"
-                        ? "bg-success/5 border-success/20 text-success"
-                        : draft.status === "Gagal"
-                          ? "bg-error/5 border-error/20 text-error"
-                          : draft.status === "Butuh OTP"
-                            ? "bg-warning/5 border-warning/20 text-warning"
-                            : draft.status === "Proses"
-                              ? "bg-primary-container/5 border-primary-container/20 text-primary-container"
-                              : "bg-tertiary/5 border-tertiary/20 text-tertiary"
-                    }`}>
-                      {draft.status}
-                    </span>
+                    <StatusBadge status={draft.status} />
                   </div>
 
                   {/* Middle row: Owner details */}
