@@ -19,6 +19,7 @@ export default function AutomationPage() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [statusText, setStatusText] = useState<string>("Sistem sedang bersiap...");
   const [logs, setLogs] = useState<LogMessage[]>([]);
+  const [stepDurations, setStepDurations] = useState<Record<number, number>>({});
   
   // Registration and OTP States
   const [akunOss, setAkunOss] = useState<string>("belum");
@@ -249,6 +250,7 @@ export default function AutomationPage() {
 
       eventSource.onopen = () => {
         addLog("Koneksi SSE Backend Lokal BERHASIL. Mendengarkan stream otomatisasi...", "success");
+        setStepDurations({});
         setElapsedSeconds(0);
         clearElapsedTimer();
         elapsedTimerRef.current = setInterval(() => {
@@ -260,6 +262,12 @@ export default function AutomationPage() {
         try {
           const payload = JSON.parse(event.data);
           if (payload && typeof payload.step === "number") {
+            if (typeof payload.duration === "number") {
+              setStepDurations((prev) => ({
+                ...prev,
+                [payload.step]: payload.duration,
+              }));
+            }
             if (payload.text) {
               let displayMsg = payload.text;
               const suffixIndex = displayMsg.indexOf(" (+");
@@ -577,6 +585,7 @@ export default function AutomationPage() {
       setCurrentStep(1);
       setStatusText("Memulai ulang otomatisasi...");
       setLogs([]);
+      setStepDurations({});
       setIsPromptingProduct(false);
       setIsPromptingParameter(false);
       setIsPromptingKbli2025(false);
@@ -1046,6 +1055,12 @@ export default function AutomationPage() {
                               }`}>
                                 {label}
                               </h4>
+
+                              {stepDurations[step] !== undefined && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#ECEEF0] text-on-surface-variant font-mono border border-border-light">
+                                  {stepDurations[step]}s
+                                </span>
+                              )}
                               
                               {isActionRequired && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-warning/15 text-warning uppercase tracking-wider animate-pulse border border-warning/20">

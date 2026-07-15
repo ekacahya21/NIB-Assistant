@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from '@zorilla/puppeteer-extra-plugin-stealth';
@@ -15,10 +15,11 @@ export interface AutomationEvent {
   status: 'info' | 'success' | 'warn' | 'error';
   text: string;
   data?: any;
+  duration?: number;
 }
 
 @Injectable()
-export class AutomationService implements OnModuleDestroy {
+export class AutomationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AutomationService.name);
   private readonly userConfirmations = new Subject<string>();
   private readonly activeOtps = new Map<string, string>();
@@ -74,6 +75,45 @@ export class AutomationService implements OnModuleDestroy {
     private readonly draftsService: DraftsService,
     private readonly documentsService: DocumentsService,
   ) {}
+
+  async onModuleInit() {
+    this.pruneOldRecordings();
+  }
+
+  private pruneOldRecordings() {
+    const recordingsDir = path.resolve('./recordings');
+    if (!fs.existsSync(recordingsDir)) {
+      return;
+    }
+
+    this.logger.log('Scanning ./recordings directory for cleanup...');
+    try {
+      const files = fs.readdirSync(recordingsDir);
+      const now = Date.now();
+      const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+      let prunedCount = 0;
+
+      for (const file of files) {
+        if (file.endsWith('.webm') && file.startsWith('draft_')) {
+          const filePath = path.join(recordingsDir, file);
+          const stats = fs.statSync(filePath);
+          const ageMs = now - stats.mtimeMs;
+
+          if (ageMs > maxAgeMs) {
+            fs.unlinkSync(filePath);
+            prunedCount++;
+          }
+        }
+      }
+      if (prunedCount > 0) {
+        this.logger.log(`Pruned ${prunedCount} video recording files older than 7 days.`);
+      } else {
+        this.logger.log('No video recording files older than 7 days found.');
+      }
+    } catch (err: any) {
+      this.logger.error(`Error pruning old recordings: ${err.message}`);
+    }
+  }
 
   async onModuleDestroy() {
     this.logger.log(
@@ -411,6 +451,7 @@ export class AutomationService implements OnModuleDestroy {
             step: prevStep,
             status: 'success',
             text: completionMsg,
+            duration: parseFloat(prevStepElapsed),
           });
           this.logger.log(`[Tx: ${draftId}] ${completionMsg}`);
 
