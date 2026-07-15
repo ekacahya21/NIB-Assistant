@@ -1851,6 +1851,8 @@ export class FilingFlowService {
         'info',
         'Membuka redirection URL pada tab utama...',
       );
+
+      // proses penapisan di website amdalnet
       await page.goto(redirectionUrl, {
         waitUntil: 'networkidle',
         timeout: 15000,
@@ -1888,7 +1890,13 @@ export class FilingFlowService {
           'Mendapatkan response check-license-status',
         );
 
-        await proyekScope.locator('.el-switch').first().click();
+        const elSwitch = proyekScope.locator('.el-switch').first();
+        const isAlreadyChecked = await elSwitch.evaluate(
+          (el: Element) => el.classList.contains('is-checked'),
+        ).catch(() => false);
+        if (!isAlreadyChecked) {
+          await elSwitch.click();
+        }
         await page.locator(`#sector-select-${kdIzin}`).click();
         const multiSectorOpt = page.getByText('Multi Sektor');
         if (await multiSectorOpt.isVisible()) {
