@@ -864,24 +864,4 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   getKdIzin(draftId: string): string | undefined {
     return this.filingFlowService.getKdIzin(draftId);
   }
-
-  private formatToDDMMYYYY(dateStr?: string): string {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return dateStr;
-  }
-
-  private formatToMMYYYY(dateStr?: string): string {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      return `${parts[1]}/${parts[0]}`;
-    } else if (parts.length === 2) {
-      return `${parts[1]}/${parts[0]}`;
-    }
-    return dateStr;
-  }
 }
