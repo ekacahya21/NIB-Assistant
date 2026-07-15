@@ -1044,7 +1044,7 @@ export default function AutomationPage() {
                           {/* Text labels */}
                           <div className="pt-1 flex-1">
                             <div className="flex items-center flex-wrap">
-                              <h4 className={`text-xs font-bold uppercase tracking-wide transition-colors duration-350 ${
+                              <h4 className={`text-xs font-bold tracking-wide transition-colors duration-350 ${
                                 isActionRequired 
                                   ? "text-warning font-extrabold" 
                                   : isCompleted 
