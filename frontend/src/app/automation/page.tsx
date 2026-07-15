@@ -1083,8 +1083,8 @@ export default function AutomationPage() {
               {/* Right Column: Browser & Logs */}
               <div className="space-y-6">
                 {/* Mock browser session */}
-                <div className="bg-white border border-border-light rounded-xl overflow-hidden">
-                  <div className="bg-[#ECEEF0] border-b border-border-light px-3 py-2 flex items-center gap-3">
+                <div className="bg-white border border-border-light rounded-xl">
+                  <div className="bg-[#ECEEF0] border-b border-border-light px-3 py-2 flex items-center gap-3 rounded-t-xl">
                     <div className="flex gap-1 shrink-0">
                       <div className="w-2.5 h-2.5 rounded-full bg-error" />
                       <div className="w-2.5 h-2.5 rounded-full bg-warning" />

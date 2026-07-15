@@ -1829,7 +1829,8 @@ export class AutomationService implements OnModuleDestroy {
         .first()
         .waitFor({ state: 'attached', timeout: 3000 });
     } catch (e) {
-      // Gracefully continue and let page.getByRole('option') retry dynamically
+      // Check if popup blocked it and dismiss it
+      await this.dismissPopupIfVisible(page, null as any, 0, 1000);
     }
 
     const optionElements = page.getByRole('option');
@@ -1853,7 +1854,8 @@ export class AutomationService implements OnModuleDestroy {
         await page.keyboard.press('Escape'); // Close dropdown menu if it remains open
         return true;
       } catch (e) {
-        // Fallback to sequential search if element became detached
+        // Check if popup blocked it and dismiss it
+        await this.dismissPopupIfVisible(page, null as any, 0, 1000);
       }
     }
 
@@ -1936,7 +1938,8 @@ export class AutomationService implements OnModuleDestroy {
             return true;
           }
         } catch (e2) {
-          // Both failed, retry in next loop iteration
+          // Both failed, check for blocking popup and dismiss it, then retry
+          await this.dismissPopupIfVisible(page, null as any, 0, 1000);
         }
       }
       await page.waitForTimeout(500);
@@ -2001,7 +2004,11 @@ export class AutomationService implements OnModuleDestroy {
     try {
       const mengertiBtn = page.getByRole('button', { name: /mengerti/i });
       await mengertiBtn.waitFor({ state: 'visible', timeout: timeoutMs });
-      this.logStep(subject, step, 'info', 'Menutup popup pemberitahuan...');
+      if (subject) {
+        this.logStep(subject, step, 'info', 'Menutup popup pemberitahuan...');
+      } else {
+        this.logger.log('Menutup popup pemberitahuan...');
+      }
       await mengertiBtn.click();
       await page.waitForTimeout(1000);
     } catch (err) {
@@ -2054,7 +2061,8 @@ export class AutomationService implements OnModuleDestroy {
     });
 
     await page.getByRole('button', { name: 'Tambah Posisi Lokasi' }).click();
-    await page.waitForTimeout(2000);
+    const daratRadio = page.getByRole('radio', { name: 'Darat' });
+    await daratRadio.waitFor({ state: 'visible', timeout: 10000 });
 
     // wait for matra api
     await page
@@ -2326,7 +2334,6 @@ export class AutomationService implements OnModuleDestroy {
       );
       await fileInputs.first().setInputFiles(npsPath);
       await upload1Promise;
-      await page.waitForTimeout(1000);
 
       const upload2Promise = page
         .waitForResponse(
@@ -2342,7 +2349,6 @@ export class AutomationService implements OnModuleDestroy {
       this.logStep(subject, 5, 'info', 'Mengunggah Foto Lokasi...');
       await fileInputs.last().setInputFiles(photoPath);
       await upload2Promise;
-      await page.waitForTimeout(1000);
 
       // Wait for any loading/progressbar indicator to detach
       this.logStep(
@@ -2360,7 +2366,6 @@ export class AutomationService implements OnModuleDestroy {
       await page
         .waitForLoadState('networkidle', { timeout: 10000 })
         .catch(() => null);
-      await page.waitForTimeout(1500);
 
       this.logStep(
         subject,
@@ -2382,7 +2387,7 @@ export class AutomationService implements OnModuleDestroy {
     const tidakRadio = page.getByRole('radio', { name: 'Tidak' });
     if (await tidakRadio.isVisible()) {
       await tidakRadio.check();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(200);
     }
 
     // Save Position Location
@@ -2393,7 +2398,7 @@ export class AutomationService implements OnModuleDestroy {
       'Mengklik tombol "Simpan Posisi Lokasi" untuk mendaftarkan lokasi...',
     );
     await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
-    await page.waitForTimeout(3000);
+    await page.locator('.lokasi-usaha-card').first().waitFor({ state: 'visible', timeout: 15000 });
 
     // Cleanup temp files
     try {
@@ -2458,7 +2463,10 @@ export class AutomationService implements OnModuleDestroy {
     this.logStep(subject, 6, 'info', 'Memilih KBLI...');
     await page.getByRole('button', { name: 'Selanjutnya' }).click();
     await getListKbliPromise;
-    await page.waitForTimeout(1000);
+    await page
+      .getByPlaceholder('Pilih jenis kegiatan usaha')
+      .locator('input')
+      .waitFor({ state: 'visible', timeout: 10000 });
 
     // select jenis kegiatan usaha
     await page
@@ -2497,11 +2505,18 @@ export class AutomationService implements OnModuleDestroy {
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.dismissPopupIfVisible(page, subject, 6);
-    await page.waitForTimeout(1000);
-    const listKbliResponse = await getListKbli2025Promise;
 
     const kbli2025Select = page.getByTestId('kbli-select').first();
-    if (await kbli2025Select.isVisible()) {
+    let isKbli2025Visible = false;
+    try {
+      await kbli2025Select.waitFor({ state: 'visible', timeout: 1500 });
+      isKbli2025Visible = true;
+    } catch (e) {
+      // KBLI 2025 select not visible
+    }
+
+    if (isKbli2025Visible) {
+      const listKbliResponse = await getListKbli2025Promise;
       this.logStep(
         subject,
         6,
@@ -2559,40 +2574,37 @@ export class AutomationService implements OnModuleDestroy {
         // Select KBLI 2025 in portal
         const selectContainer = kbli2025Select.locator('input');
         await selectContainer.click();
-        await page.waitForTimeout(1000);
         await selectContainer.fill(chosenKbli);
-        await page.waitForTimeout(1000);
 
         const optionLocator = page
           .locator('.ant-select-item-option-content')
           .filter({ hasText: chosenKbli })
           .first();
+        await optionLocator.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
         if (await optionLocator.isVisible()) {
           await optionLocator.click();
         } else {
           await page.getByText(chosenKbli).first().click();
         }
-        await page.waitForTimeout(1000);
       }
     }
 
     this.logStep(subject, 6, 'info', 'Memilih ruang lingkup kegiatan...');
-    await page
-      .getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' })
-      .click();
+    const ruangLingkupCombobox = page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' });
+    await ruangLingkupCombobox.waitFor({ state: 'visible', timeout: 10000 });
+    await ruangLingkupCombobox.click();
 
     // check if 'Seluruh' ruang lingkup is exists, then click it
     const seluruhRuangLingkup = page.getByText('Seluruh');
     if (await seluruhRuangLingkup.isVisible()) {
       await seluruhRuangLingkup.click();
-      await page.waitForTimeout(1000);
     }
 
     // select bidang usaha
     const bidangUsaha = page.getByTestId('radio-bidang-usaha');
+    await bidangUsaha.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
     if (await bidangUsaha.isVisible()) {
       await bidangUsaha.getByRole('radio').first().click();
-      await page.waitForTimeout(1000);
     }
 
     // click tombol tambah bidang usaha
@@ -2608,11 +2620,10 @@ export class AutomationService implements OnModuleDestroy {
       )
       .catch(() => null);
     await prosesBidangUsahaPromise;
-    await page.waitForTimeout(1000);
-
-    await page
-      .getByRole('textbox', { name: 'Contoh : Restoran' })
-      .fill(draft.namaUsaha);
+    
+    const inputRestoran = page.getByRole('textbox', { name: 'Contoh : Restoran' });
+    await inputRestoran.waitFor({ state: 'visible', timeout: 10000 });
+    await inputRestoran.fill(draft.namaUsaha);
     await page.getByRole('button', { name: 'Selanjutnya' }).click();
 
     // wait for prosesProyek
@@ -2624,11 +2635,12 @@ export class AutomationService implements OnModuleDestroy {
       )
       .catch(() => null);
     await prosesProyekPromise;
-    await page.waitForTimeout(1000);
 
     // check for pernyataan mandiri
     this.logStep(subject, 6, 'info', 'Menyetujui pernyataan mandiri...');
-    await page.getByText('Saya menyatakan pemberian ini').click();
+    const pernyataanMandiriCheckbox = page.getByText('Saya menyatakan pemberian ini');
+    await pernyataanMandiriCheckbox.waitFor({ state: 'visible', timeout: 10000 });
+    await pernyataanMandiriCheckbox.click();
 
     // click tombol proses
     await page.getByRole('button', { name: 'Proses' }).click();
@@ -2651,7 +2663,6 @@ export class AutomationService implements OnModuleDestroy {
       )
       .catch(() => null);
     await submitPernyataanMandiriPromise;
-    await page.waitForTimeout(1000);
 
     // wait for detailPerizinan
     const detailPerizinanPromise = page
@@ -2663,10 +2674,11 @@ export class AutomationService implements OnModuleDestroy {
       )
       .catch(() => null);
     await detailPerizinanPromise;
-    await page.waitForTimeout(1000);
 
-    // click lanjut to navigate to 'Perizinan Berusaha'
-    await page.getByRole('tab', { name: 'Perizinan Berusaha' }).click();
+    // wait for Perizinan Berusaha tab to be visible before clicking Lanjut
+    const perizinanTab = page.getByRole('tab', { name: 'Perizinan Berusaha' });
+    await perizinanTab.waitFor({ state: 'visible', timeout: 15000 });
+    await perizinanTab.click();
     await page.getByRole('button', { name: 'Lanjut' }).click();
 
     // Apakah kegiatan usaha ini sudah berjalan?
