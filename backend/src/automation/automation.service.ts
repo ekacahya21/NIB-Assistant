@@ -548,6 +548,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // ALWAYS clear cancellation flag at the start of a new run to prevent poisoning from previous disconnected streams
+    this.cancelledDrafts.delete(draftId);
+
     this.draftMetadata.set(draftId, {
       namaUsaha: draft.namaUsaha || 'Draf Usaha Baru',
       namaPemilik: draft.namaPemilik || 'Tanpa Nama',

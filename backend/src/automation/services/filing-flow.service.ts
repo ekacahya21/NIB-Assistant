@@ -654,7 +654,7 @@ export class FilingFlowService {
     );
     await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
     await page.locator('.lokasi-usaha-card').first().waitFor({ state: 'visible', timeout: 15000 });
-
+    
     // Cleanup temp files
     try {
       if (createdNps && fs.existsSync(npsPath)) {
@@ -666,6 +666,8 @@ export class FilingFlowService {
     } catch (cleanupErr) {
       this.logger.warn('Gagal menghapus file PDF temporer:', cleanupErr);
     }
+
+    // TODO mark this state to database, so that we can continue from here if further process is failed / interrupted
 
     // select newly created location
     await page
@@ -1814,101 +1816,134 @@ export class FilingFlowService {
       )
       .catch(() => null);
 
+    // TODO move to new step from this state, step name: Proses Penapisan Izin Lingkungan
     context.logStep(6, "info", 'Klik tab Persyaratan Dasar..');
     await page.getByRole('tab', { name: 'Persyaratan Dasar' }).click();
 
     const btnProsesPenapisan = page.getByRole('button', {
       name: 'Proses Penapisan',
     });
+
     if (await btnProsesPenapisan.isVisible()) {
-      context.logStep(6, "info", 'Klik tombol Proses Penapisan..');
-      const pageAmdalnet = page.waitForEvent('popup');
+      context.logStep(6, "info", 'Klik tombol Proses Penapisan (memaksa di tab yang sama)..');
+      
+      // Force any new tab action to happen in the current tab to keep the video recording continuous
+      await page.evaluate(() => {
+        window.open = function(url) {
+          window.location.href = url ? url.toString() : '';
+          return window;
+        };
+        document.addEventListener('click', function(e) {
+          const target = e.target as HTMLElement;
+          const a = target.closest('a');
+          if (a && a.getAttribute('target') === '_blank') {
+            a.removeAttribute('target');
+          }
+          const form = target.closest('form');
+          if (form && form.getAttribute('target') === '_blank') {
+            form.removeAttribute('target');
+          }
+        }, { capture: true });
+      });
+
+      // Capture the kdIzin from the very first navigation request before the SPA rewrites the URL
+      let interceptedIdIzin = '';
+      const requestListener = (request: any) => {
+        const url = request.url();
+        if (request.isNavigationRequest() && url.includes('id_izin=')) {
+          const match = url.match(/[?&]id_izin=([^&]+)/);
+          if (match && !interceptedIdIzin) {
+            interceptedIdIzin = match[1];
+          }
+        }
+      };
+      page.on('request', requestListener);
+
       await btnProsesPenapisan.click();
       await page.waitForTimeout(1500);
-      const page1 = await pageAmdalnet;
 
-      // Wait for the popup URL to load and redirect away from about:blank
-      await page1
-        .waitForURL((url: URL) => url.href !== 'about:blank', {
-          timeout: 10000,
-        })
-        .catch(() => null);
-      const redirectionUrl = page1.url();
-      context.logStep(6, "info", `Redirection URL: ${redirectionUrl}`);
-      this.redirectionUrls.set(draftId, redirectionUrl);
-
-      const kdIzinMatch = redirectionUrl.match(/[?&]kd_izin=([^&]+)/);
-      const kdIzin = kdIzinMatch ? kdIzinMatch[1] : undefined;
-      if (kdIzin) {
-        context.logStep(6, "info", `Parsed kd_izin: ${kdIzin}`);
-        this.kdIzins.set(draftId, kdIzin);
-      }
-
-      // Close popup tab and navigate the main page instead
-      await page1.close().catch(() => null);
       context.logStep(
         6,
         'info',
-        'Membuka redirection URL pada tab utama...',
+        'Menunggu halaman penapisan izin lingkungan dimuat...',
       );
 
-      // proses penapisan di website amdalnet
-      await page.goto(redirectionUrl, {
-        waitUntil: 'networkidle',
-        timeout: 15000,
-      });
-
-      // wait for response list-proyek
+      // wait for response list-proyek on the main tab
       await page
         .waitForResponse(
-          (response: any) =>
-            response.url().includes('list-proyek') && response.status() === 200,
+          (response: any) => {
+            if (response.url().includes('list-proyek')) {
+              context.logStep(6, "info", `Response URL: ${response.url()} | Status: ${response.status()}`);
+              return response.status() === 200
+            }
+            return false;
+          },
           { timeout: 15000 },
         )
         .catch(() => null);
+      
+      // Stop listening to requests
+      page.off('request', requestListener);
       context.logStep(6, "info", 'Mendapatkan response list-proyek');
 
-      const proyekScope = page.locator(`#sub-project-card-${kdIzin}`);
+      // Extract kdIzin from the intercepted original navigation request.
+      const idIzinMatch = page.url().match(/[?&]id_izin=([^&]+)/);
+      const idIzin = interceptedIdIzin || (idIzinMatch ? idIzinMatch[1] : draft.idIzin || '');
+      context.logStep(6, "info", `ID Izin: ${idIzin}`);
+
+      const proyekScope = page.locator(`#sub-project-card-${idIzin}`);
+      await proyekScope.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
+        context.logStep(6, "error", 'Proyek tidak ditemukan..');
+        throw new Error('Proyek tidak ditemukan..');
+      });
       const proyekCheck = proyekScope.locator('.el-checkbox').first();
-      if (await proyekCheck.isVisible()) {
-        context.logStep(6, "info", 'Mencentang checkbox proyek...');
-        await proyekCheck.click();
-        await page.waitForTimeout(1000);
+      context.logStep(6, "info", 'Mencentang checkbox proyek...');
+      await proyekCheck.click();
+      await page.waitForTimeout(1000);
 
-        // wait for response check-license-status
-        await page
-          .waitForResponse(
-            (response: any) =>
-              response.url().includes('check-license-status') &&
-              response.status() === 200,
-            { timeout: 15000 },
-          )
-          .catch(() => null);
-        context.logStep(
-          6,
-          'info',
-          'Mendapatkan response check-license-status',
-        );
+      // wait for response check-license-status
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes('check-license-status') &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+      context.logStep(
+        6,
+        'info',
+        'Mendapatkan response check-license-status',
+      );
 
-        const elSwitch = proyekScope.locator('.el-switch').first();
-        const isAlreadyChecked = await elSwitch.evaluate(
-          (el: Element) => el.classList.contains('is-checked'),
-        ).catch(() => false);
-        if (!isAlreadyChecked) {
-          await elSwitch.click();
-        }
-        await page.locator(`#sector-select-${kdIzin}`).click();
-        const multiSectorOpt = page.getByText('Multi Sektor');
-        if (await multiSectorOpt.isVisible()) {
-          await multiSectorOpt.click();
+      const elSwitch = proyekScope.locator('.el-switch').first();
+      const isAlreadyChecked = await elSwitch.evaluate(
+        (el: Element) => el.classList.contains('is-checked'),
+      ).catch(() => false);
+      
+      if (!isAlreadyChecked) {
+        context.logStep(6, 'info', 'Mengaktifkan switch pemenuhan persyaratan...');
+        await elSwitch.click();
+      } else {
+        context.logStep(6, 'info', 'Switch pemenuhan persyaratan sudah aktif.');
+      }
+
+      context.logStep(6, 'info', 'Membuka pilihan sektor...');
+      await page.locator(`#sector-select-${idIzin}`).click();
+      
+      const multiSectorOpt = page.getByText('Multi Sektor');
+      if (await multiSectorOpt.isVisible()) {
+        context.logStep(6, 'info', 'Memilih opsi Multi Sektor...');
+        await multiSectorOpt.click();
+      } else {
+        const targetKbli = draft.kbliCode || '';
+        const targetItem = page.getByRole('listitem').filter({ hasText: targetKbli }).first();
+        if (targetKbli && await targetItem.isVisible()) {
+          context.logStep(6, 'info', `Memilih sektor sesuai KBLI ${targetKbli}...`);
+          await targetItem.click();
         } else {
-          const targetKbli = draft.kbliCode || '';
-          const targetItem = page.getByRole('listitem').filter({ hasText: targetKbli }).first();
-          if (targetKbli && await targetItem.isVisible()) {
-            await targetItem.click();
-          } else {
-            await page.getByRole('listitem').first().click();
-          }
+          context.logStep(6, 'info', 'Memilih sektor pertama yang tersedia...');
+          await page.getByRole('listitem').first().click();
         }
       }
     }

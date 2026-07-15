@@ -1227,6 +1227,7 @@ export default function AutomationPage() {
                               />
                               <button
                                 type="button"
+                                tabIndex={-1}
                                 onClick={() => setShowNewPassword(!showNewPassword)}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
                               >
@@ -1251,6 +1252,7 @@ export default function AutomationPage() {
                                 />
                                 <button
                                   type="button"
+                                  tabIndex={-1}
                                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                   className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
                                 >
