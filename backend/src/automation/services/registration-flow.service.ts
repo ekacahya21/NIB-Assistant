@@ -122,9 +122,9 @@ export class RegistrationFlowService {
       context.logStep(
         2,
         'error',
-        'Pendaftaran GAGAL: Batas waktu pengisian OTP telah habis (90 detik). Silakan coba lagi.',
+        `Pendaftaran GAGAL: OTP tidak valid atau batas waktu habis. Diterima: '${otpCode}', tipe: ${typeof otpCode}, panjang: ${otpCode?.length}. Silakan coba lagi.`,
       );
-      throw new Error('Batas waktu pengisian OTP telah habis.');
+      throw new Error('Batas waktu pengisian OTP telah habis atau OTP tidak valid.');
     }
 
     context.logStep(

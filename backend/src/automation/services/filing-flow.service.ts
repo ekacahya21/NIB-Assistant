@@ -103,9 +103,9 @@ export class FilingFlowService {
       context.logStep(
         4,
         'error',
-        'Batas waktu pengisian kata sandi telah habis.',
+        `Batas waktu pengisian kata sandi telah habis atau kata sandi tidak valid. Diterima: '${finalPassword}', tipe: ${typeof finalPassword}. Silakan coba lagi.`,
       );
-      throw new Error('Batas waktu pengisian kata sandi telah habis.');
+      throw new Error('Batas waktu pengisian kata sandi telah habis atau tidak valid.');
     }
 
     context.logStep(
@@ -1902,7 +1902,13 @@ export class FilingFlowService {
         if (await multiSectorOpt.isVisible()) {
           await multiSectorOpt.click();
         } else {
-          await page.getByRole('listitem').first().click();
+          const targetKbli = draft.kbliCode || '';
+          const targetItem = page.getByRole('listitem').filter({ hasText: targetKbli }).first();
+          if (targetKbli && await targetItem.isVisible()) {
+            await targetItem.click();
+          } else {
+            await page.getByRole('listitem').first().click();
+          }
         }
       }
     }

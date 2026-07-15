@@ -232,7 +232,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           `Client disconnected from SSE stream for draft: ${draftId}`,
         );
         subscription.unsubscribe();
-        this.cancelStream(draftId);
+        this.cancelStream(draftId, subject);
       };
     });
   }
@@ -241,7 +241,13 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     return this.adminEvents.asObservable();
   }
 
-  cancelStream(draftId: string) {
+  cancelStream(draftId: string, subject?: Subject<AutomationEvent>) {
+    // If a subject is provided, only cancel if it is still the active stream
+    if (subject && this.activeSubjects.get(draftId) !== subject) {
+      this.logger.log(`Ignoring cancellation request for old/finished stream of draft ID: ${draftId}`);
+      return;
+    }
+
     this.logger.log(`Received cancellation request for draft ID: ${draftId}`);
     this.cancelledDrafts.add(draftId);
     this.userConfirmations.next(draftId);
@@ -277,9 +283,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Complete the subject
-    const subject = this.activeSubjects.get(draftId);
-    if (subject) {
-      subject.complete();
+    const activeSubject = this.activeSubjects.get(draftId);
+    if (activeSubject) {
+      activeSubject.complete();
       this.activeSubjects.delete(draftId);
     }
   }
