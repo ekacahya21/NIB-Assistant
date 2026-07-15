@@ -198,6 +198,7 @@ export class AutomationService implements OnModuleDestroy {
   cancelStream(draftId: string) {
     this.logger.log(`Received cancellation request for draft ID: ${draftId}`);
     this.cancelledDrafts.add(draftId);
+    this.userConfirmations.next(draftId);
 
     // 1. If in queue, cancel it and reject the promise
     const queuedIndex = this.queue.findIndex(
@@ -866,17 +867,7 @@ export class AutomationService implements OnModuleDestroy {
     );
 
     // 6. Asynchronous Wait for OTP submitted from Frontend!
-    let otpCode = '';
-    const startTime = Date.now();
-    while (Date.now() - startTime < 120000) {
-      // Timeout after 120 seconds
-      if (this.activeOtps.has(draftId)) {
-        otpCode = this.activeOtps.get(draftId)!;
-        this.activeOtps.delete(draftId);
-        break;
-      }
-      await page.waitForTimeout(500);
-    }
+    const otpCode = await this.waitForUserInput<string>(draftId, this.activeOtps).catch(() => '');
 
     if (!otpCode || otpCode.length !== 6) {
       this.logStep(
@@ -952,16 +943,9 @@ export class AutomationService implements OnModuleDestroy {
         'warn',
         'PENTING: Silakan masukkan kata sandi baru Anda di halaman aplikasi.',
       );
-      const startTimePass = Date.now();
-      while (Date.now() - startTimePass < 120000) {
-        // Timeout after 120 seconds
-        if (this.activePasswords.has(draftId)) {
-          passwordCode = this.activePasswords.get(draftId)!;
-          this.cachedPasswords.set(draftId, passwordCode);
-          this.activePasswords.delete(draftId);
-          break;
-        }
-        await page.waitForTimeout(500);
+      passwordCode = await this.waitForUserInput<string>(draftId, this.activePasswords).catch(() => '');
+      if (passwordCode) {
+        this.cachedPasswords.set(draftId, passwordCode);
       }
     }
 
@@ -1448,16 +1432,9 @@ export class AutomationService implements OnModuleDestroy {
           'warn',
           'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.',
         );
-        const startTimePass = Date.now();
-        while (Date.now() - startTimePass < 120000) {
-          // Timeout after 120 seconds
-          if (this.activePasswords.has(draftId)) {
-            finalPassword = this.activePasswords.get(draftId)!;
-            this.cachedPasswords.set(draftId, finalPassword);
-            this.activePasswords.delete(draftId);
-            break;
-          }
-          await page.waitForTimeout(500);
+        finalPassword = await this.waitForUserInput<string>(draftId, this.activePasswords).catch(() => '');
+        if (finalPassword) {
+          this.cachedPasswords.set(draftId, finalPassword);
         }
       }
     }
@@ -2553,16 +2530,7 @@ export class AutomationService implements OnModuleDestroy {
         });
 
         // Wait up to 120 seconds for user response
-        let chosenKbli: string | null = null;
-        const startTime = Date.now();
-        while (Date.now() - startTime < 120000) {
-          if (this.activeParameterInputs.has(draftId)) {
-            chosenKbli = this.activeParameterInputs.get(draftId)!;
-            this.activeParameterInputs.delete(draftId);
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
+        const chosenKbli = await this.waitForUserInput<string>(draftId, this.activeParameterInputs).catch(() => '');
 
         if (!chosenKbli) {
           this.logStep(
@@ -3191,16 +3159,7 @@ export class AutomationService implements OnModuleDestroy {
       });
 
       // Wait up to 120 seconds for user response
-      let userInput: any = null;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 120000) {
-        if (this.activeProductInputs.has(draftId)) {
-          userInput = this.activeProductInputs.get(draftId);
-          this.activeProductInputs.delete(draftId);
-          break;
-        }
-        await page.waitForTimeout(500);
-      }
+      const userInput = await this.waitForUserInput<any>(draftId, this.activeProductInputs).catch(() => null);
 
       if (!userInput) {
         this.logStep(
@@ -3539,16 +3498,7 @@ export class AutomationService implements OnModuleDestroy {
       });
 
       // Wait up to 120s for user parameter selection
-      let selectedParam: string = '';
-      const startTime = Date.now();
-      while (Date.now() - startTime < 120000) {
-        if (this.activeParameterInputs.has(draftId)) {
-          selectedParam = this.activeParameterInputs.get(draftId)!;
-          this.activeParameterInputs.delete(draftId);
-          break;
-        }
-        await page.waitForTimeout(500);
-      }
+      const selectedParam = await this.waitForUserInput<string>(draftId, this.activeParameterInputs).catch(() => '');
 
       if (!selectedParam) {
         this.logStep(
@@ -3712,6 +3662,48 @@ export class AutomationService implements OnModuleDestroy {
         }
       }
     }
+  }
+
+  private async waitForUserInput<T>(
+    draftId: string,
+    inputMap: Map<string, T>,
+    timeoutMs = 120000,
+  ): Promise<T> {
+    if (inputMap.has(draftId)) {
+      const val = inputMap.get(draftId)!;
+      inputMap.delete(draftId);
+      return val;
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      let isResolved = false;
+
+      const subscription = this.userConfirmations.subscribe((id) => {
+        if (this.cancelledDrafts.has(draftId)) {
+          isResolved = true;
+          subscription.unsubscribe();
+          clearTimeout(timer);
+          reject(new Error('Sesi dibatalkan oleh pengguna.'));
+          return;
+        }
+
+        if (id === draftId && inputMap.has(draftId)) {
+          const val = inputMap.get(draftId)!;
+          inputMap.delete(draftId);
+          isResolved = true;
+          subscription.unsubscribe();
+          clearTimeout(timer);
+          resolve(val);
+        }
+      });
+
+      const timer = setTimeout(() => {
+        if (!isResolved) {
+          subscription.unsubscribe();
+          reject(new Error('Batas waktu input habis.'));
+        }
+      }, timeoutMs);
+    });
   }
 
   getRedirectionUrl(draftId: string): string | undefined {
