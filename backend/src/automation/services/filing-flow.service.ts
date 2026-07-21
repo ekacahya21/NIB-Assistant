@@ -78,168 +78,202 @@ export class FilingFlowService {
       throw new Error('Halaman login tidak dapat dimuat.');
     }
 
-    // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
-    let finalPassword = passwordCode;
-    if (!finalPassword) {
-      if (this.cachedPasswords.has(txId)) {
-        finalPassword = this.cachedPasswords.get(txId)!;
-      } else {
-        context.logStep(
-          4,
-          'warn',
-          'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.',
-        );
-        finalPassword = await context.waitForPassword().catch((err) => {
-          this.logger.error(`waitForPassword rejected with error:`, err);
-          return '';
-        });
-        if (finalPassword) {
-          this.cachedPasswords.set(txId, finalPassword);
+    let loginSuccess = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!loginSuccess && attempts < maxAttempts) {
+      attempts++;
+      
+      // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
+      let finalPassword = passwordCode;
+      if (!finalPassword) {
+        if (this.cachedPasswords.has(txId)) {
+          finalPassword = this.cachedPasswords.get(txId)!;
+        } else {
+          context.logStep(
+            4,
+            'warn',
+            'PENTING: Silakan masukkan kata sandi akun OSS Anda di halaman aplikasi.',
+          );
+          finalPassword = await context.waitForPassword().catch((err) => {
+            this.logger.error(`waitForPassword rejected with error:`, err);
+            return '';
+          });
+          if (finalPassword) {
+            this.cachedPasswords.set(txId, finalPassword);
+          }
         }
       }
-    }
 
-    if (!finalPassword) {
-      context.logStep(
-        4,
-        'error',
-        `Batas waktu pengisian kata sandi telah habis atau kata sandi tidak valid. Diterima: '${finalPassword}', tipe: ${typeof finalPassword}. Silakan coba lagi.`,
-      );
-      throw new Error('Batas waktu pengisian kata sandi telah habis atau tidak valid.');
-    }
-
-    context.logStep(
-      4,
-      'info',
-      `Mengisi Username dengan Email: ${draft.email}...`,
-    );
-    await page.fill(usernameSelector, draft.email);
-    await page.waitForTimeout(500);
-
-    context.logStep(4, 'info', 'Mengisi kata sandi...');
-    await page.fill(passwordSelector, finalPassword);
-    await page.waitForTimeout(1000);
-
-    // Check if captcha is visible on the page
-    const isCaptchaVisible = await page
-      .locator(
-        'input[placeholder*="Captcha"], input[name*="captcha"], #captcha',
-      )
-      .isVisible()
-      .catch(() => false);
-    if (isCaptchaVisible) {
-      context.logStep(
-        4,
-        'warn',
-        'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.',
-      );
-      // Wait for the user to complete login manually
-      let isLoginConfirmed = false;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 120000) {
-        // Timeout after 120 seconds
-        const currentUrl = page.url();
-        if (
-          currentUrl &&
-          !currentUrl.includes('/login') &&
-          !currentUrl.includes('ui-login.oss.go.id')
-        ) {
-          isLoginConfirmed = true;
-          break;
-        }
-        // Accessing OTP/Confirmation using helper callbacks or stream map
-        const hasConfirmation = await context.waitForOtp().then(() => true).catch(() => false);
-        if (hasConfirmation) {
-          isLoginConfirmed = true;
-          break;
-        }
-        await page.waitForTimeout(1000);
-      }
-      if (!isLoginConfirmed) {
+      if (!finalPassword) {
         context.logStep(
           4,
           'error',
-          'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).',
+          `Batas waktu pengisian kata sandi telah habis atau kata sandi tidak valid. Diterima: '${finalPassword}', tipe: ${typeof finalPassword}. Silakan coba lagi.`,
         );
-        throw new Error('Batas waktu login habis.');
+        throw new Error('Batas waktu pengisian kata sandi telah habis atau tidak valid.');
       }
-    } else {
-      context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
-      const loginButtonSelector =
-        'button[type="button"], button[type="submit"]';
-      await page.click(loginButtonSelector);
 
-      // Wait for redirection
       context.logStep(
         4,
         'info',
-        'Menunggu pengalihan (redirection) setelah masuk...',
+        `Mengisi Username dengan Email: ${draft.email}...`,
       );
+      await page.fill(usernameSelector, draft.email);
+      await page.waitForTimeout(500);
+
+      context.logStep(4, 'info', 'Mengisi kata sandi...');
+      await page.fill(passwordSelector, finalPassword);
+      await page.waitForTimeout(1000);
+
+      // Check if captcha is visible on the page
+      const isCaptchaVisible = await page
+        .locator(
+          'input[placeholder*="Captcha"], input[name*="captcha"], #captcha',
+        )
+        .isVisible()
+        .catch(() => false);
+      
       let isRedirected = false;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 30000) {
-        const currentUrl = page.url();
-        if (
-          currentUrl &&
-          !currentUrl.includes('/login') &&
-          !currentUrl.includes('ui-login.oss.go.id') &&
-          !currentUrl.includes('ui-login-stg.oss.go.id')
-        ) {
-          isRedirected = true;
-          break;
-        }
 
-        // Quick check for visible validation errors to abort immediately
-        const errorLocator = page
-          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-          .first();
-        const isErrorVisible = await errorLocator
-          .isVisible()
-          .catch(() => false);
-        if (isErrorVisible) {
-          const errorMsg = await errorLocator
-            .textContent()
-            .catch(() => 'Username atau Kata Sandi salah.');
-          context.logStep(
-            4,
-            'error',
-            `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
-          );
-          throw new Error(`Login gagal: ${errorMsg.trim()}`);
-        }
-
-        await page.waitForTimeout(1000);
-      }
-
-      if (!isRedirected) {
-        // Fallback post-loop check for validation error messages
-        const errorLocator = page
-          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-          .first();
-        const isLoginErrorVisible = await errorLocator
-          .isVisible()
-          .catch(() => false);
-        if (isLoginErrorVisible) {
-          const errorMsg = await errorLocator
-            .textContent()
-            .catch(() => 'Username atau Kata Sandi salah.');
-          context.logStep(
-            4,
-            'error',
-            `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
-          );
-          throw new Error(`Login gagal: ${errorMsg.trim()}`);
-        }
-
+      if (isCaptchaVisible) {
         context.logStep(
           4,
-          'error',
-          'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).',
+          'warn',
+          'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.',
         );
-        throw new Error(
-          'Login ditolak atau butuh penyelesaian CAPTCHA manual.',
+        // Wait for the user to complete login manually
+        let isLoginConfirmed = false;
+        const startTime = Date.now();
+        while (Date.now() - startTime < 120000) {
+          // Timeout after 120 seconds
+          const currentUrl = page.url();
+          if (
+            currentUrl &&
+            !currentUrl.includes('/login') &&
+            !currentUrl.includes('ui-login.oss.go.id')
+          ) {
+            isLoginConfirmed = true;
+            isRedirected = true;
+            break;
+          }
+          // Accessing OTP/Confirmation using helper callbacks or stream map
+          const hasConfirmation = await context.waitForOtp().then(() => true).catch(() => false);
+          if (hasConfirmation) {
+            isLoginConfirmed = true;
+            isRedirected = true;
+            break;
+          }
+          await page.waitForTimeout(1000);
+        }
+        if (!isLoginConfirmed) {
+          context.logStep(
+            4,
+            'error',
+            'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).',
+          );
+          throw new Error('Batas waktu login habis.');
+        }
+      } else {
+        context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
+        const loginButtonSelector =
+          'button[type="button"], button[type="submit"]';
+        await page.click(loginButtonSelector);
+
+        // Wait for redirection
+        context.logStep(
+          4,
+          'info',
+          'Menunggu pengalihan (redirection) setelah masuk...',
         );
+        const startTime = Date.now();
+        let localErrorMsg = '';
+
+        while (Date.now() - startTime < 30000) {
+          const currentUrl = page.url();
+          if (
+            currentUrl &&
+            !currentUrl.includes('/login') &&
+            !currentUrl.includes('ui-login.oss.go.id') &&
+            !currentUrl.includes('ui-login-stg.oss.go.id')
+          ) {
+            isRedirected = true;
+            break;
+          }
+
+          // Quick check for visible validation errors to abort immediately
+          const errorLocator = page
+            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+            .first();
+          const isErrorVisible = await errorLocator
+            .isVisible()
+            .catch(() => false);
+          if (isErrorVisible) {
+            localErrorMsg = await errorLocator
+              .textContent()
+              .catch(() => 'Username atau Kata Sandi salah.');
+            break;
+          }
+
+          await page.waitForTimeout(1000);
+        }
+
+        if (localErrorMsg) {
+          context.logStep(
+            4,
+            'error',
+            `Login GAGAL di portal OSS: ${localErrorMsg.trim()}`,
+          );
+          passwordCode = '';
+          this.cachedPasswords.delete(txId);
+          context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
+          await page.waitForTimeout(2000);
+          continue; // Restart the retry loop
+        }
+
+        if (!isRedirected) {
+          // Fallback post-loop check for validation error messages
+          const errorLocator = page
+            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+            .first();
+          const isLoginErrorVisible = await errorLocator
+            .isVisible()
+            .catch(() => false);
+          if (isLoginErrorVisible) {
+            const errorMsg = await errorLocator
+              .textContent()
+              .catch(() => 'Username atau Kata Sandi salah.');
+            context.logStep(
+              4,
+              'error',
+              `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
+            );
+            passwordCode = '';
+            this.cachedPasswords.delete(txId);
+            context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
+            await page.waitForTimeout(2000);
+            continue; // Restart the retry loop
+          }
+
+          context.logStep(
+            4,
+            'error',
+            'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).',
+          );
+          throw new Error(
+            'Login ditolak atau butuh penyelesaian CAPTCHA manual.',
+          );
+        }
       }
+
+      if (isRedirected) {
+        loginSuccess = true;
+      }
+    }
+
+    if (!loginSuccess) {
+      throw new Error('Gagal login setelah batas maksimal percobaan. Silakan periksa kembali akun Anda.');
     }
 
     context.logStep(
