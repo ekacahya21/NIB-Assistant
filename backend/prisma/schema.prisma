@@ -54,6 +54,8 @@ model Draft {
   cangkupanProduk         String?  @map("cangkupan_produk")
   kapasitas               String?  @map("kapasitas")
   satuan                  String?  @map("satuan")
+  ossPassword             String?  @map("oss_password")
+  registrationCompleted   Boolean  @default(false) @map("registration_completed")
   updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("drafts")

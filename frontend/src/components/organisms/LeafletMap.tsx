@@ -38,6 +38,11 @@ export default function LeafletMap({
     document.head.appendChild(script);
   }, []);
 
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   // Initialize Leaflet Map
   useEffect(() => {
     if (!leafletLoaded || !containerRef.current) return;
@@ -45,8 +50,8 @@ export default function LeafletMap({
     const L = (window as any).L;
     if (!L) return;
 
-    const lat = parseFloat(latitude) || -6.2088;
-    const lng = parseFloat(longitude) || 106.8456;
+    const initialLat = parseFloat(latitude) || -6.2088;
+    const initialLng = parseFloat(longitude) || 106.8456;
 
     const customIcon = L.divIcon({
       className: "custom-leaflet-pin",
@@ -55,59 +60,59 @@ export default function LeafletMap({
       iconAnchor: [14, 28],
     });
 
-    if (!mapRef.current) {
-      const map = L.map(containerRef.current, {
-        zoomControl: true,
-        scrollWheelZoom: !isMobile, // Disable on mobile to prevent scrolling
-      }).setView([lat, lng], 14);
+    const map = L.map(containerRef.current, {
+      zoomControl: true,
+      scrollWheelZoom: !isMobile,
+    }).setView([initialLat, initialLng], 14);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(map);
 
-      const marker = L.marker([lat, lng], { draggable: true, icon: customIcon }).addTo(map);
-      markerRef.current = marker;
+    const marker = L.marker([initialLat, initialLng], { draggable: true, icon: customIcon }).addTo(map);
+    markerRef.current = marker;
 
-      marker.on("dragend", () => {
-        const position = marker.getLatLng();
-        onChange(position.lat.toFixed(6), position.lng.toFixed(6));
-      });
+    marker.on("dragend", () => {
+      const position = marker.getLatLng();
+      onChangeRef.current(position.lat.toFixed(6), position.lng.toFixed(6));
+    });
 
-      map.on("click", (e: any) => {
-        const { lat: clickLat, lng: clickLng } = e.latlng;
-        marker.setLatLng([clickLat, clickLng]);
-        onChange(clickLat.toFixed(6), clickLng.toFixed(6));
-      });
+    map.on("click", (e: any) => {
+      const { lat: clickLat, lng: clickLng } = e.latlng;
+      marker.setLatLng([clickLat, clickLng]);
+      onChangeRef.current(clickLat.toFixed(6), clickLng.toFixed(6));
+    });
 
-      mapRef.current = map;
-    } else {
-      const map = mapRef.current;
-      const marker = markerRef.current;
-      if (map && marker) {
-        const currentPos = marker.getLatLng();
-        if (Math.abs(currentPos.lat - lat) > 0.0001 || Math.abs(currentPos.lng - lng) > 0.0001) {
-          marker.setLatLng([lat, lng]);
-          map.setView([lat, lng], map.getZoom());
-        }
-      }
-    }
+    mapRef.current = map;
 
-    // Trigger map invalidation to correct size issues inside modal / container
+    // Trigger map invalidation to correct size issues inside container
     const timer = setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.invalidateSize();
-      }
+      map.invalidateSize();
     }, 200);
 
     return () => {
       clearTimeout(timer);
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        markerRef.current = null;
-      }
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
     };
-  }, [leafletLoaded, latitude, longitude, isMobile, onChange]);
+  }, [leafletLoaded, isMobile]);
+
+  // Synchronize latitude & longitude props
+  useEffect(() => {
+    const map = mapRef.current;
+    const marker = markerRef.current;
+    if (!map || !marker) return;
+
+    const lat = parseFloat(latitude) || -6.2088;
+    const lng = parseFloat(longitude) || 106.8456;
+
+    const currentPos = marker.getLatLng();
+    if (Math.abs(currentPos.lat - lat) > 0.0001 || Math.abs(currentPos.lng - lng) > 0.0001) {
+      marker.setLatLng([lat, lng]);
+      map.setView([lat, lng], map.getZoom());
+    }
+  }, [latitude, longitude]);
 
   return (
     <div className="relative w-full h-full min-h-[200px]">

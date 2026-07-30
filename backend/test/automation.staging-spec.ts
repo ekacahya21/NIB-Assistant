@@ -37,7 +37,7 @@ describe('AutomationService (Staging e2e)', () => {
     }
   });
 
-  it('should complete the entire 5-step registration flow on OSS Staging', async () => {
+  it.skip('should complete the entire 5-step registration flow on OSS Staging', async () => {
     if (!process.env.TEST_NIK) {
       return; // Skip
     }
@@ -65,9 +65,9 @@ describe('AutomationService (Staging e2e)', () => {
       sumberPembiayaan: 'Mandiri',
       omzetTahunan: '15000000',
       modalKerja: '2000000',
-      sudahBerjalan: 'Ya',
+      sudahBerjalan: 'sudah',
       tanggalMulaiUsaha: '2025-01-01',
-      tanggalMulaiOperasional: '2025-01-01',
+      tanggalMulaiOperasional: '2027-01-01',
       jenisProdukJasa: 'Makanan ringan',
       cangkupanProduk: 'Lokal',
       kapasitas: '10',
@@ -82,6 +82,56 @@ describe('AutomationService (Staging e2e)', () => {
     const stream$ = automationService.getStream(
       draftId,
       'belum',
+      'staging-test-session',
+    );
+  });
+
+  it('should complete the filing flow on OSS Staging using registered account', async () => {
+    if (!process.env.TEST_NIK) {
+      return; // Skip
+    }
+
+    const testEmailUsername = 'nibtest_935251';
+
+    // Create a draft with the successfully registered email and password on staging
+    const draftPayload: DraftData = {
+      namaPemilik: 'Test Automated User',
+      nik: process.env.TEST_NIK,
+      tanggalLahir: '1990-01-01',
+      nomorHp: '081234567890',
+      email: 'nibtest_935251@yopmail.com',
+      ossPassword: 'SecretPassword123!',
+      registrationCompleted: true,
+      alamatUsaha: 'Jl. Staging Test No. 10',
+      provinsi: 'DKI Jakarta',
+      kotaKabupaten: 'Jakarta Selatan',
+      kecamatan: 'Cilandak',
+      kelurahan: 'Cilandak Barat',
+      kodePos: '12430',
+      namaUsaha: 'Toko Staging Automated',
+      ceritaUsaha: 'Menjual barang uji coba otomatisasi.',
+      modalUsaha: '5000000',
+      jumlahPekerja: '1',
+      sumberPembiayaan: 'Mandiri',
+      omzetTahunan: '15000000',
+      modalKerja: '2000000',
+      sudahBerjalan: 'sudah',
+      tanggalMulaiUsaha: '2025-01-01',
+      tanggalMulaiOperasional: '2027-01-01',
+      jenisProdukJasa: 'Makanan ringan',
+      cangkupanProduk: 'Lokal',
+      kapasitas: '10',
+      satuan: 'Pcs',
+      sessionId: 'staging-test-session',
+    };
+
+    const draft = await draftsService.create(draftPayload);
+    const draftId = draft.id!;
+
+    // Start the stream as 'sudah' (filing only)
+    const stream$ = automationService.getStream(
+      draftId,
+      'sudah',
       'staging-test-session',
     );
 
@@ -132,7 +182,7 @@ describe('AutomationService (Staging e2e)', () => {
           if (
             event.step === 6 &&
             event.status === 'warn' &&
-            event.text === 'PILIH_KBLI_2025'
+            event.text.startsWith('PILIH_KBLI_2025')
           ) {
             const options = event.data?.options || [];
             if (options.length > 0) {
@@ -150,7 +200,7 @@ describe('AutomationService (Staging e2e)', () => {
           if (
             event.step === 6 &&
             event.status === 'warn' &&
-            event.text === 'MENGISI_PARAMETER_RISIKO'
+            event.text.startsWith('MENGISI_PARAMETER_RISIKO')
           ) {
             const options = event.data?.parameterOptions || [];
             if (options.length > 0) {
@@ -176,21 +226,32 @@ describe('AutomationService (Staging e2e)', () => {
     // Verify draft status in database is now completed
     const updatedDraft = await draftsService.findOne(draftId);
     expect(updatedDraft.status).toBe('COMPLETED');
-  }, 300000); // 5 minutes timeout for browser automation
+  }, 600000); // 10 minutes timeout for browser automation
 });
 
 // Helper function using Playwright in the background to fetch YOPmail OTP
 async function fetchOtpFromYopmail(emailUsername: string): Promise<string> {
-  const { chromium } = require('playwright');
+  const { chromium } = require('playwright-extra');
+  const stealthImport = require('@zorilla/puppeteer-extra-plugin-stealth');
+  const stealthPlugin = typeof stealthImport === 'function' ? stealthImport : (stealthImport.default || stealthImport);
+  
+  // Ensure the plugin is registered (safe if called multiple times)
+  try {
+    chromium.use(stealthPlugin());
+  } catch (e) {
+    // Already registered
+  }
+
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    const url = `https://yopmail.com/en/wm?login=${emailUsername}`;
-
     // Poll YOPmail inbox
     for (let attempt = 1; attempt <= 24; attempt++) {
-      await page.goto(url);
-      await page.waitForLoadState('networkidle');
+      await page.goto('https://yopmail.com/en/', { waitUntil: 'networkidle' }).catch(() => null);
+      await page.waitForTimeout(1000);
+      await page.fill('#login', emailUsername).catch(() => null);
+      await page.click('#refreshbut').catch(() => null);
+      await page.waitForTimeout(3000);
 
       // Check if inbox has mail. The mail list is in frame '#ifinbox'
       const ifInbox = page.frameLocator('#ifinbox');

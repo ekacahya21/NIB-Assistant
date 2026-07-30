@@ -245,7 +245,8 @@ export default function AutomationPage() {
 
     try {
       addLog("Menghubungkan ke backend local NIB Assistant...", "info");
-      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?akunOss=${isBelum}&sessionId=${getSessionId()}`);
+      const phaseParam = isBelum === "sudah" ? "&phase=filing" : "";
+      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?akunOss=${isBelum}&sessionId=${getSessionId()}${phaseParam}`);
       streamRef.current = eventSource;
 
       eventSource.onopen = () => {
@@ -513,9 +514,19 @@ export default function AutomationPage() {
         return e.returnValue;
       }
     };
+    const handleUnload = () => {
+      if (isAutomationActive()) {
+        const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") : null;
+        if (draftId) {
+          navigator.sendBeacon(`${API_URL}/automation/cancel/${draftId}`);
+        }
+      }
+    };
     window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("unload", handleUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("unload", handleUnload);
     };
   }, [failedStep, statusText]);
 
@@ -523,6 +534,11 @@ export default function AutomationPage() {
     if (isAutomationActive()) {
       const confirmLeave = window.confirm("Proses otomatisasi sedang berjalan. Jika Anda keluar, otomatisasi akan dibatalkan. Apakah Anda yakin ingin keluar?");
       if (!confirmLeave) return;
+
+      const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") : null;
+      if (draftId) {
+        fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" }).catch(err => console.error("Gagal membatalkan otomatisasi:", err));
+      }
     }
     router.push("/review");
   };
@@ -595,6 +611,14 @@ export default function AutomationPage() {
 
       if (streamRef.current) {
         streamRef.current.close();
+      }
+
+      if (draftId) {
+        try {
+          await fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" });
+        } catch (cancelErr) {
+          console.error("Gagal membatalkan sesi sebelumnya sebelum restart:", cancelErr);
+        }
       }
       
       connectStream();

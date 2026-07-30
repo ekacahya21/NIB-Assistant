@@ -28,9 +28,10 @@ export class AutomationController {
     @Param('draftId') draftId: string,
     @Query('akunOss') akunOss?: string,
     @Query('sessionId') sessionId?: string,
+    @Query('phase') phase?: string,
   ): Observable<MessageEvent> {
     return this.automationService
-      .getStream(draftId, akunOss, sessionId)
+      .getStream(draftId, akunOss, sessionId, phase)
       .pipe(map((event) => ({ data: event })));
   }
 
@@ -45,6 +46,12 @@ export class AutomationController {
   @Post('confirm/:draftId')
   confirm(@Param('draftId') draftId: string) {
     this.automationService.confirmLogin(draftId);
+    return { success: true };
+  }
+
+  @Post('cancel/:draftId')
+  cancel(@Param('draftId') draftId: string) {
+    this.automationService.cancelStream(draftId);
     return { success: true };
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getSessionId } from "../../utils/session";
 
@@ -186,10 +186,288 @@ export default function ReviewPage() {
     }
   }, []);
 
+  // Step 2 Verification States (Background Registration tracking)
+  const [isVerifyingStep2, setIsVerifyingStep2] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [verifyingStatusText, setVerifyingStatusText] = useState("Menghubungkan...");
+  const [verifyingLogs, setVerifyingLogs] = useState<{ text: string; type: string }[]>([]);
+  const [isPromptingOtp, setIsPromptingOtp] = useState(false);
+  const [isPromptingPassword, setIsPromptingPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const [registrationCompleted, setRegistrationCompleted] = useState(false);
+  const [isWaitingForRegistration, setIsWaitingForRegistration] = useState(false);
+  const [verifyingErrorText, setVerifyingErrorText] = useState("");
+  const [verifyingStep, setVerifyingStep] = useState(1);
+  const [verifyingTimeLeft, setVerifyingTimeLeft] = useState(120);
+
+  const streamRef = useRef<EventSource | null>(null);
+  const verifyTimerRef = useRef<any>(null);
+  const otpRefs = useRef<HTMLInputElement[]>([]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const regDone = sessionStorage.getItem("registration_completed") === "true";
+      const isBelum = sessionStorage.getItem("akun_oss") === "belum";
+      const draftId = sessionStorage.getItem("draft_id");
+      setRegistrationCompleted(regDone);
+
+      if (isBelum && !regDone && draftId) {
+        // The registration is still running in the background! Re-connect to stream.
+        setIsVerifyingStep2(true);
+        setIsMinimized(true);
+        startVerificationStream(draftId);
+      }
+    }
+    return () => {
+      if (streamRef.current) streamRef.current.close();
+      if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+    };
+  }, []);
+
+  const startVerificationStream = (draftId: string) => {
+    setVerifyingErrorText("");
+    setIsPromptingOtp(false);
+    setIsPromptingPassword(false);
+    setVerifyingLogs([]);
+    setVerifyingStatusText("Menghubungkan ke backend local...");
+
+    try {
+      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?phase=registration&akunOss=belum&sessionId=${getSessionId()}`);
+      streamRef.current = eventSource;
+
+      setVerifyingTimeLeft(120);
+      if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+      verifyTimerRef.current = setInterval(() => {
+        setVerifyingTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload) {
+            setVerifyingLogs((prev) => [...prev, { text: payload.text, type: payload.status }]);
+            if (payload.status === "error") {
+              setVerifyingErrorText(payload.text);
+              setVerifyingStatusText("Registrasi Gagal");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+              setIsWaitingForRegistration(false);
+              eventSource.close();
+              if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+            } else {
+              setVerifyingStep(payload.step);
+              if (payload.step === 1) setVerifyingStatusText("Membuka Portal OSS");
+              if (payload.step === 2) {
+                if (payload.text.includes("OTP") && payload.status === "warn") {
+                  setVerifyingStatusText("Menunggu Anda memasukkan OTP...");
+                  setIsPromptingOtp(true);
+                  setShowVerificationModal(true);
+                  setIsMinimized(false);
+                } else if (payload.text.includes("Silakan masukkan kata sandi")) {
+                  setVerifyingStatusText("Menunggu Anda mengatur Kata Sandi...");
+                  setIsPromptingPassword(true);
+                  setIsPromptingOtp(false);
+                  setShowVerificationModal(true);
+                  setIsMinimized(false);
+                } else if (payload.text.includes("OTP diterima") || payload.text.includes("Verifikasi berhasil") || payload.text.includes("SUKSES")) {
+                  setIsPromptingOtp(false);
+                } else {
+                  setVerifyingStatusText("Memproses validasi NIK & Email...");
+                }
+              }
+              if (payload.step === 3) {
+                setVerifyingStatusText("Mengisi detail akun & menyelesaikan pendaftaran...");
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+              }
+              if (payload.step === 7 && payload.status === "success") {
+                eventSource.close();
+                if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                setVerifyingStatusText("Pendaftaran Berhasil!");
+                setRegistrationCompleted(true);
+                sessionStorage.setItem("registration_completed", "true");
+                sessionStorage.setItem("akun_oss", "sudah");
+                
+                // Show floating success toast
+                setShowSuccessToast(true);
+                setTimeout(() => setShowSuccessToast(false), 5000);
+
+                setTimeout(() => {
+                  setIsVerifyingStep2(false);
+                  setShowVerificationModal(false);
+                  setIsMinimized(false);
+                }, 1500);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing message", e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+        setVerifyingErrorText("Koneksi backend terputus atau tidak terdeteksi. Silakan coba lagi.");
+        setVerifyingStatusText("Koneksi Terputus");
+        setIsWaitingForRegistration(false);
+      };
+    } catch (e) {
+      setVerifyingErrorText("Gagal mendirikan koneksi.");
+      setVerifyingStatusText("Koneksi Gagal");
+    }
+  };
+
+  const handleOtpDigitChange = (value: string, idx: number) => {
+    const cleanVal = value.replace(/\D/g, "").slice(0, 1);
+    const newDigits = [...otpDigits];
+    newDigits[idx] = cleanVal;
+    setOtpDigits(newDigits);
+
+    const fullOtp = newDigits.join("");
+    setOtp(fullOtp);
+
+    if (cleanVal && idx < 5) {
+      otpRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === "Backspace") {
+      if (!otpDigits[idx] && idx > 0) {
+        const newDigits = [...otpDigits];
+        newDigits[idx - 1] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+        otpRefs.current[idx - 1]?.focus();
+      } else if (otpDigits[idx]) {
+        const newDigits = [...otpDigits];
+        newDigits[idx] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+      }
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (pasteData.length > 0) {
+      const newDigits = [...otpDigits];
+      const digitsToFill = pasteData.slice(0, 6).split("");
+      for (let i = 0; i < 6; i++) {
+        newDigits[i] = digitsToFill[i] || "";
+      }
+      setOtpDigits(newDigits);
+      setOtp(newDigits.join(""));
+      const targetFocusIdx = Math.min(digitsToFill.length, 5);
+      otpRefs.current[targetFocusIdx]?.focus();
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length < 6 || isSubmittingOtp) return;
+
+    setIsSubmittingOtp(true);
+    const draftId = sessionStorage.getItem("draft_id") || "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/otp/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otp })
+      });
+      if (res.ok) {
+        setVerifyingLogs((prev) => [...prev, { text: `Mengirimkan OTP: ${otp} ke backend...`, type: "success" }]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingOtp(false);
+      setIsPromptingOtp(false);
+      setOtp("");
+      setOtpDigits(Array(6).fill(""));
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword.trim() || isSubmittingPassword) return;
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Kata sandi dan konfirmasi kata sandi tidak cocok.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("Kata sandi harus minimal 8 karakter.");
+      return;
+    }
+
+    setPasswordError("");
+    setIsSubmittingPassword(true);
+    const draftId = sessionStorage.getItem("draft_id") || "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/password/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword })
+      });
+      if (res.ok) {
+        setVerifyingLogs((prev) => [...prev, { text: "Mengirimkan kata sandi ke backend...", type: "success" }]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingPassword(false);
+      setIsPromptingPassword(false);
+    }
+  };
+
+  const handleCancelWaiting = async () => {
+    setIsWaitingForRegistration(false);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") : null;
+    if (draftId) {
+      try {
+        await fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" });
+      } catch (err) {
+        console.error("Gagal membatalkan otomatisasi:", err);
+      }
+    }
+    if (streamRef.current) streamRef.current.close();
+    if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+    setIsVerifyingStep2(false);
+    setShowVerificationModal(false);
+    setIsMinimized(false);
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleProceedToAutomation = async () => {
     if (!isAllConsentGiven || isSubmitting) return;
+
+    if (isVerifyingStep2 && !registrationCompleted) {
+      setIsWaitingForRegistration(true);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -234,6 +512,8 @@ export default function ReviewPage() {
         cangkupanProduk: formData.cangkupanProduk,
         kapasitas: formData.kapasitas,
         satuan: formData.satuan,
+        ossPassword: typeof window !== "undefined" ? sessionStorage.getItem("oss_password") || "" : "",
+        registrationCompleted: typeof window !== "undefined" ? sessionStorage.getItem("registration_completed") === "true" : false,
         sessionId: getSessionId(),
       };
 
@@ -260,6 +540,16 @@ export default function ReviewPage() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (registrationCompleted && isWaitingForRegistration) {
+      const timer = setTimeout(() => {
+        setIsWaitingForRegistration(false);
+        handleProceedToAutomation();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [registrationCompleted, isWaitingForRegistration]);
 
   const handleEditSection = (stepNum: number) => {
     if (typeof window !== "undefined") {
@@ -667,6 +957,396 @@ export default function ReviewPage() {
           )}
         </button>
       </div>
+
+      {/* ── STEP 2 VERIFICATION MODAL ── */}
+      {showVerificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-[480px] bg-white border border-border-light rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-[#ECEEF0] border-b border-border-light px-5 py-4 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-extrabold text-primary-container uppercase tracking-wider">Verifikasi Akun OSS</span>
+                <span className="text-[9px] font-bold text-on-surface-variant uppercase mt-0.5">{verifyingStatusText}</span>
+              </div>
+              {!registrationCompleted && !(isPromptingOtp || isPromptingPassword) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVerificationModal(false);
+                    setIsMinimized(true);
+                  }}
+                  className="p-1.5 hover:bg-surface-container rounded-full text-on-surface-variant transition-all flex items-center justify-center"
+                  title="Lanjutkan di latar belakang"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="p-6 flex-grow overflow-y-auto space-y-6">
+              
+              {/* Status and Progress Stepper */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <span>Progress Registrasi</span>
+                  {verifyingErrorText ? (
+                    <span className="text-error font-extrabold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">error</span> Registrasi Terhenti
+                    </span>
+                  ) : registrationCompleted ? (
+                    <span className="text-success font-extrabold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">check_circle</span> Selesai
+                    </span>
+                  ) : (
+                    <span className="text-primary-container font-extrabold flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                      Sedang Diproses
+                    </span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 rounded-full ${
+                      verifyingErrorText 
+                        ? "bg-error" 
+                        : registrationCompleted 
+                          ? "bg-success" 
+                          : "bg-primary-container animate-pulse"
+                    }`}
+                    style={{ width: `${(verifyingStep / 7) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {verifyingErrorText && (
+                <div className="p-4 bg-error/5 border border-error/20 rounded-xl space-y-3 animate-fadeIn">
+                  <div className="flex gap-2.5 items-start">
+                    <span className="material-symbols-outlined text-error text-lg mt-0.5">error</span>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-extrabold text-error uppercase">Gagal Registrasi</h4>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                        {verifyingErrorText}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Apakah Anda yakin ingin membatalkan registrasi akun OSS? Proses pendaftaran yang sedang berjalan akan dihentikan.")) {
+                          const draftId = sessionStorage.getItem("draft_id");
+                          if (draftId) {
+                            fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" }).catch(err => console.error("Gagal membatalkan registrasi:", err));
+                          }
+                          if (streamRef.current) streamRef.current.close();
+                          if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                          setIsVerifyingStep2(false);
+                          setShowVerificationModal(false);
+                          setIsMinimized(false);
+                          setIsWaitingForRegistration(false);
+                        }
+                      }}
+                      className="px-3.5 py-1.5 border border-border-light hover:bg-surface-container transition-all rounded text-[10px] font-bold uppercase tracking-wider text-on-surface-variant"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const draftId = sessionStorage.getItem("draft_id");
+                        if (draftId) startVerificationStream(draftId);
+                      }}
+                      className="px-4 py-1.5 bg-primary-container hover:bg-primary text-white transition-all rounded text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* OTP Form State */}
+              {isPromptingOtp && !verifyingErrorText && (
+                <div className="bento-card bg-primary-container/5 border border-primary-container/15 p-5 space-y-5 animate-fadeIn">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface flex items-center justify-center gap-1.5">
+                      <span className="material-symbols-outlined text-base animate-bounce text-primary-container">mail</span>
+                      Masukkan Kode OTP
+                    </h3>
+                    <p className="text-[11.5px] text-on-surface-variant leading-relaxed">
+                      Kode OTP telah dikirimkan ke email Anda <strong>{formData.email}</strong>. Masukkan kode untuk memvalidasi identitas.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleOtpSubmit} className="space-y-4 max-w-xs mx-auto">
+                    <div className="flex flex-col gap-2.5 text-left">
+                      <div className="flex justify-between items-center text-[9px] font-extrabold uppercase tracking-wider text-on-surface-variant">
+                        <span>Kode OTP</span>
+                        <span className={`flex items-center gap-1 font-mono font-bold ${verifyingTimeLeft < 25 ? "text-error animate-pulse" : "text-primary-container"}`}>
+                          <span className="material-symbols-outlined text-[10px]">schedule</span>
+                          {verifyingTimeLeft > 0 ? formatTime(verifyingTimeLeft) : "Waktu Habis"}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 justify-center py-1">
+                        {otpDigits.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            ref={(el) => { otpRefs.current[idx] = el!; }}
+                            type="text"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpDigitChange(e.target.value, idx)}
+                            onKeyDown={(e) => handleOtpKeyDown(e, idx)}
+                            onPaste={handleOtpPaste}
+                            className="w-10 h-12 rounded border border-border-light text-center font-bold text-lg focus:border-primary-container focus:outline-none bg-white text-on-surface shadow-sm"
+                            disabled={verifyingTimeLeft === 0}
+                            autoFocus={idx === 0}
+                            required
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingOtp || otp.length < 6 || verifyingTimeLeft === 0}
+                      className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingOtp ? "Memverifikasi..." : "Verifikasi & Lanjutkan"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Password Form State */}
+              {isPromptingPassword && !verifyingErrorText && (
+                <div className="bento-card bg-primary-container/5 border border-primary-container/15 p-5 space-y-5 animate-fadeIn">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface flex items-center justify-center gap-1.5">
+                      <span className="material-symbols-outlined text-base text-primary-container">lock</span>
+                      Atur Kata Sandi Baru
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                      Buatlah kata sandi untuk akun OSS BKPM Anda. Kata sandi ini akan disimpan untuk otomatisasi pengisian data berikutnya.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-xs mx-auto">
+                    <div className="flex flex-col gap-3 text-left">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kata Sandi Baru</label>
+                        <div className="relative w-full">
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="Minimal 8 karakter"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                          >
+                            <span className="material-symbols-outlined text-lg select-none">
+                              {showNewPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Konfirmasi Kata Sandi</label>
+                        <div className="relative w-full">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Ulangi kata sandi"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                          >
+                            <span className="material-symbols-outlined text-lg select-none">
+                              {showConfirmPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {passwordError && <p className="text-[10px] text-error font-semibold leading-normal">{passwordError}</p>}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingPassword || !newPassword || !confirmPassword}
+                      className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingPassword ? "Menyimpan..." : "Simpan & Lanjutkan"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Console Logs Preview */}
+              {!isPromptingOtp && !isPromptingPassword && !verifyingErrorText && (
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <div className="relative w-12 h-12 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary-container text-4xl animate-spin">sync</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-on-surface">{verifyingStatusText}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Ini dapat memakan waktu 1-2 menit...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Simple scrollable log view at bottom */}
+              <div className="bg-[#1F2937] text-white p-3 rounded-lg font-mono text-[9px] h-24 overflow-y-auto space-y-1">
+                {verifyingLogs.length === 0 ? (
+                  <div className="text-gray-400">Inisialisasi log stream...</div>
+                ) : (
+                  verifyingLogs.map((log, idx) => (
+                    <div key={idx} className={log.type === "error" ? "text-error" : log.type === "warn" ? "text-warning" : log.type === "success" ? "text-success" : "text-gray-300"}>
+                      &gt; {log.text}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Modal Footer Controls */}
+              {!registrationCompleted && (
+                <div className="flex gap-2 justify-end border-t border-border-light pt-4 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Apakah Anda yakin ingin membatalkan registrasi akun OSS? Proses pendaftaran yang sedang berjalan akan dihentikan.")) {
+                        const draftId = sessionStorage.getItem("draft_id");
+                        if (draftId) {
+                          fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" }).catch(err => console.error("Gagal membatalkan registrasi:", err));
+                        }
+                        if (streamRef.current) streamRef.current.close();
+                        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                        setIsVerifyingStep2(false);
+                        setShowVerificationModal(false);
+                        setIsMinimized(false);
+                        setIsWaitingForRegistration(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-error/20 hover:bg-error/5 text-error rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-xs">cancel</span> Batalkan Registrasi
+                  </button>
+                  {!(isPromptingOtp || isPromptingPassword) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowVerificationModal(false);
+                        setIsMinimized(true);
+                      }}
+                      className="px-4 py-2 bg-surface-container hover:bg-border-light text-on-surface rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-xs">visibility_off</span> Latar Belakang
+                    </button>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Floating Background Notification Banner & FAB */}
+      {isMinimized && (
+        <div className={`fixed bottom-5 right-5 z-50 ${isPromptingOtp || isPromptingPassword ? "animate-bounce" : ""}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowVerificationModal(true);
+              setIsMinimized(false);
+            }}
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl transition-all text-xs font-bold uppercase tracking-wider hover:scale-105 border ${
+              isPromptingOtp || isPromptingPassword
+                ? "bg-amber-500 text-white border-amber-400"
+                : "bg-primary-container text-white border-primary/20"
+            }`}
+          >
+            {isPromptingOtp || isPromptingPassword ? (
+              <>
+                <span className="material-symbols-outlined text-lg animate-pulse">notifications_active</span>
+                <span>{isPromptingOtp ? "OTP Diperlukan!" : "Kata Sandi Diperlukan!"}</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg animate-spin">sync</span>
+                <span>Registrasi Berjalan...</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Floating Success Toast */}
+      {showSuccessToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-fadeIn">
+          <div className="flex items-center gap-3 bg-emerald-600 text-white px-6 py-3.5 rounded-xl shadow-2xl border border-emerald-500 text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-lg">check_circle</span>
+            <span>Registrasi OSS Berhasil! Akun siap digunakan.</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── WAITING FOR REGISTRATION MODAL ── */}
+      {isWaitingForRegistration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-[440px] bg-white border border-border-light rounded-2xl shadow-xl flex flex-col p-6 space-y-6 text-center">
+            <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-primary-container/20 border-t-primary-container animate-spin" />
+              <span className="material-symbols-outlined text-primary text-2xl animate-pulse">sync</span>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">Menunggu Registrasi Latar Belakang</h3>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                Pendaftaran akun OSS Anda sedang diproses di latar belakang. Mohon tunggu sebentar, sistem akan otomatis melanjutkan ke proses pengisian setelah pendaftaran selesai.
+              </p>
+            </div>
+            
+            {/* simple status logs peek */}
+            <div className="bg-surface-container rounded-xl p-3 text-[10px] font-mono text-on-surface-variant text-left h-20 overflow-y-auto space-y-1">
+              <div className="font-bold text-primary-container uppercase text-[9px] tracking-wider mb-1 border-b border-border-light pb-0.5">Status Registrasi:</div>
+              {verifyingLogs.length === 0 ? (
+                <div className="text-outline">Menghubungkan...</div>
+              ) : (
+                verifyingLogs.slice(-2).map((log, idx) => (
+                  <div key={idx} className={log.type === "error" ? "text-error" : log.type === "success" ? "text-success" : "text-on-surface-variant"}>
+                    &gt; {log.text}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={handleCancelWaiting}
+                className="flex-1 py-2.5 border border-error/20 hover:bg-error/5 text-error rounded text-[10px] font-extrabold uppercase tracking-wider transition-all"
+              >
+                Batalkan Registrasi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

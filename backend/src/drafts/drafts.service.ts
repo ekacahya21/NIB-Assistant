@@ -49,6 +49,8 @@ export class DraftData {
   kapasitas?: string;
   satuan?: string;
   sessionId?: string;
+  ossPassword?: string;
+  registrationCompleted?: boolean;
 }
 
 @Injectable()
@@ -114,6 +116,8 @@ export class DraftsService {
         kapasitas: data.kapasitas,
         satuan: data.satuan,
         sessionId: data.sessionId,
+        ossPassword: data.ossPassword,
+        registrationCompleted: data.registrationCompleted ?? false,
         updatedAt: new Date(),
       },
     });
@@ -180,6 +184,8 @@ export class DraftsService {
         kapasitas: data.kapasitas,
         satuan: data.satuan,
         sessionId: data.sessionId,
+        ossPassword: data.ossPassword,
+        registrationCompleted: data.registrationCompleted,
         updatedAt: new Date(),
       },
     });

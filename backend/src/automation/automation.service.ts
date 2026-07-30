@@ -59,6 +59,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   >();
   private readonly cancelledDrafts = new Set<string>();
   private readonly sessionLogs = new Map<string, Array<any>>();
+  private readonly activeSteps = new Map<string, number>();
 
 
   // Queue and browser management
@@ -72,6 +73,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     resolve: () => void;
     reject: (err: any) => void;
     isCancelled: boolean;
+    phase?: string;
   }> = [];
 
   constructor(
@@ -202,24 +204,45 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     draftId: string,
     akunOss?: string,
     sessionId?: string,
+    phase?: string,
   ): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
-      // Prevent double session for the same draftId
+      // Support reconnection to existing session
       if (this.activeSubjects.has(draftId)) {
-        subscriber.next({
-          step: 1,
-          status: 'error',
-          text: 'Sesi otomatisasi untuk data ini sudah berjalan atau sedang mengantre.',
+        this.logger.log(`Client reconnecting to existing session for draft: ${draftId}`);
+        const subject = this.activeSubjects.get(draftId)!;
+
+        // Replay log history
+        const logs = this.sessionLogs.get(draftId) || [];
+        for (const log of logs) {
+          subscriber.next({
+            step: log.step,
+            status: log.status,
+            text: log.text,
+            data: log.data,
+          });
+        }
+
+        // Subscribe to future events
+        const subscription = subject.subscribe({
+          next: (val) => subscriber.next(val),
+          error: (err) => subscriber.error(err),
+          complete: () => subscriber.complete(),
         });
-        subscriber.complete();
-        return;
+
+        return () => {
+          this.logger.log(
+            `Client disconnected from reconnected SSE stream for draft: ${draftId}`,
+          );
+          subscription.unsubscribe();
+        };
       }
 
       const subject = new Subject<AutomationEvent>();
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);
 
-      this.enqueueRequest(draftId, akunOss, subject, sessionId);
+      this.enqueueRequest(draftId, akunOss, subject, sessionId, phase);
 
       const subscription = subject.subscribe({
         next: (val) => subscriber.next(val),
@@ -232,7 +255,14 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           `Client disconnected from SSE stream for draft: ${draftId}`,
         );
         subscription.unsubscribe();
-        this.cancelStream(draftId, subject);
+        const currentActiveStep = this.activeSteps.get(draftId) || 1;
+        if (phase === 'registration' && currentActiveStep < 3) {
+          this.cancelStream(draftId, subject);
+        } else {
+          this.logger.log(
+            `Phase ${phase} for draft ID ${draftId} is at step ${currentActiveStep} and will continue in background.`,
+          );
+        }
       };
     });
   }
@@ -295,6 +325,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
     sessionId?: string,
+    phase?: string,
   ) {
     const maxSessions = parseInt(
       process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3',
@@ -308,7 +339,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         .update(draftId, { status: 'RUNNING', sessionId })
         .catch(() => {});
 
-      this.runPlaywrightAutomation(draftId, akunOss, subject)
+      this.runPlaywrightAutomation(draftId, akunOss, subject, phase)
         .catch((err) => {
           this.logger.error(
             `Error running playwright automation for draft ${draftId}: ${err.message}`,
@@ -344,6 +375,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           resolve,
           reject,
           isCancelled: false,
+          phase,
         });
       })
         .then(async () => {
@@ -351,7 +383,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           await this.draftsService
             .update(draftId, { status: 'RUNNING', sessionId })
             .catch(() => {});
-          return this.runPlaywrightAutomation(draftId, akunOss, subject);
+          return this.runPlaywrightAutomation(draftId, akunOss, subject, phase);
         })
         .catch((err) => {
           this.logger.error(
@@ -510,6 +542,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         step,
         status,
         text: richText,
+        data,
         timestamp: new Date().toISOString(),
       });
     }
@@ -540,6 +573,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     draftId: string,
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
+    phase?: string,
   ): Promise<void> {
     const draft = await this.draftsService.findOne(draftId);
     if (!draft) {
@@ -558,7 +592,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
     this.sessionLogs.set(draftId, []);
 
-    const isRegister = akunOss === 'belum';
+    const isRegister = phase === 'registration' || (phase === undefined && (akunOss === 'belum' || !draft.registrationCompleted));
+    const isFiling = phase === 'filing' || phase === undefined;
     const timerNow = Date.now();
     this.executionTimers.set(draftId, {
       startTime: timerNow,
@@ -569,8 +604,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     let browser: any = null;
     let context: any = null;
     let page: any = null;
-    let activeStep = 1;
-    let passwordCode = '';
+    let activeStep = isRegister ? 1 : 4;
+    this.activeSteps.set(draftId, activeStep);
+    let passwordCode = draft.ossPassword || '';
     let finalErrorMessage: string | null = null;
 
     // Delete previous recordings if they exist to clear disk space for retry
@@ -611,42 +647,85 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       };
 
       // Step 1: Initialize Browser
-      const initResult = await this.initializeBrowser(sessionCtx);
-      browser = initResult.browser;
-      context = initResult.context;
-      page = initResult.page;
-      sessionCtx.page = page;
+      if (activeStep === 1) {
+        const initResult = await this.initializeBrowser(sessionCtx);
+        browser = initResult.browser;
+        context = initResult.context;
+        page = initResult.page;
+        sessionCtx.page = page;
+      }
 
       if (isRegister) {
         // Step 2: Registration & Verification
         activeStep = 2;
+        this.activeSteps.set(draftId, activeStep);
         passwordCode = await this.registrationFlowService.executeRegistrationSteps(sessionCtx);
 
         // Step 3: Fill Detailed Profile Information
         activeStep = 3;
+        this.activeSteps.set(draftId, activeStep);
         await this.registrationFlowService.executeDetailProfileSteps(sessionCtx);
+
+        // Save credentials immediately after successful registration
+        await this.draftsService.update(draftId, {
+          ossPassword: passwordCode,
+          registrationCompleted: true,
+        });
+
+        this.logStep(
+          subject,
+          3,
+          'success',
+          'Pendaftaran akun OSS berhasil! Kredensial telah disimpan dan siap digunakan.',
+        );
+
+        if (phase === 'registration') {
+          activeStep = 7; // Mark Phase 1 complete
+          this.activeSteps.set(draftId, activeStep);
+          this.logStep(
+            subject,
+            7,
+            'success',
+            'Pendaftaran akun OSS selesai dengan sukses!',
+          );
+        }
       }
 
-      // Step 4: Login & Authentication
-      activeStep = 4;
-      const jwtToken = await this.filingFlowService.executeLoginSteps(sessionCtx, passwordCode);
+      if (isFiling && activeStep < 7) {
+        // If starting directly from filing phase, initialize browser
+        if (!page) {
+          const initResult = await this.initializeBrowser(sessionCtx);
+          browser = initResult.browser;
+          context = initResult.context;
+          page = initResult.page;
+          sessionCtx.page = page;
+        }
 
-      // Step 5: Kelola Lokasi Usaha
-      activeStep = 5;
-      await this.filingFlowService.executeManageLocationSteps(sessionCtx, jwtToken);
+        // Step 4: Login & Authentication
+        activeStep = 4;
+        this.activeSteps.set(draftId, activeStep);
+        const jwtToken = await this.filingFlowService.executeLoginSteps(sessionCtx, passwordCode);
 
-      // Step 6: Kelola detail Usaha
-      activeStep = 6;
-      await this.filingFlowService.executeManageBusinessDetailSteps(sessionCtx);
+        // Step 5: Kelola Lokasi Usaha
+        activeStep = 5;
+        this.activeSteps.set(draftId, activeStep);
+        await this.filingFlowService.executeManageLocationSteps(sessionCtx, jwtToken);
 
-      // Step 7: Selesai
-      activeStep = 7;
-      this.logStep(
-        subject,
-        7,
-        'success',
-        'Otomatisasi NIB selesai dengan sukses!',
-      );
+        // Step 6: Kelola detail Usaha
+        activeStep = 6;
+        this.activeSteps.set(draftId, activeStep);
+        await this.filingFlowService.executeManageBusinessDetailSteps(sessionCtx);
+
+        // Step 7: Selesai
+        activeStep = 7;
+        this.activeSteps.set(draftId, activeStep);
+        this.logStep(
+          subject,
+          7,
+          'success',
+          'Otomatisasi NIB selesai dengan sukses!',
+        );
+      }
     } catch (error: any) {
       console.error(
         'Playwright execution error inside runPlaywrightAutomation:',
@@ -667,15 +746,17 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         : 0;
       const finalStatus =
         activeStep === 7
-          ? 'COMPLETED'
-          : activeStep > 2
-            ? 'FAILED_LATER'
-            : 'FAILED';
+          ? (phase === 'registration' ? 'DRAFT' : 'COMPLETED')
+          : phase === 'registration'
+            ? 'FAILED'
+            : activeStep > 2
+              ? 'FAILED_LATER'
+              : 'FAILED';
       const isCancelled = this.cancelledDrafts.has(draftId);
       this.cancelledDrafts.delete(draftId);
 
       const dbErrorMessage =
-        finalStatus === 'COMPLETED'
+        finalStatus === 'COMPLETED' || finalStatus === 'DRAFT'
           ? null
           : isCancelled
             ? 'Sesi dibatalkan oleh pengguna.'
@@ -716,6 +797,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.activeBrowsers.delete(draftId);
       this.activeSubjects.delete(draftId);
       this.draftMetadata.delete(draftId);
+      this.activeSteps.delete(draftId);
       if (browser) {
         await browser.close().catch(() => {});
       }

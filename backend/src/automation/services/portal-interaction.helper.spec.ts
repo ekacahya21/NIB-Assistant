@@ -34,7 +34,7 @@ describe('PortalInteractionHelper', () => {
     it('should split by dot if it contains one', () => {
       const query = 'KOTA ADM. JAKARTA PUSAT';
       const result = helper.getOptimalSearchQuery(query);
-      expect(result).toBe('KOTA');
+      expect(result).toBe('ADM.');
     });
 
     it('should return input if length is 2 words or less', () => {

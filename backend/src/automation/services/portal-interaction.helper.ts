@@ -141,15 +141,17 @@ export class PortalInteractionHelper {
   }
 
   public getOptimalSearchQuery(name: string): string {
-    const trimmed = name.trim();
-    if (trimmed.includes(' ')) {
-      const parts = trimmed.split(/\s+/);
+    // Remove common admin prefixes to get the actual distinctive name for searching
+    const distinctiveName = name.replace(/^(kab\.|kota|kabupaten|kec\.|kecamatan|prov\.|provinsi|desa|kel\.|kelurahan)\s+/i, '').trim();
+
+    if (distinctiveName.includes(' ')) {
+      const parts = distinctiveName.split(/\s+/);
       const firstWord = parts[0];
       if (firstWord.length >= 3) {
         return firstWord;
       }
     }
-    return trimmed;
+    return distinctiveName;
   }
 
   public extractAndStoreToken(url: string, context: AutomationSessionContext) {
@@ -344,11 +346,15 @@ export class PortalInteractionHelper {
         url.includes('/provinsi') ||
         url.includes('/kota') ||
         url.includes('/kecamatan') ||
-        url.includes('/kelurahan')
+        url.includes('/kelurahan') ||
+        url.includes('/dokumen') ||
+        url.includes('/file') ||
+        url.includes('/upload')
       ) {
         try {
           if (status >= 200 && status < 300) {
             const text = await response.text();
+            console.log(`[Tx: ${txId}] [DEBUG NETWORK RESPONSE BODY] URL: ${url} | Body: ${text}`);
             const trimmed =
               text.length > 200 ? text.substring(0, 200) + '...' : text;
             this.logger.log(`[Tx: ${txId}] [Network Response Body] ${trimmed}`);

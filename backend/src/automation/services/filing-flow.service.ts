@@ -127,103 +127,80 @@ export class FilingFlowService {
       await page.fill(passwordSelector, finalPassword);
       await page.waitForTimeout(1000);
 
-      // Check if captcha is visible on the page
-      const isCaptchaVisible = await page
-        .locator(
-          'input[placeholder*="Captcha"], input[name*="captcha"], #captcha',
-        )
-        .isVisible()
-        .catch(() => false);
-      
       let isRedirected = false;
 
-      if (isCaptchaVisible) {
+      context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
+      const loginButtonSelector =
+        'button[type="button"], button[type="submit"]';
+      await page.click(loginButtonSelector);
+
+      // Wait for redirection
+      context.logStep(
+        4,
+        'info',
+        'Menunggu pengalihan (redirection) setelah masuk...',
+      );
+      const startTime = Date.now();
+      let localErrorMsg = '';
+
+      while (Date.now() - startTime < 30000) {
+        const currentUrl = page.url();
+        if (
+          currentUrl &&
+          !currentUrl.includes('/login') &&
+          !currentUrl.includes('ui-login.oss.go.id') &&
+          !currentUrl.includes('ui-login-stg.oss.go.id')
+        ) {
+          isRedirected = true;
+          break;
+        }
+
+        // Quick check for visible validation errors to abort immediately
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isErrorVisible = await errorLocator
+          .isVisible()
+          .catch(() => false);
+        if (isErrorVisible) {
+          localErrorMsg = await errorLocator
+            .textContent()
+            .catch(() => 'Username atau Kata Sandi salah.');
+          break;
+        }
+
+        await page.waitForTimeout(1000);
+      }
+
+      if (localErrorMsg) {
         context.logStep(
           4,
-          'warn',
-          'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.',
+          'error',
+          `Login GAGAL di portal OSS: ${localErrorMsg.trim()}`,
         );
-        // Wait for the user to complete login manually
-        let isLoginConfirmed = false;
-        const startTime = Date.now();
-        while (Date.now() - startTime < 120000) {
-          // Timeout after 120 seconds
-          const currentUrl = page.url();
-          if (
-            currentUrl &&
-            !currentUrl.includes('/login') &&
-            !currentUrl.includes('ui-login.oss.go.id')
-          ) {
-            isLoginConfirmed = true;
-            isRedirected = true;
-            break;
-          }
-          // Accessing OTP/Confirmation using helper callbacks or stream map
-          const hasConfirmation = await context.waitForOtp().then(() => true).catch(() => false);
-          if (hasConfirmation) {
-            isLoginConfirmed = true;
-            isRedirected = true;
-            break;
-          }
-          await page.waitForTimeout(1000);
-        }
-        if (!isLoginConfirmed) {
+        passwordCode = '';
+        this.cachedPasswords.delete(txId);
+        context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
+        await page.waitForTimeout(2000);
+        continue; // Restart the retry loop
+      }
+
+      if (!isRedirected) {
+        // Fallback post-loop check for validation error messages
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isLoginErrorVisible = await errorLocator
+          .isVisible()
+          .catch(() => false);
+        if (isLoginErrorVisible) {
+          const errorMsg = await errorLocator
+            .textContent()
+            .catch(() => 'Username atau Kata Sandi salah.');
           context.logStep(
             4,
             'error',
-            'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).',
-          );
-          throw new Error('Batas waktu login habis.');
-        }
-      } else {
-        context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
-        const loginButtonSelector =
-          'button[type="button"], button[type="submit"]';
-        await page.click(loginButtonSelector);
-
-        // Wait for redirection
-        context.logStep(
-          4,
-          'info',
-          'Menunggu pengalihan (redirection) setelah masuk...',
-        );
-        const startTime = Date.now();
-        let localErrorMsg = '';
-
-        while (Date.now() - startTime < 30000) {
-          const currentUrl = page.url();
-          if (
-            currentUrl &&
-            !currentUrl.includes('/login') &&
-            !currentUrl.includes('ui-login.oss.go.id') &&
-            !currentUrl.includes('ui-login-stg.oss.go.id')
-          ) {
-            isRedirected = true;
-            break;
-          }
-
-          // Quick check for visible validation errors to abort immediately
-          const errorLocator = page
-            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-            .first();
-          const isErrorVisible = await errorLocator
-            .isVisible()
-            .catch(() => false);
-          if (isErrorVisible) {
-            localErrorMsg = await errorLocator
-              .textContent()
-              .catch(() => 'Username atau Kata Sandi salah.');
-            break;
-          }
-
-          await page.waitForTimeout(1000);
-        }
-
-        if (localErrorMsg) {
-          context.logStep(
-            4,
-            'error',
-            `Login GAGAL di portal OSS: ${localErrorMsg.trim()}`,
+            `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
           );
           passwordCode = '';
           this.cachedPasswords.delete(txId);
@@ -232,39 +209,14 @@ export class FilingFlowService {
           continue; // Restart the retry loop
         }
 
-        if (!isRedirected) {
-          // Fallback post-loop check for validation error messages
-          const errorLocator = page
-            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-            .first();
-          const isLoginErrorVisible = await errorLocator
-            .isVisible()
-            .catch(() => false);
-          if (isLoginErrorVisible) {
-            const errorMsg = await errorLocator
-              .textContent()
-              .catch(() => 'Username atau Kata Sandi salah.');
-            context.logStep(
-              4,
-              'error',
-              `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
-            );
-            passwordCode = '';
-            this.cachedPasswords.delete(txId);
-            context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
-            await page.waitForTimeout(2000);
-            continue; // Restart the retry loop
-          }
-
-          context.logStep(
-            4,
-            'error',
-            'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).',
-          );
-          throw new Error(
-            'Login ditolak atau butuh penyelesaian CAPTCHA manual.',
-          );
-        }
+        context.logStep(
+          4,
+          'error',
+          'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik.',
+        );
+        throw new Error(
+          'Login ditolak.',
+        );
       }
 
       if (isRedirected) {
@@ -295,6 +247,20 @@ export class FilingFlowService {
       // Ignore timeout if dashboard remains active
     }
     await page.waitForTimeout(5000);
+
+    // Wait for the loading spinner to disappear, reload if stuck
+    const spinnerSelector = '.v-progress-circular, .v-loading, [role="progressbar"], .loading-spinner';
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      if (await loader.isVisible()) {
+        context.logStep(4, 'info', 'Menunggu loading spinner menghilang...');
+        await loader.waitFor({ state: 'detached', timeout: 10000 });
+      }
+    } catch (err) {
+      context.logStep(4, 'warn', 'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...');
+      await page.reload({ waitUntil: 'networkidle' }).catch(() => null);
+      await page.waitForTimeout(5000);
+    }
 
     const currentUrl = page.url();
     let jwtToken = context.jwtToken || '';
@@ -343,36 +309,91 @@ export class FilingFlowService {
       'Memulai pengelolaan lokasi usaha (Step 5)...',
     );
 
+    // Wait for the loading spinner to disappear, reload if stuck
+    const spinnerSelector = '.v-progress-circular, .v-loading, [role="progressbar"], .loading-spinner';
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      await loader.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
+      if (await loader.isVisible()) {
+        context.logStep(5, 'info', 'Menunggu loading spinner menghilang...');
+        await loader.waitFor({ state: 'detached', timeout: 15000 });
+      }
+    } catch (err) {
+      context.logStep(5, 'warn', 'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...');
+      await page.reload({ waitUntil: 'load' }).catch(() => null);
+      await page.waitForTimeout(5000);
+      try {
+        const loader = page.locator(spinnerSelector).first();
+        await loader.waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
+        if (await loader.isVisible()) {
+          await loader.waitFor({ state: 'detached', timeout: 15000 }).catch(() => null);
+        }
+      } catch (e) {}
+    }
+
     // pilih menu kelola lokasi usaha
-    await page
-      .getByTestId('top-menus')
-      .locator('div')
-      .filter({ hasText: 'Perizinan Berusaha' })
-      .click();
-    await page
-      .getByTestId('desktop-dropdown-panel')
-      .getByText('Kelola Usaha')
-      .click();
-    await page
-      .getByTestId('category-right-panel')
-      .getByText('Lokasi Usaha')
-      .first()
-      .click();
+    try {
+      await page
+        .getByTestId('top-menus')
+        .locator('div')
+        .filter({ hasText: 'Perizinan Berusaha' })
+        .click({ timeout: 5000 });
+    } catch (err) {
+      context.logStep(5, 'info', 'Menemukan menu "Perizinan Berusaha" menggunakan selector alternatif...');
+      await page.locator('text=Perizinan Berusaha').first().click();
+    }
+
+    try {
+      await page
+        .getByTestId('desktop-dropdown-panel')
+        .getByText('Kelola Usaha')
+        .click({ timeout: 5000 });
+    } catch (err) {
+      await page.locator('text=Kelola Usaha').first().click();
+    }
+
+    try {
+      await page
+        .getByTestId('category-right-panel')
+        .getByText('Lokasi Usaha')
+        .first()
+        .click({ timeout: 5000 });
+    } catch (err) {
+      await page.locator('text=Lokasi Usaha').first().click();
+    }
 
     // wait for redirected page loaded
-    await page.waitForURL(/.*\/lokasi-usaha.*/, {
-      waitUntil: 'networkidle',
+    await page.waitForURL(/.*\/(lokasi-usaha|kelola-usaha).*/, {
+      waitUntil: 'load',
       timeout: 15000,
-    });
+    }).catch(() => null);
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.interactionHelper.dismissPopupIfVisible(page, context, 5);
 
+    const cardSelector = '.lokasi-usaha-card';
+    const cardLocator = page.locator(cardSelector);
+    if (await cardLocator.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+      context.logStep(
+        5,
+        'info',
+        'Lokasi usaha sudah terdaftar dari sesi sebelumnya. Memilih lokasi yang ada...',
+      );
+      await cardLocator.first().getByRole('checkbox').click();
+      await page.getByRole('button', { name: 'Lengkapi Detail Kegiatan' }).click();
+      context.logStep(
+        5,
+        'success',
+        '✨ [Selesai] Pengelolaan Lokasi Usaha berhasil diselesaikan.',
+      );
+      return;
+    }
+
     await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
-    await page.waitForURL(/.*\/lokasi-usaha\/tambah-lokasi.*/, {
-      waitUntil: 'networkidle',
+    await page.waitForURL(/.*\/(lokasi-usaha|kelola-usaha)\/tambah-lokasi.*/, {
+      waitUntil: 'load',
       timeout: 15000,
-    });
+    }).catch(() => null);
 
     await page.getByRole('button', { name: 'Tambah Posisi Lokasi' }).click();
     const daratRadio = page.getByRole('radio', { name: 'Darat' });
@@ -581,16 +602,27 @@ export class FilingFlowService {
 
       // 2. Generate Photo PDF or fallback
       if (draft.fotoLokasi) {
-        const photoBuffer = await this.documentsService.convertPhotoToPdf(
-          draft.fotoLokasi,
-        );
-        fs.writeFileSync(photoPath, photoBuffer);
-        createdPhoto = true;
-        context.logStep(
-          5,
-          'info',
-          'Dokumen Foto Lokasi PDF berhasil dibuat.',
-        );
+        try {
+          const photoBuffer = await this.documentsService.convertPhotoToPdf(
+            draft.fotoLokasi,
+          );
+          fs.writeFileSync(photoPath, photoBuffer);
+          createdPhoto = true;
+          context.logStep(
+            5,
+            'info',
+            'Dokumen Foto Lokasi PDF berhasil dibuat.',
+          );
+        } catch (photoErr) {
+          this.logger.warn('Gagal mengubah foto lokasi ke PDF, menggunakan fallback: ', photoErr);
+          fs.writeFileSync(photoPath, npsBuffer);
+          createdPhoto = true;
+          context.logStep(
+            5,
+            'info',
+            'Konversi Foto Lokasi gagal, menggunakan fallback dokumen administrasi.',
+          );
+        }
       } else {
         // Fallback: Copy NPS PDF to photo path
         fs.writeFileSync(photoPath, npsBuffer);
@@ -604,6 +636,13 @@ export class FilingFlowService {
 
       const fileInputs = page.locator('input[type="file"]');
       const inputCount = await fileInputs.count();
+      console.log(`[DEBUG] Found ${inputCount} file inputs on the form.`);
+      for (let i = 0; i < inputCount; i++) {
+        const accept = await fileInputs.nth(i).getAttribute('accept');
+        const outerHTML = await fileInputs.nth(i).evaluate((el: any) => el.outerHTML);
+        console.log(`[DEBUG] File Input ${i}: accept="${accept}", outerHTML="${outerHTML}"`);
+      }
+
       if (inputCount < 2) {
         throw new Error('Jumlah input upload file kurang dari 2.');
       }
@@ -612,9 +651,7 @@ export class FilingFlowService {
       const upload1Promise = page
         .waitForResponse(
           (response: any) =>
-            (response.url().includes('/dokumen') ||
-              response.url().includes('/file') ||
-              response.url().includes('/upload')) &&
+            response.url().includes('/file/upload') &&
             response.status() === 200,
           { timeout: 25000 },
         )
@@ -625,23 +662,22 @@ export class FilingFlowService {
         'info',
         'Mengunggah Dokumen Administrasi Lokasi...',
       );
-      await fileInputs.first().setInputFiles(npsPath);
+      await fileInputs.nth(0).setInputFiles(npsPath);
       await upload1Promise;
 
       const upload2Promise = page
         .waitForResponse(
           (response: any) =>
-            (response.url().includes('/dokumen') ||
-              response.url().includes('/file') ||
-              response.url().includes('/upload')) &&
+            response.url().includes('/file/upload') &&
             response.status() === 200,
           { timeout: 25000 },
         )
         .catch(() => null);
 
       context.logStep(5, 'info', 'Mengunggah Foto Lokasi...');
-      await fileInputs.last().setInputFiles(photoPath);
+      await fileInputs.nth(1).setInputFiles(photoPath);
       await upload2Promise;
+      await page.waitForTimeout(5000);
 
       // Wait for any loading/progressbar indicator to detach
       context.logStep(
@@ -752,6 +788,17 @@ export class FilingFlowService {
     context.logStep(6, 'info', 'Memilih KBLI...');
     await page.getByRole('button', { name: 'Selanjutnya' }).click();
     await getListKbliPromise;
+
+    // Wait for the loading spinner to disappear
+    const spinnerSelector = '.v-progress-circular, .v-loading, [role="progressbar"], .loading-spinner';
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      await loader.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
+      if (await loader.isVisible()) {
+        await loader.waitFor({ state: 'detached', timeout: 15000 }).catch(() => null);
+      }
+    } catch (e) {}
+
     await page
       .getByPlaceholder('Pilih jenis kegiatan usaha')
       .locator('input')
@@ -762,7 +809,20 @@ export class FilingFlowService {
       .getByPlaceholder('Pilih jenis kegiatan usaha')
       .locator('input')
       .click();
-    await page.getByText('Kegiatan Usaha Utama').click();
+    
+    const option = page.getByText('Kegiatan Usaha Utama');
+    await option.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+    if (!(await option.isVisible())) {
+      // Close and reopen dropdown if options didn't load (No data available)
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(1000);
+      await page
+        .getByPlaceholder('Pilih jenis kegiatan usaha')
+        .locator('input')
+        .click();
+      await option.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+    }
+    await option.click();
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
@@ -776,7 +836,8 @@ export class FilingFlowService {
     );
     const kbliSearchInput = page.getByPlaceholder('kode KBLI').locator('input');
     await kbliSearchInput.click();
-    await kbliSearchInput.fill(searchKbli);
+    await kbliSearchInput.fill('');
+    await kbliSearchInput.pressSequentially(searchKbli, { delay: 100 });
     const getListKbli2025Promise = page
       .waitForResponse(
         (response: any) => {
@@ -857,8 +918,8 @@ export class FilingFlowService {
         });
 
         // Select KBLI 2025 in portal
+        await kbli2025Select.click();
         const selectContainer = kbli2025Select.locator('input');
-        await selectContainer.click();
         await selectContainer.fill(chosenKbli);
 
         const optionLocator = page
@@ -883,13 +944,24 @@ export class FilingFlowService {
     const seluruhRuangLingkup = page.getByText('Seluruh');
     if (await seluruhRuangLingkup.isVisible()) {
       await seluruhRuangLingkup.click();
+    } else {
+      // Fallback: Click the first option in the dropdown list
+      const firstOption = page.locator('.v-list-item, .v-overlay-container .v-list-item').first();
+      await firstOption.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+      if (await firstOption.isVisible()) {
+        await firstOption.click();
+      } else {
+        const fallbackOption = page.getByRole('option').first();
+        if (await fallbackOption.isVisible()) {
+          await fallbackOption.click();
+        }
+      }
     }
 
     // select bidang usaha
-    const bidangUsaha = page.getByTestId('radio-bidang-usaha');
-    await bidangUsaha.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
-    if (await bidangUsaha.isVisible()) {
-      await bidangUsaha.getByRole('radio').first().click();
+    const firstRadio = page.getByTestId('radio-bidang-usaha').getByRole('radio').first();
+    if (await firstRadio.isVisible().catch(() => false)) {
+      await firstRadio.click();
     }
 
     // click tombol tambah bidang usaha
@@ -974,6 +1046,10 @@ export class FilingFlowService {
       'info',
       `Mengisi status berjalan: ${runningOptionText}`,
     );
+    // Wait for the page loader overlay to disappear
+    const pageLoader = page.locator('.page-loader');
+    await pageLoader.waitFor({ state: 'detached', timeout: 30000 }).catch(() => null);
+
     const runningCombobox = page
       .getByTestId('select-box-flag-berjalan')
       .first();
@@ -985,7 +1061,7 @@ export class FilingFlowService {
 
     await runningCombobox.click();
     await runningCombobox.locator('input').fill(runningOptionText);
-    await page.getByText(runningOptionText, { exact: true }).click();
+    await page.locator('.v-list-item-title, .v-list-item').getByText(runningOptionText, { exact: true }).first().click();
     await page.waitForTimeout(500);
 
     // Conditional Date Pickers for Sudah Berjalan
@@ -1171,118 +1247,46 @@ export class FilingFlowService {
         .first();
       await containerOp.scrollIntoViewIfNeeded().catch(() => {});
       await containerOp.click();
+      await page.waitForTimeout(1000);
 
-      // picker locator
-      const pickerContainerOp = page.locator('.v-picker');
+      const pickerContainerOp = page.locator('.v-picker, .v-overlay-container .v-picker').first();
 
-      // 2. Select Year (e.g. 2020)
-      const yearSelectOp = pickerContainerOp
-        .locator('button, div, span')
-        .filter({ hasText: /^\d{4}$/ })
-        .first();
-      const currentYearTextOp = await yearSelectOp.innerText().catch(() => '');
-      let currentYearOp =
-        parseInt(currentYearTextOp) || new Date().getFullYear();
+      // Change the year to targetYear
+      const yearLabelLocator = pickerContainerOp.locator('button, div, span').filter({ hasText: /20\d{2}/ }).first();
+      let currentYearText = await yearLabelLocator.innerText({ timeout: 1000 }).catch(() => '');
+      let currentYear = parseInt(currentYearText) || new Date().getFullYear();
 
-      if (currentYearOp !== targetYear) {
-        await yearSelectOp
-          .getByTestId('year-btn')
-          .click()
-          .catch(() => {});
-        await page.waitForTimeout(1000);
-
-        let targetYearOptionOp = pickerContainerOp
-          .locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
-          .locator('div, li, button, span')
-          .filter({ hasText: new RegExp(`^${targetYear}$`) })
-          .first();
-
-        if (!(await targetYearOptionOp.isVisible())) {
-          targetYearOptionOp = pickerContainerOp
-            .locator('button, div, li, span')
-            .filter({ hasText: new RegExp(`^${targetYear}$`) })
-            .first();
-        }
-
-        if (await targetYearOptionOp.isVisible()) {
-          await targetYearOptionOp.scrollIntoViewIfNeeded().catch(() => {});
-          await targetYearOptionOp.click({ force: true });
+      let limit = 0;
+      while (currentYear !== targetYear && limit < 10) {
+        if (currentYear < targetYear) {
+          const rightArrows = await pickerContainerOp.locator('button, span, i').filter({ hasText: /^(>|chevron_right|right)$/i }).all();
+          const yearRightArrow = rightArrows[1] || rightArrows[0];
+          if (yearRightArrow) {
+            await yearRightArrow.click();
+            await page.waitForTimeout(500);
+          }
         } else {
-          // Fallback: Click year decrement/increment button next to Year text
-          const leftArrowsOp = await pickerContainerOp
-            .locator('button, span, i')
-            .filter({ hasText: /^(<|chevron_left|left)$/i })
-            .all();
-          const yearLeftArrowOp = leftArrowsOp[1] || leftArrowsOp[0];
-          if (yearLeftArrowOp) {
-            while (currentYearOp > targetYear) {
-              await yearLeftArrowOp.click().catch(() => {});
-              await page.waitForTimeout(200);
-              const updatedYearTextOp = await yearSelectOp.innerText();
-              currentYearOp = parseInt(updatedYearTextOp) || currentYearOp - 1;
-            }
-            while (currentYearOp < targetYear) {
-              const rightArrowsOp = await pickerContainerOp
-                .locator('button, span, i')
-                .filter({ hasText: /^(>|chevron_right|right)$/i })
-                .all();
-              const yearRightArrowOp = rightArrowsOp[1] || rightArrowsOp[0];
-              if (yearRightArrowOp) {
-                await yearRightArrowOp.click().catch(() => {});
-                await page.waitForTimeout(200);
-                const updatedYearTextOp = await yearSelectOp.innerText();
-                currentYearOp =
-                  parseInt(updatedYearTextOp) || currentYearOp + 1;
-              } else {
-                break;
-              }
-            }
+          const leftArrows = await pickerContainerOp.locator('button, span, i').filter({ hasText: /^(<|chevron_left|left)$/i }).all();
+          const yearLeftArrow = leftArrows[1] || leftArrows[0];
+          if (yearLeftArrow) {
+            await yearLeftArrow.click();
+            await page.waitForTimeout(500);
           }
         }
-        await page.waitForTimeout(500);
-      }
 
-      // 3. Select Month (e.g. 'Apr')
-      const monthSelectOp = pickerContainerOp
-        .locator('button, div, span')
-        .filter({
-          hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
-        })
-        .first();
-      const currentMonthTextOp = await monthSelectOp
-        .innerText()
-        .catch(() => '');
-      if (currentMonthTextOp.toLowerCase() !== targetMonth.toLowerCase()) {
-        await monthSelectOp.click().catch(() => {});
-        await page.waitForTimeout(500);
-
-        const targetMonthOptionOp = pickerContainerOp
-          .locator('button, div, span')
-          .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
-          .first();
-        if (await targetMonthOptionOp.isVisible()) {
-          await targetMonthOptionOp.click();
+        const updatedYearText = await yearLabelLocator.innerText({ timeout: 1000 }).catch(() => '');
+        const parsedYear = parseInt(updatedYearText);
+        if (parsedYear && parsedYear !== currentYear) {
+          currentYear = parsedYear;
         } else {
-          // Fallback: Click month decrement button (the 1st left arrow)
-          const leftArrowsOp = await pickerContainerOp
-            .locator('button, span, i')
-            .filter({ hasText: /^(<|chevron_left|left)$/i })
-            .all();
-          const monthLeftArrowOp = leftArrowsOp[0];
-          if (monthLeftArrowOp) {
-            let limitOp = 0;
-            while (limitOp < 12) {
-              const checkTextOp = await monthSelectOp.innerText();
-              if (checkTextOp.toLowerCase() === targetMonth.toLowerCase())
-                break;
-              await monthLeftArrowOp.click();
-              await page.waitForTimeout(200);
-              limitOp++;
-            }
-          }
+          currentYear = currentYear < targetYear ? currentYear + 1 : currentYear - 1;
         }
-        await page.waitForTimeout(500);
+        limit++;
       }
+
+      // Click the target month button (e.g. 'Jan')
+      const monthOption = pickerContainerOp.locator('button, div, span').filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') }).first();
+      await monthOption.click();
       await page.waitForTimeout(1000);
     }
 
@@ -1494,7 +1498,7 @@ export class FilingFlowService {
     await page.waitForTimeout(1000);
 
     const coverageCombobox = page.locator(
-      'input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]',
+      'input[placeholder*="Cakupan Produk"], input[placeholder*="Cangkupan Produk"]',
     );
     if (await coverageCombobox.isVisible()) {
       context.logStep(
@@ -1503,21 +1507,21 @@ export class FilingFlowService {
         `Mengisi Cangkupan Produk: ${productInfo.cangkupanProduk}`,
       );
       await coverageCombobox.click();
-      await coverageCombobox.fill(productInfo.cangkupanProduk);
+      await coverageCombobox.fill('');
       await page.waitForTimeout(500);
 
-      const option = page
-        .getByRole('option', { name: productInfo.cangkupanProduk })
-        .first();
-      const textOption = page
-        .getByText(productInfo.cangkupanProduk, { exact: false })
-        .first();
-      if (await option.isVisible()) {
-        await option.click();
-      } else if (await textOption.isVisible()) {
-        await textOption.click();
+      const firstOption = page.locator('.v-overlay-container .v-list-item, .v-list-item').first();
+      await firstOption.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+      if (await firstOption.isVisible()) {
+        await firstOption.click();
       } else {
-        await page.keyboard.press('Enter');
+        await coverageCombobox.pressSequentially(productInfo.cangkupanProduk, { delay: 100 });
+        await page.waitForTimeout(500);
+        if (await firstOption.isVisible()) {
+          await firstOption.click();
+        } else {
+          await page.keyboard.press('Enter');
+        }
       }
       await page.waitForTimeout(1000);
     }
