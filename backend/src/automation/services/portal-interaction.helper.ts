@@ -142,7 +142,12 @@ export class PortalInteractionHelper {
 
   public getOptimalSearchQuery(name: string): string {
     // Remove common admin prefixes to get the actual distinctive name for searching
-    const distinctiveName = name.replace(/^(kab\.|kota|kabupaten|kec\.|kecamatan|prov\.|provinsi|desa|kel\.|kelurahan)\s+/i, '').trim();
+    const distinctiveName = name
+      .replace(
+        /^(kab\.|kota|kabupaten|kec\.|kecamatan|prov\.|provinsi|desa|kel\.|kelurahan)\s+/i,
+        '',
+      )
+      .trim();
 
     if (distinctiveName.includes(' ')) {
       const parts = distinctiveName.split(/\s+/);
@@ -194,14 +199,70 @@ export class PortalInteractionHelper {
     step: number,
     timeoutMs = 3000,
   ): Promise<void> {
+    let loopCount = 0;
+    while (loopCount < 5) {
+      try {
+        const candidates = page
+          .locator(
+            '.v-overlay-container button, .v-overlay-container .v-btn, .v-overlay-container [role="button"], .popup-modal button',
+          )
+          .filter({
+            hasText: /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan/i,
+          });
+
+        // Wait briefly for elements to mount
+        await page.waitForTimeout(500);
+
+        const count = await candidates.count().catch(() => 0);
+        let clicked = false;
+        for (let i = 0; i < count; i++) {
+          const btn = candidates.nth(i);
+          if (
+            (await btn.isVisible().catch(() => false)) &&
+            (await btn.isEnabled().catch(() => false))
+          ) {
+            const text = await btn.textContent().catch(() => '');
+            context.logStep(
+              step,
+              'info',
+              `Mengklik tombol "${text.trim()}" untuk menutup popup (loop #${loopCount + 1})...`,
+            );
+            await btn.click({ force: true });
+            await page.waitForTimeout(1000);
+            clicked = true;
+            break;
+          }
+        }
+        if (clicked) {
+          loopCount++;
+          continue;
+        }
+      } catch (err) {
+        // Click failed, exit loop to run DOM removal
+        break;
+      }
+      break;
+    }
+
+    // Forceful DOM cleanup: remove active dialog overlays to clear blocking popups without destroying dropdown menu roots
     try {
-      const mengertiBtn = page.getByRole('button', { name: /mengerti/i });
-      await mengertiBtn.waitFor({ state: 'visible', timeout: timeoutMs });
-      context.logStep(step, 'info', 'Menutup popup pemberitahuan...');
-      await mengertiBtn.click();
-      await page.waitForTimeout(1000);
-    } catch (err) {
-      // Popup did not appear, proceed normally
+      await page.evaluate(() => {
+        const elementsToClear = [
+          '.v-overlay--active:has(.v-dialog)',
+          '.v-dialog',
+          '.popup-modal',
+          '.modal-backdrop',
+        ];
+        elementsToClear.forEach((sel) => {
+          document.querySelectorAll(sel).forEach((el) => el.remove());
+        });
+      });
+      await page.waitForTimeout(500);
+    } catch (e) {
+      this.logger.error(
+        'Failed during fallback DOM removal in dismissPopupIfVisible',
+        e,
+      );
     }
   }
 
@@ -354,7 +415,9 @@ export class PortalInteractionHelper {
         try {
           if (status >= 200 && status < 300) {
             const text = await response.text();
-            console.log(`[Tx: ${txId}] [DEBUG NETWORK RESPONSE BODY] URL: ${url} | Body: ${text}`);
+            console.log(
+              `[Tx: ${txId}] [DEBUG NETWORK RESPONSE BODY] URL: ${url} | Body: ${text}`,
+            );
             const trimmed =
               text.length > 200 ? text.substring(0, 200) + '...' : text;
             this.logger.log(`[Tx: ${txId}] [Network Response Body] ${trimmed}`);

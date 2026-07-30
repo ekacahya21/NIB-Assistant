@@ -46,7 +46,8 @@ describe('PortalInteractionHelper', () => {
 
   describe('extractAndStoreToken', () => {
     it('should extract token from url and store it in context', () => {
-      const url = 'https://oss.go.id/register?auth-code=my-secret-jwt-token&other=param';
+      const url =
+        'https://oss.go.id/register?auth-code=my-secret-jwt-token&other=param';
       const context: AutomationSessionContext = {
         page: null,
         draft: null,

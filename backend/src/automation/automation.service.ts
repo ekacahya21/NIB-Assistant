@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from '@zorilla/puppeteer-extra-plugin-stealth';
@@ -61,7 +66,6 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   private readonly sessionLogs = new Map<string, Array<any>>();
   private readonly activeSteps = new Map<string, number>();
 
-
   // Queue and browser management
   private activeSessionsCount = 0;
   private readonly activeBrowsers = new Map<string, any>();
@@ -114,7 +118,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         }
       }
       if (prunedCount > 0) {
-        this.logger.log(`Pruned ${prunedCount} video recording files older than 7 days.`);
+        this.logger.log(
+          `Pruned ${prunedCount} video recording files older than 7 days.`,
+        );
       } else {
         this.logger.log('No video recording files older than 7 days found.');
       }
@@ -209,7 +215,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     return new Observable<AutomationEvent>((subscriber) => {
       // Support reconnection to existing session
       if (this.activeSubjects.has(draftId)) {
-        this.logger.log(`Client reconnecting to existing session for draft: ${draftId}`);
+        this.logger.log(
+          `Client reconnecting to existing session for draft: ${draftId}`,
+        );
         const subject = this.activeSubjects.get(draftId)!;
 
         // Replay log history
@@ -274,7 +282,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   cancelStream(draftId: string, subject?: Subject<AutomationEvent>) {
     // If a subject is provided, only cancel if it is still the active stream
     if (subject && this.activeSubjects.get(draftId) !== subject) {
-      this.logger.log(`Ignoring cancellation request for old/finished stream of draft ID: ${draftId}`);
+      this.logger.log(
+        `Ignoring cancellation request for old/finished stream of draft ID: ${draftId}`,
+      );
       return;
     }
 
@@ -592,7 +602,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
     this.sessionLogs.set(draftId, []);
 
-    const isRegister = phase === 'registration' || (phase === undefined && (akunOss === 'belum' || !draft.registrationCompleted));
+    const isRegister =
+      phase === 'registration' ||
+      (phase === undefined &&
+        (akunOss === 'belum' || !draft.registrationCompleted));
     const isFiling = phase === 'filing' || phase === undefined;
     const timerNow = Date.now();
     this.executionTimers.set(draftId, {
@@ -639,11 +652,16 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         subject,
         akunOss: isRegister ? 'belum' : 'sudah',
         txId: draftId,
-        logStep: (step, status, text, data) => this.logStep(subject, step, status, text, data),
-        waitForOtp: () => this.waitForUserInput<string>(draftId, this.activeOtps),
-        waitForPassword: () => this.waitForUserInput<string>(draftId, this.activePasswords),
-        waitForProductInput: () => this.waitForUserInput<any>(draftId, this.activeProductInputs),
-        waitForParameterInput: () => this.waitForUserInput<string>(draftId, this.activeParameterInputs),
+        logStep: (step, status, text, data) =>
+          this.logStep(subject, step, status, text, data),
+        waitForOtp: () =>
+          this.waitForUserInput<string>(draftId, this.activeOtps),
+        waitForPassword: () =>
+          this.waitForUserInput<string>(draftId, this.activePasswords),
+        waitForProductInput: () =>
+          this.waitForUserInput<any>(draftId, this.activeProductInputs),
+        waitForParameterInput: () =>
+          this.waitForUserInput<string>(draftId, this.activeParameterInputs),
       };
 
       // Step 1: Initialize Browser
@@ -659,12 +677,17 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         // Step 2: Registration & Verification
         activeStep = 2;
         this.activeSteps.set(draftId, activeStep);
-        passwordCode = await this.registrationFlowService.executeRegistrationSteps(sessionCtx);
+        passwordCode =
+          await this.registrationFlowService.executeRegistrationSteps(
+            sessionCtx,
+          );
 
         // Step 3: Fill Detailed Profile Information
         activeStep = 3;
         this.activeSteps.set(draftId, activeStep);
-        await this.registrationFlowService.executeDetailProfileSteps(sessionCtx);
+        await this.registrationFlowService.executeDetailProfileSteps(
+          sessionCtx,
+        );
 
         // Save credentials immediately after successful registration
         await this.draftsService.update(draftId, {
@@ -704,17 +727,25 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         // Step 4: Login & Authentication
         activeStep = 4;
         this.activeSteps.set(draftId, activeStep);
-        const jwtToken = await this.filingFlowService.executeLoginSteps(sessionCtx, passwordCode);
+        const jwtToken = await this.filingFlowService.executeLoginSteps(
+          sessionCtx,
+          passwordCode,
+        );
 
         // Step 5: Kelola Lokasi Usaha
         activeStep = 5;
         this.activeSteps.set(draftId, activeStep);
-        await this.filingFlowService.executeManageLocationSteps(sessionCtx, jwtToken);
+        await this.filingFlowService.executeManageLocationSteps(
+          sessionCtx,
+          jwtToken,
+        );
 
         // Step 6: Kelola detail Usaha
         activeStep = 6;
         this.activeSteps.set(draftId, activeStep);
-        await this.filingFlowService.executeManageBusinessDetailSteps(sessionCtx);
+        await this.filingFlowService.executeManageBusinessDetailSteps(
+          sessionCtx,
+        );
 
         // Step 7: Selesai
         activeStep = 7;
@@ -746,7 +777,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         : 0;
       const finalStatus =
         activeStep === 7
-          ? (phase === 'registration' ? 'DRAFT' : 'COMPLETED')
+          ? phase === 'registration'
+            ? 'DRAFT'
+            : 'COMPLETED'
           : phase === 'registration'
             ? 'FAILED'
             : activeStep > 2
@@ -843,7 +876,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
     const browser = await chromium.launch({
       headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
-      slowMo: process.env.PLAYWRIGHT_SLOW_MO ? parseInt(process.env.PLAYWRIGHT_SLOW_MO) : 200,
+      slowMo: process.env.PLAYWRIGHT_SLOW_MO
+        ? parseInt(process.env.PLAYWRIGHT_SLOW_MO)
+        : 200,
     });
     this.activeBrowsers.set(txId, browser);
 
@@ -891,7 +926,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      await this.interactionHelper.logSessionState(page, `automation-${txId}`, 'Browser Init');
+      await this.interactionHelper.logSessionState(
+        page,
+        `automation-${txId}`,
+        'Browser Init',
+      );
 
       return { browser, context, page };
     } catch (err) {
@@ -905,10 +944,14 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     inputMap: Map<string, T>,
     timeoutMs = 120000,
   ): Promise<T> {
-    this.logger.log(`[waitForUserInput] Called for draftId: "${draftId}". Map currently has key: ${inputMap.has(draftId)}`);
+    this.logger.log(
+      `[waitForUserInput] Called for draftId: "${draftId}". Map currently has key: ${inputMap.has(draftId)}`,
+    );
     if (inputMap.has(draftId)) {
       const val = inputMap.get(draftId)!;
-      this.logger.log(`[waitForUserInput] Immediate hit for draftId: "${draftId}". Deleting key and returning value.`);
+      this.logger.log(
+        `[waitForUserInput] Immediate hit for draftId: "${draftId}". Deleting key and returning value.`,
+      );
       inputMap.delete(draftId);
       return val;
     }
@@ -917,9 +960,13 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       let isResolved = false;
 
       const subscription = this.userConfirmations.subscribe((id) => {
-        this.logger.log(`[waitForUserInput Subscription] Received notification for id: "${id}". Target draftId: "${draftId}". Map has key: ${inputMap.has(draftId)}. Cancelled drafts has key: ${this.cancelledDrafts.has(draftId)}`);
+        this.logger.log(
+          `[waitForUserInput Subscription] Received notification for id: "${id}". Target draftId: "${draftId}". Map has key: ${inputMap.has(draftId)}. Cancelled drafts has key: ${this.cancelledDrafts.has(draftId)}`,
+        );
         if (this.cancelledDrafts.has(draftId)) {
-          this.logger.warn(`[waitForUserInput Subscription] Draft "${draftId}" is cancelled. Rejecting promise.`);
+          this.logger.warn(
+            `[waitForUserInput Subscription] Draft "${draftId}" is cancelled. Rejecting promise.`,
+          );
           isResolved = true;
           subscription.unsubscribe();
           clearTimeout(timer);
@@ -929,7 +976,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
         if (id === draftId && inputMap.has(draftId)) {
           const val = inputMap.get(draftId)!;
-          this.logger.log(`[waitForUserInput Subscription] Found value for draftId: "${draftId}". Resolving promise.`);
+          this.logger.log(
+            `[waitForUserInput Subscription] Found value for draftId: "${draftId}". Resolving promise.`,
+          );
           inputMap.delete(draftId);
           isResolved = true;
           subscription.unsubscribe();
@@ -940,7 +989,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
       const timer = setTimeout(() => {
         if (!isResolved) {
-          this.logger.error(`[waitForUserInput Timeout] Timeout occurred for draftId: "${draftId}" after ${timeoutMs}ms.`);
+          this.logger.error(
+            `[waitForUserInput Timeout] Timeout occurred for draftId: "${draftId}" after ${timeoutMs}ms.`,
+          );
           subscription.unsubscribe();
           reject(new Error('Batas waktu input habis.'));
         }
