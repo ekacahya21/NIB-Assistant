@@ -9,10 +9,10 @@ generator client {
 
 model Draft {
   id                String   @id
-  namaPemilik       String   @map("nama_pemilik")
-  nik               String
-  tanggalLahir      String   @map("tanggal_lahir")
-  nomorHp           String   @map("nomor_hp")
+  namaPemilik       String?  @map("nama_pemilik")
+  nik               String?
+  tanggalLahir      String?  @map("tanggal_lahir")
+  nomorHp           String?  @map("nomor_hp")
   email             String
   alamatUsaha       String   @map("alamat_usaha")
   alamatKtp         String?  @map("alamat_ktp")

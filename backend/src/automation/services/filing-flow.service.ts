@@ -84,7 +84,7 @@ export class FilingFlowService {
 
     while (!loginSuccess && attempts < maxAttempts) {
       attempts++;
-
+      
       // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
       let finalPassword = passwordCode;
       if (!finalPassword) {
@@ -337,8 +337,8 @@ export class FilingFlowService {
         await loader.waitFor({ state: 'detached', timeout: 15000 });
       }
     } catch (err) {
-      context.logStep(
-        5,
+    context.logStep(
+      5,
         'warn',
         'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...',
       );
@@ -358,39 +358,9 @@ export class FilingFlowService {
     }
 
     // pilih menu kelola lokasi usaha
-    try {
-      await page
-        .getByTestId('top-menus')
-        .locator('div')
-        .filter({ hasText: 'Perizinan Berusaha' })
-        .click({ timeout: 5000 });
-    } catch (err) {
-      context.logStep(
-        5,
-        'info',
-        'Menemukan menu "Perizinan Berusaha" menggunakan selector alternatif...',
-      );
-      await page.locator('text=Perizinan Berusaha').first().click();
-    }
-
-    try {
-      await page
-        .getByTestId('desktop-dropdown-panel')
-        .getByText('Kelola Usaha')
-        .click({ timeout: 5000 });
-    } catch (err) {
-      await page.locator('text=Kelola Usaha').first().click();
-    }
-
-    try {
-      await page
-        .getByTestId('category-right-panel')
-        .getByText('Lokasi Usaha')
-        .first()
-        .click({ timeout: 5000 });
-    } catch (err) {
-      await page.locator('text=Lokasi Usaha').first().click();
-    }
+    await page.getByText('Perizinan Berusaha', { exact: true }).click();
+    await page.getByText('Kelola Usaha', { exact: true }).click();
+    await page.getByText('Lokasi Usaha', { exact: true }).click();
 
     // wait for redirected page loaded
     await page
@@ -432,7 +402,7 @@ export class FilingFlowService {
     await page
       .waitForURL(/.*\/(lokasi-usaha|kelola-usaha)\/tambah-lokasi.*/, {
         waitUntil: 'load',
-        timeout: 15000,
+      timeout: 15000,
       })
       .catch(() => null);
 
@@ -856,18 +826,18 @@ export class FilingFlowService {
     // select jenis kegiatan usaha
     await page.getByTestId('jenis-kegiatan-select').locator('input').click();
 
-    const option = page.getByText('Kegiatan Usaha Utama');
-    await option.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
-    if (!(await option.isVisible())) {
+    const optionUtama = page.getByText('Kegiatan Usaha Utama', { exact: true });
+    await optionUtama.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+    if (!(await optionUtama.isVisible())) {
       // Close and reopen dropdown if options didn't load (No data available)
       await page.keyboard.press('Escape');
       await page.waitForTimeout(1000);
       await page.getByTestId('jenis-kegiatan-select').locator('input').click();
-      await option
+      await optionUtama
         .waitFor({ state: 'visible', timeout: 5000 })
         .catch(() => null);
     }
-    await option.click();
+    await optionUtama.click();
     await page.waitForTimeout(1500);
 
     // Dismiss warning popup if visible
@@ -2038,6 +2008,17 @@ export class FilingFlowService {
       .click({ force: true });
     await page.waitForTimeout(3000);
 
+    // wait for prosesProyek
+    await page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('prosesProyek') &&
+          response.status() === 200,
+        { timeout: 120000 },
+      )
+      .catch(() => null);
+    await page.waitForTimeout(1500);
+
     context.logStep(6, 'info', "Memilih 'Belum' memiliki amdal..");
     await page.getByRole('radio', { name: 'Belum' }).check();
 
@@ -2046,27 +2027,42 @@ export class FilingFlowService {
     await page.waitForTimeout(1500);
 
     context.logStep(6, 'info', 'Klik tombol Ya, Lanjut..');
-    await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
-    await page.waitForTimeout(1500);
 
-    // Wait for submitLingkungan response
-    await page
+    // Register response listeners BEFORE clicking "Ya, Lanjut" so fast responses aren't missed
+    const submitLingkunganPromise = page
       .waitForResponse(
         (response: any) =>
           response.url().includes('submitLingkungan') &&
           response.status() === 200,
-        { timeout: 15000 },
+        { timeout: 120000 },
       )
       .catch(() => null);
 
-    // Wait for prosesProyek response
-    await page
+    const prosesProyekLanjutPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('prosesProyek') && response.status() === 200,
-        { timeout: 15000 },
+          response.url().includes('prosesProyek') &&
+          response.status() === 200,
+        { timeout: 120000 },
       )
       .catch(() => null);
+
+    const detailPerizinanLanjutPromise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('detailPerizinan') &&
+          response.status() === 200,
+        { timeout: 120000 },
+      )
+      .catch(() => null);
+
+    await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
+
+    // Await response promises
+    await submitLingkunganPromise;
+    await prosesProyekLanjutPromise;
+    await detailPerizinanLanjutPromise;
+    await page.waitForTimeout(1500);
 
     // TODO move to new step from this state, step name: Proses Penapisan Izin Lingkungan
     context.logStep(6, 'info', 'Klik tab Persyaratan Dasar..');
@@ -2158,13 +2154,86 @@ export class FilingFlowService {
       context.logStep(6, 'info', `ID Izin: ${idIzin}`);
 
       const proyekScope = page.locator(`#sub-project-card-${idIzin}`);
-      await proyekScope
-        .waitFor({ state: 'visible', timeout: 15000 })
-        .catch(() => {
-          context.logStep(6, 'error', 'Proyek tidak ditemukan..');
-          throw new Error('Proyek tidak ditemukan..');
-        });
+      let foundProyek = false;
+
+      try {
+        await proyekScope.waitFor({ state: 'visible', timeout: 5000 });
+        foundProyek = true;
+      } catch (e) {
+        foundProyek = false;
+      }
+
+      if (!foundProyek) {
+        context.logStep(
+          6,
+          'info',
+          `Proyek #${idIzin} belum ditemukan di halaman pertama. Mencari di halaman pagination berikutnya...`,
+        );
+
+        for (let pageNum = 1; pageNum <= 10; pageNum++) {
+          const nextBtn = page
+            .locator('.el-pagination button.btn-next, button.btn-next')
+            .first();
+
+          const isNextDisabled = await nextBtn
+            .evaluate(
+              (btn: HTMLButtonElement) =>
+                btn.disabled || btn.classList.contains('disabled'),
+            )
+            .catch(() => true);
+
+          if (isNextDisabled) {
+            context.logStep(
+              6,
+              'info',
+              'Sudah mencapai halaman terakhir pagination.',
+            );
+            break;
+          }
+
+          context.logStep(
+            6,
+            'info',
+            `Pindah ke halaman pagination berikutnya (${pageNum + 1})...`,
+          );
+
+          const listProyekPromise = page
+            .waitForResponse(
+              (response: any) =>
+                response.url().includes('list-proyek') &&
+                response.status() === 200,
+              { timeout: 15000 },
+            )
+            .catch(() => null);
+
+          await nextBtn.click();
+          await listProyekPromise;
+          await page.waitForTimeout(1500);
+
+          if (await proyekScope.isVisible().catch(() => false)) {
+            foundProyek = true;
+            context.logStep(
+              6,
+              'info',
+              `Proyek #${idIzin} berhasil ditemukan di halaman pagination.`,
+            );
+            break;
+          }
+        }
+      }
+
+      if (!foundProyek) {
+        context.logStep(
+          6,
+          'error',
+          `Proyek #${idIzin} tidak ditemukan pada seluruh halaman pagination.`,
+        );
+        throw new Error('Proyek tidak ditemukan..');
+      }
       const proyekCheck = proyekScope.locator('.el-checkbox').first();
+      await proyekScope.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(1000);
+
       context.logStep(6, 'info', 'Mencentang checkbox proyek...');
       await proyekCheck.click();
       await page.waitForTimeout(1000);
@@ -2199,9 +2268,25 @@ export class FilingFlowService {
       context.logStep(6, 'info', 'Membuka pilihan sektor...');
       await page.locator(`#sector-select-${idIzin}`).click();
 
-      const multiSectorOpt = page.getByText('Multi Sektor');
-      if (await multiSectorOpt.isVisible()) {
-        context.logStep(6, 'info', 'Memilih opsi Multi Sektor...');
+      // wait for api/business api
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes('api/business') &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+
+      const multiSectorOpt = page
+        .locator('.el-select-dropdown__item, .el-select-dropdown li, [role="option"]')
+        .filter({ hasText: /multisektor/i })
+        .first();
+
+      await multiSectorOpt.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+
+      if (await multiSectorOpt.isVisible().catch(() => false)) {
+        context.logStep(6, 'info', 'Memilih opsi Multisektor...');
         await multiSectorOpt.click();
       } else {
         const targetKbli = draft.kbliCode || '';
@@ -2209,7 +2294,7 @@ export class FilingFlowService {
           .getByRole('listitem')
           .filter({ hasText: targetKbli })
           .first();
-        if (targetKbli && (await targetItem.isVisible())) {
+        if (targetKbli && (await targetItem.isVisible().catch(() => false))) {
           context.logStep(
             6,
             'info',
@@ -2219,6 +2304,357 @@ export class FilingFlowService {
         } else {
           context.logStep(6, 'info', 'Memilih sektor pertama yang tersedia...');
           await page.getByRole('listitem').first().click();
+        }
+      }
+
+      // wait for api/business api
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes('api/business') &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+      
+      const jenisUsahaOpt = page.locator(`#biz-type-select-${idIzin}`);
+      await jenisUsahaOpt.waitFor({ state: 'visible', timeout: 15000 });
+      if (await jenisUsahaOpt.isVisible().catch(() => false)) {
+        await jenisUsahaOpt.click();
+        await page.waitForTimeout(1000);
+
+        const multiSectorJenisUsahaOpt = page.getByRole('listitem').filter({ hasText: 'Multisektor' });
+
+        await multiSectorJenisUsahaOpt
+          .waitFor({ state: 'visible', timeout: 5000 })
+          .catch(() => null);
+
+        if (await multiSectorJenisUsahaOpt.isVisible().catch(() => false)) {
+          context.logStep(6, 'info', 'Memilih opsi Multisektor...');
+          await multiSectorJenisUsahaOpt.click();
+        } else {
+          const firstOption = page
+            .locator('.el-select-dropdown__item, .el-select-dropdown li, [role="option"]')
+            .first();
+          await firstOption
+            .waitFor({ state: 'visible', timeout: 5000 })
+            .catch(() => null);
+
+          if (await firstOption.isVisible().catch(() => false)) {
+            context.logStep(
+              6,
+              'info',
+              'Opsi Multisektor tidak ditemukan. Memilih opsi jenis usaha pertama yang tersedia...',
+            );
+            await firstOption.click();
+          } else {
+            context.logStep(
+              6,
+              'warn',
+              'Opsi jenis kegiatan usaha tidak dapat dipilih.',
+            );
+          }
+        }
+      }
+
+      const namaUsahaInput = page.locator(`#name-input-${idIzin}`);
+      await namaUsahaInput.waitFor({ state: 'visible', timeout: 15000 });
+      if (await namaUsahaInput.isVisible()) {
+        await namaUsahaInput.fill(draft.namaUsaha || '');
+      }
+
+      // Helper to handle "Data Belum Lengkap" modal popup
+      const handleIncompleteDataPopup = async () => {
+        const popup = page
+          .locator('.el-message-box__wrapper, .el-message-box, .v-overlay')
+          .filter({ hasText: /Data Belum Lengkap|Mohon Lengkapi Semua Data/i })
+          .first();
+
+        await popup.waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
+        if (await popup.isVisible().catch(() => false)) {
+          context.logStep(
+            6,
+            'warn',
+            'Popup "Data Belum Lengkap" terdeteksi. Mengklik "OK, SAYA MENGERTI"...',
+          );
+          const okBtn = page
+            .locator('.el-message-box button, .el-message-box__btns button')
+            .filter({ hasText: /OK,\s*SAYA\s*MENGERTI|Mengerti|Tutup/i })
+            .first();
+
+          if (await okBtn.isVisible().catch(() => false)) {
+            await okBtn.click({ force: true }).catch(() => null);
+            await page.waitForTimeout(500);
+          }
+          return true;
+        }
+        return false;
+      };
+
+      // Fill parameter screening table for luas bangunan terbangun and luas lahan terbangun
+      const fillParameterTable = async () => {
+        const targetParams = ['luas bangunan terbangun', 'luas lahan terbangun'];
+        const luasTanahVal = String(draft.luasTanah || '50');
+
+        for (const paramName of targetParams) {
+          const row = page
+            .locator('.el-table__row, tr')
+            .filter({ hasText: new RegExp(paramName, 'i') })
+            .first();
+
+          if (await row.isVisible().catch(() => false)) {
+            context.logStep(
+              6,
+              'info',
+              `Mengisi parameter '${paramName}' dengan besaran: ${luasTanahVal} m2...`,
+            );
+
+            // 1. Check checkbox if not already checked
+            const checkboxInner = row.locator('.el-checkbox__inner, .el-checkbox').first();
+            const isChecked = await row
+              .locator('.el-checkbox__input, .el-checkbox')
+              .first()
+              .evaluate((el: Element) => el.classList.contains('is-checked'))
+              .catch(() => false);
+
+            if (!isChecked) {
+              await checkboxInner.click({ force: true }).catch(() => null);
+              await page.waitForTimeout(500);
+            }
+
+            // 2. Fill Besaran input (Column 3)
+            const besaranInput = row
+              .locator('td:nth-child(3) input, .el-table_1_column_3 input')
+              .first();
+            await besaranInput.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+            if (await besaranInput.isVisible().catch(() => false)) {
+              await besaranInput.click({ force: true }).catch(() => null);
+              await besaranInput.fill('');
+              await besaranInput.pressSequentially(luasTanahVal, { delay: 50 });
+              await besaranInput
+                .evaluate((el: HTMLInputElement) => {
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                })
+                .catch(() => null);
+              await page.waitForTimeout(500);
+            }
+
+            // 3. Select Satuan (Column 4)
+            const selectSatuan = row
+              .locator('td:nth-child(4) .el-select, .el-table_1_column_4 .el-select')
+              .first();
+            if (await selectSatuan.isVisible().catch(() => false)) {
+              const selectInput = selectSatuan.locator('input').first();
+              await selectInput
+                .click({ force: true })
+                .catch(() => selectSatuan.click({ force: true }))
+                .catch(() => null);
+              await page.waitForTimeout(500);
+
+              // Target active visible dropdown menu container
+              const activeDropdown = page.locator(
+                '.el-select-dropdown:not([style*="display: none"]), .el-popper:not([style*="display: none"])',
+              );
+
+              const m2Item = activeDropdown
+                .locator('.el-select-dropdown__item, li')
+                .filter({ hasText: /^m2$/i })
+                .first();
+
+              await m2Item.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
+
+              if (await m2Item.isVisible().catch(() => false)) {
+                await m2Item.click({ force: true }).catch(() => null);
+                await page.waitForTimeout(300);
+              } else {
+                const fallbackM2 = page
+                  .locator('.el-select-dropdown__item')
+                  .filter({ hasText: /^m2$/i })
+                  .first();
+                if (await fallbackM2.isVisible().catch(() => false)) {
+                  await fallbackM2.click({ force: true }).catch(() => null);
+                  await page.waitForTimeout(300);
+                }
+              }
+
+              // Keyboard fallback if dropdown is still open
+              const isStillOpen = await page
+                .locator('.el-select-dropdown:not([style*="display: none"])')
+                .isVisible()
+                .catch(() => false);
+
+              if (isStillOpen) {
+                await page.keyboard.press('ArrowDown').catch(() => null);
+                await page.waitForTimeout(200);
+                await page.keyboard.press('Enter').catch(() => null);
+                await page.waitForTimeout(300);
+              }
+
+              await page.waitForTimeout(300);
+            }
+          }
+        }
+      };
+
+      await fillParameterTable();
+
+      // check next step
+      const nextButton = page.getByRole('button', { name: 'Selanjutnya' });
+      if (await nextButton.isVisible().catch(() => false)) {
+        await nextButton.click();
+        await page.waitForTimeout(1000);
+
+        if (await handleIncompleteDataPopup()) {
+          context.logStep(6, 'info', 'Mengisi ulang tabel parameter...');
+          await fillParameterTable();
+          await nextButton.click();
+          await page.waitForTimeout(1000);
+          await handleIncompleteDataPopup();
+        }
+      }
+
+      // Click radio button "Ya" on "Apakah berlokasi di daratan?"
+      const daratanContainer = page
+        .locator('.kewenangan-container, div')
+        .filter({ hasText: 'Apakah berlokasi di daratan?' })
+        .first();
+
+      if (await daratanContainer.isVisible().catch(() => false)) {
+        context.logStep(
+          6,
+          'info',
+          'Memilih "Ya" pada pertanyaan Apakah berlokasi di daratan?...',
+        );
+        const yaRadio = daratanContainer
+          .locator('.el-radio')
+          .filter({ hasText: /^Ya$/i })
+          .first();
+
+        if (await yaRadio.isVisible().catch(() => false)) {
+          await yaRadio.click().catch(() => null);
+          await page.waitForTimeout(500);
+        } else {
+          const fallbackYa = page.getByRole('radio', { name: 'Ya' }).first();
+          if (await fallbackYa.isVisible().catch(() => false)) {
+            await fallbackYa.click().catch(() => null);
+            await page.waitForTimeout(500);
+          }
+        }
+
+        // Select "Tapak proyek berada di satu kabupaten/kota" if visible
+        const tapakSatuKab = page
+          .locator('.el-radio')
+          .filter({ hasText: /tapak proyek berada di satu kabupaten\/kota/i })
+          .first();
+
+        await tapakSatuKab.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
+        if (await tapakSatuKab.isVisible().catch(() => false)) {
+          context.logStep(
+            6,
+            'info',
+            'Memilih "Tapak proyek berada di satu kabupaten/kota"...',
+          );
+          await tapakSatuKab.click().catch(() => null);
+          await page.waitForTimeout(500);
+        }
+      }
+
+      // go to next step
+      const nextButtonFinal = page.getByRole('button', { name: 'Selanjutnya' });
+      if (await nextButtonFinal.isVisible().catch(() => false)) {
+        await nextButtonFinal.click();
+        await page.waitForTimeout(1000);
+
+        if (await handleIncompleteDataPopup()) {
+          context.logStep(6, 'info', 'Mengisi ulang tabel parameter...');
+          await fillParameterTable();
+          await nextButtonFinal.click();
+          await page.waitForTimeout(1000);
+          await handleIncompleteDataPopup();
+        }
+      }
+
+      // wait for response of api penapisan-kewenangan
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes('penapisan-kewenangan') &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+      console.log('Penapisan Kewenangan berhasil');
+      await page.waitForTimeout(2000);
+
+      // save
+      const saveButton = page.getByRole('button', { name: 'Simpan' }).first();
+      if (await saveButton.isVisible().catch(() => false)) {
+        context.logStep(6, 'info', 'Mengklik tombol Simpan...');
+
+        // Register update data permohonan response listener
+        const updateDataPermohonanPromise = page
+          .waitForResponse(
+            (response: any) =>
+              response.url().includes('api/projects') &&
+              response.status() === 200,
+            { timeout: 20000 },
+          )
+          .catch(() => null);
+
+        await saveButton.click();
+        await page.waitForTimeout(1000);
+
+        // Check if popup confirmation "Perhatian" appears
+        const popupConfirm = page.locator('.el-message-box__wrapper, .el-message-box').first();
+        await popupConfirm.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+
+        if (await popupConfirm.isVisible().catch(() => false)) {
+          context.logStep(
+            6,
+            'info',
+            'Konfirmasi simpan terdeteksi. Mengklik tombol Simpan pada konfirmasi...',
+          );
+
+          const popupSimpanBtn = page
+            .locator('.el-message-box__btns button, .el-message-box button')
+            .filter({ hasText: /^Simpan$/i })
+            .first();
+
+          if (await popupSimpanBtn.isVisible().catch(() => false)) {
+            await popupSimpanBtn.click().catch(() => null);
+          } else {
+            const fallbackModalBtn = page
+              .locator('.el-message-box__btns .el-button--primary')
+              .first();
+            if (await fallbackModalBtn.isVisible().catch(() => false)) {
+              await fallbackModalBtn.click().catch(() => null);
+            }
+          }
+        }
+
+        // wait for response of api update data permohonan
+        await updateDataPermohonanPromise;
+        context.logStep(6, 'info', 'Update Data Permohonan berhasil.');
+        await page.waitForTimeout(2000);
+
+        // Click final completion button "Oke, Mengerti."
+        const finalOkBtn = page
+          .locator('button, .v-btn, .el-button, [role="button"]')
+          .filter({ hasText: /Oke,\s*Mengerti/i })
+          .first();
+
+        await finalOkBtn.waitFor({ state: 'visible', timeout: 10000 }).catch(() => null);
+        if (await finalOkBtn.isVisible().catch(() => false)) {
+          context.logStep(
+            6,
+            'info',
+            'Mengklik tombol "Oke, Mengerti." untuk menyelesaikan proses...',
+          );
+          await finalOkBtn.click().catch(() => null);
+          await page.waitForTimeout(1000);
+        } else {
+          await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
         }
       }
     }

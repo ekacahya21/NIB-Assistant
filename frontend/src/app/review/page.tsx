@@ -56,7 +56,8 @@ export default function ReviewPage() {
     jenisProdukJasa: "",
     cangkupanProduk: "",
     kapasitas: "0",
-    satuan: ""
+    satuan: "",
+    ossPassword: ""
   });
 
   const [downloadingNps, setDownloadingNps] = useState(false);
@@ -176,6 +177,9 @@ export default function ReviewPage() {
         }
       }
 
+      const storedAkunOss = sessionStorage.getItem("akun_oss") || "belum";
+      setAkunOss(storedAkunOss);
+
       if (storedKbli) {
         try {
           setSelectedKbli(JSON.parse(storedKbli));
@@ -185,6 +189,9 @@ export default function ReviewPage() {
       }
     }
   }, []);
+
+  // Account mode state
+  const [akunOss, setAkunOss] = useState<string>("belum");
 
   // Step 2 Verification States (Background Registration tracking)
   const [isVerifyingStep2, setIsVerifyingStep2] = useState(false);
@@ -223,7 +230,7 @@ export default function ReviewPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const regDone = sessionStorage.getItem("registration_completed") === "true";
-      const isBelum = sessionStorage.getItem("akun_oss") === "belum";
+      const isBelum = (sessionStorage.getItem("akun_oss") || "belum") === "belum";
       const draftId = sessionStorage.getItem("draft_id");
       setRegistrationCompleted(regDone);
 
@@ -464,7 +471,7 @@ export default function ReviewPage() {
   const handleProceedToAutomation = async () => {
     if (!isAllConsentGiven || isSubmitting) return;
 
-    if (isVerifyingStep2 && !registrationCompleted) {
+    if (akunOss !== "sudah" && isVerifyingStep2 && !registrationCompleted) {
       setIsWaitingForRegistration(true);
       return;
     }
@@ -512,8 +519,8 @@ export default function ReviewPage() {
         cangkupanProduk: formData.cangkupanProduk,
         kapasitas: formData.kapasitas,
         satuan: formData.satuan,
-        ossPassword: typeof window !== "undefined" ? sessionStorage.getItem("oss_password") || "" : "",
-        registrationCompleted: typeof window !== "undefined" ? sessionStorage.getItem("registration_completed") === "true" : false,
+        ossPassword: formData.ossPassword || (typeof window !== "undefined" ? sessionStorage.getItem("oss_password") || "" : ""),
+        registrationCompleted: typeof window !== "undefined" ? (sessionStorage.getItem("akun_oss") === "sudah" || sessionStorage.getItem("registration_completed") === "true") : false,
         sessionId: getSessionId(),
       };
 
@@ -613,67 +620,84 @@ export default function ReviewPage() {
           {/* 5 Summary Cards */}
           <div className="space-y-4">
             
-            {/* Card 1: Identitas Pemilik */}
+            {/* Card 1: Identitas Pemilik / Akun OSS */}
             <div className="bento-card relative">
               <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
                 <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-primary-container text-sm">person</span>
-                  IDENTITAS PEMILIK
+                  <span className="material-symbols-outlined text-primary-container text-sm">
+                    {akunOss === "sudah" ? "account_circle" : "person"}
+                  </span>
+                  {akunOss === "sudah" ? "KREDENSIAL AKUN OSS" : "IDENTITAS PEMILIK"}
                 </span>
                 <button 
                   onClick={() => handleEditSection(1)} 
-                  className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5"
+                  className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-xs">edit</span> Ubah
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Nama Lengkap</span>
-                  <span className="block font-bold text-on-surface mt-0.5">{formData.namaPemilik}</span>
+              {akunOss === "sudah" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Email / Username OSS</span>
+                    <span className="block font-bold text-on-surface mt-0.5">{formData.email}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Kata Sandi OSS</span>
+                    <span className="block font-mono font-bold text-on-surface mt-0.5">••••••••</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">NIK (16-Digit)</span>
-                  <span className="block font-mono font-bold text-on-surface mt-0.5">{formData.nik}</span>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Nama Lengkap</span>
+                    <span className="block font-bold text-on-surface mt-0.5">{formData.namaPemilik}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">NIK (16-Digit)</span>
+                    <span className="block font-mono font-bold text-on-surface mt-0.5">{formData.nik}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Tanggal Lahir</span>
+                    <span className="block font-semibold text-on-surface mt-0.5">{formData.tanggalLahir}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Jenis Kelamin</span>
+                    <span className="block font-semibold text-on-surface mt-0.5">{formData.jenisKelamin}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Nomor WhatsApp</span>
+                    <span className="block font-semibold text-on-surface mt-0.5">{formData.nomorHp}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Alamat Email</span>
+                    <span className="block font-semibold text-on-surface mt-0.5">{formData.email}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Tanggal Lahir</span>
-                  <span className="block font-semibold text-on-surface mt-0.5">{formData.tanggalLahir}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Jenis Kelamin</span>
-                  <span className="block font-semibold text-on-surface mt-0.5">{formData.jenisKelamin}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Nomor WhatsApp</span>
-                  <span className="block font-semibold text-on-surface mt-0.5">{formData.nomorHp}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Alamat Email</span>
-                  <span className="block font-semibold text-on-surface mt-0.5">{formData.email}</span>
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Card 2: Alamat KTP */}
-            <div className="bento-card">
-              <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
-                <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-primary-container text-sm">badge</span>
-                  ALAMAT DOMISILI KTP
-                </span>
-                <button 
-                  onClick={() => handleEditSection(2)} 
-                  className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5"
-                >
-                  <span className="material-symbols-outlined text-xs">edit</span> Ubah
-                </button>
+            {/* Card 2: Alamat KTP (Only for new registrations) */}
+            {akunOss !== "sudah" && (
+              <div className="bento-card">
+                <div className="flex justify-between items-center border-b border-border-light pb-2 mb-3">
+                  <span className="text-xs font-extrabold text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary-container text-sm">badge</span>
+                    ALAMAT DOMISILI KTP
+                  </span>
+                  <button 
+                    onClick={() => handleEditSection(2)} 
+                    className="text-primary-container font-extrabold text-[10px] uppercase tracking-wider hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-xs">edit</span> Ubah
+                  </button>
+                </div>
+                <div className="text-xs">
+                  <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Alamat Sesuai KTP</span>
+                  <p className="font-semibold text-on-surface leading-relaxed mt-0.5">{formData.alamatKtp}</p>
+                </div>
               </div>
-              <div className="text-xs">
-                <span className="block text-[10px] text-outline font-bold uppercase tracking-wide">Alamat Sesuai KTP</span>
-                <p className="font-semibold text-on-surface leading-relaxed mt-0.5">{formData.alamatKtp}</p>
-              </div>
-            </div>
+            )}
 
             {/* Card 3: Alamat Usaha & Peta Koordinat */}
             <div className="bento-card">

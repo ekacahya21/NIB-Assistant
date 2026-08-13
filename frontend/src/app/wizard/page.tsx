@@ -46,6 +46,7 @@ export default function WizardPage() {
     jenisKelamin: "Laki-laki",
     nomorHp: "",
     email: "",
+    ossPassword: "",
     // Step 2: Lokasi Usaha
     alamatKtp: "",
     provinsiKtp: "",
@@ -83,6 +84,10 @@ export default function WizardPage() {
     kapasitas: "0",
     satuan: ""
   });
+
+  // Account Type & UI toggle states
+  const [akunOss, setAkunOss] = useState<string>("belum");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   // Geocoding Coordinates State
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -427,6 +432,9 @@ export default function WizardPage() {
       const savedStep = sessionStorage.getItem("wizard_step");
       const scale = sessionStorage.getItem("skala_usaha") || "";
       const modalDefault = scale === "mikro" ? "50000000" : "";
+      const storedAkunOss = sessionStorage.getItem("akun_oss") || "belum";
+      setAkunOss(storedAkunOss);
+      const storedPassword = sessionStorage.getItem("oss_password") || "";
 
       const storedKbli = sessionStorage.getItem("selected_kbli");
       if (storedKbli) {
@@ -450,7 +458,11 @@ export default function WizardPage() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setFormData((prev) => ({ ...prev, ...parsed }));
+          setFormData((prev) => ({ 
+            ...prev, 
+            ...parsed,
+            ossPassword: parsed.ossPassword || storedPassword || prev.ossPassword 
+          }));
           if (parsed.ceritaUsaha && parsed.ceritaUsaha.trim().length >= 15) {
             setKbliFlow("ai");
           }
@@ -460,6 +472,7 @@ export default function WizardPage() {
       } else {
         setFormData((prev) => ({
           ...prev,
+          ossPassword: prev.ossPassword || storedPassword,
           modalUsaha: prev.modalUsaha || modalDefault
         }));
       }
@@ -994,6 +1007,7 @@ export default function WizardPage() {
 
     if (
       field !== "email" &&
+      field !== "ossPassword" &&
       field !== "jenisKelamin" &&
       field !== "provinsi" &&
       field !== "kotaKabupaten" &&
@@ -1028,6 +1042,10 @@ export default function WizardPage() {
       return;
     }
 
+    if (field === "ossPassword" && typeof window !== "undefined") {
+      sessionStorage.setItem("oss_password", processedValue);
+    }
+
     setFormData((prev) => {
       const updated = { ...prev, [field]: processedValue };
       if (field === "alamatKtp" && updated.isAddressSame) {
@@ -1039,43 +1057,64 @@ export default function WizardPage() {
     triggerAutosave();
   };
 
+  const handleToggleAkunOss = (val: string) => {
+    setAkunOss(val);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("akun_oss", val);
+    }
+    setErrors({});
+  };
+
   // 4-Step Validation
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (step === 1) {
-      if (!formData.namaPemilik.trim()) {
-        newErrors.namaPemilik = "Nama pemilik harus diisi.";
-      }
-      if (formData.nik.length !== 16) {
-        newErrors.nik = "NIK harus terdiri dari 16 digit angka.";
-      }
-      if (!formData.tanggalLahir) {
-        newErrors.tanggalLahir = "Tanggal lahir harus diisi.";
-      }
-      if (formData.nomorHp.length < 10) {
-        newErrors.nomorHp = "Nomor WhatsApp belum lengkap.";
-      }
-      if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        newErrors.email = "Format email tidak valid.";
+      if (akunOss === "sudah") {
+        if (!formData.email.trim()) {
+          newErrors.email = "Alamat email / username akun OSS harus diisi.";
+        } else if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          newErrors.email = "Format email tidak valid.";
+        }
+        if (!formData.ossPassword || !formData.ossPassword.trim()) {
+          newErrors.ossPassword = "Kata sandi akun OSS harus diisi.";
+        }
+      } else {
+        if (!formData.namaPemilik.trim()) {
+          newErrors.namaPemilik = "Nama pemilik harus diisi.";
+        }
+        if (formData.nik.length !== 16) {
+          newErrors.nik = "NIK harus terdiri dari 16 digit angka.";
+        }
+        if (!formData.tanggalLahir) {
+          newErrors.tanggalLahir = "Tanggal lahir harus diisi.";
+        }
+        if (formData.nomorHp.length < 10) {
+          newErrors.nomorHp = "Nomor WhatsApp belum lengkap.";
+        }
+        if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          newErrors.email = "Format email tidak valid.";
+        }
       }
     }
 
     if (step === 2) {
-      if (!formData.alamatKtp.trim()) {
-        newErrors.alamatKtp = "Alamat KTP harus diisi.";
-      }
-      if (!formData.provinsiKtp) {
-        newErrors.provinsiKtp = "Pilih provinsi KTP.";
-      }
-      if (!formData.kotaKabupatenKtp) {
-        newErrors.kotaKabupatenKtp = "Pilih kota/kabupaten KTP.";
-      }
-      if (!formData.kecamatanKtp) {
-        newErrors.kecamatanKtp = "Pilih kecamatan KTP.";
-      }
-      if (!formData.kelurahanKtp) {
-        newErrors.kelurahanKtp = "Pilih kelurahan KTP.";
+      if (akunOss !== "sudah") {
+        if (!formData.alamatKtp.trim()) {
+          newErrors.alamatKtp = "Alamat KTP harus diisi.";
+        }
+        if (!formData.provinsiKtp) {
+          newErrors.provinsiKtp = "Pilih provinsi KTP.";
+        }
+        if (!formData.kotaKabupatenKtp) {
+          newErrors.kotaKabupatenKtp = "Pilih kota/kabupaten KTP.";
+        }
+        if (!formData.kecamatanKtp) {
+          newErrors.kecamatanKtp = "Pilih kecamatan KTP.";
+        }
+        if (!formData.kelurahanKtp) {
+          newErrors.kelurahanKtp = "Pilih kelurahan KTP.";
+        }
       }
       if (!formData.alamatUsaha.trim()) {
         newErrors.alamatUsaha = "Alamat lengkap usaha harus diisi.";
@@ -1273,7 +1312,9 @@ export default function WizardPage() {
     return matches ? matches.join(" ") : nik;
   };
 
-  const stepsLabels = ["Identitas", "Lokasi", "Cerita", "Skala"];
+  const stepsLabels = akunOss === "sudah" 
+    ? ["Akun OSS", "Lokasi", "Cerita", "Skala"] 
+    : ["Identitas", "Lokasi", "Cerita", "Skala"];
 
   return (
     <div className="flex-grow flex flex-col bg-background min-h-screen font-sans">
@@ -1322,177 +1363,289 @@ export default function WizardPage() {
 
           <div className="flex-grow">
             
-            {/* ── STEP 1: IDENTITAS & KONTAK ── */}
+            {/* ── STEP 1: IDENTITAS & KONTAK / KREDENSIAL OSS ── */}
             {currentStep === 1 && (
               <div className="animate-fadeIn space-y-6">
-                
-                {/* Section title */}
-                <div>
-                  <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
-                    Identitas Pemilik & Kontak
-                  </h2>
-                  <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                    Masukkan data pemilik usaha sesuai KTP dan kontak aktif yang dapat menerima OTP.
-                  </p>
+
+                {/* Mode Switcher Banner / Toggle */}
+                <div className="flex items-center justify-between p-3 bg-surface-container-low rounded border border-border-light">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary-container text-base">account_circle</span>
+                    <span className="text-[11px] font-bold text-on-surface">
+                      Status Akun OSS:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAkunOss("sudah")}
+                      className={`px-3 py-1.5 rounded text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        akunOss === "sudah"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "bg-white border border-border-light text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      Sudah Punya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAkunOss("belum")}
+                      className={`px-3 py-1.5 rounded text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        akunOss !== "sudah"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "bg-white border border-border-light text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      Belum Punya
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bento-card space-y-5">
-                  {/* Nama Pemilik */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="namaPemilik">
-                      NAMA LENGKAP PEMILIK (SESUAI KTP)
-                    </label>
-                    <input
-                      type="text"
-                      id="namaPemilik"
-                      placeholder="Contoh: BUDI SANTOSO"
-                      value={formData.namaPemilik}
-                      onChange={(e) => handleInputChange("namaPemilik", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
-                        errors.namaPemilik ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.namaPemilik && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.namaPemilik}
+                {akunOss === "sudah" ? (
+                  <>
+                    {/* Section title for Existing Account */}
+                    <div>
+                      <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
+                        Kredensial Akun OSS
+                      </h2>
+                      <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
+                        Masukkan akun OSS resmi Anda untuk login dan pengajuan NIB otomatis. Data identitas pemilik tidak perlu diisi ulang karena telah tersimpan di akun OSS Anda.
                       </p>
-                    )}
-                  </div>
-
-                  {/* Jenis Kelamin Buttons */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold text-on-surface-variant">
-                      JENIS KELAMIN
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange("jenisKelamin", "Laki-laki")}
-                        className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
-                          formData.jenisKelamin === "Laki-laki"
-                            ? "border-primary-container bg-primary-container/5 text-primary-container"
-                            : "border-border-light hover:bg-surface-container-low text-on-surface"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-base">male</span>
-                        Laki-laki
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange("jenisKelamin", "Perempuan")}
-                        className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
-                          formData.jenisKelamin === "Perempuan"
-                            ? "border-primary-container bg-primary-container/5 text-primary-container"
-                            : "border-border-light hover:bg-surface-container-low text-on-surface"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-base">female</span>
-                        Perempuan
-                      </button>
                     </div>
-                  </div>
 
-                  {/* NIK */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="nik">
-                      NIK (NOMOR INDUK KEPENDUDUKAN)
-                    </label>
-                    <input
-                      type="text"
-                      id="nik"
-                      placeholder="Contoh: 327301XXXXXXXXXX"
-                      value={formData.nik}
-                      onChange={(e) => handleInputChange("nik", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white font-mono text-xs tracking-wider focus:border-primary-container focus:outline-none ${
-                        errors.nik ? "border-error" : ""
-                      }`}
-                    />
-                    {formData.nik && (
-                      <p className="text-[10px] text-primary-container font-mono font-bold">
-                        Terformat: {formatNIK(formData.nik)}
-                      </p>
-                    )}
-                    {errors.nik && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.nik}
-                      </p>
-                    )}
-                  </div>
+                    <div className="bento-card space-y-5">
+                      {/* Email */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
+                          ALAMAT EMAIL / USERNAME OSS
+                        </label>
+                        <input
+                          type="email"
+                          id="email"
+                          placeholder="Contoh: pemilik@gmail.com"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.email ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.email && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.email}
+                          </p>
+                        )}
+                      </div>
 
-                  {/* Tanggal Lahir */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalLahir">
-                      TANGGAL LAHIR
-                    </label>
-                    <input
-                      type="date"
-                      id="tanggalLahir"
-                      value={formData.tanggalLahir}
-                      onChange={(e) => handleInputChange("tanggalLahir", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.tanggalLahir ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.tanggalLahir && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.tanggalLahir}
+                      {/* OSS Password */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="ossPassword">
+                          KATA SANDI AKUN OSS
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            id="ossPassword"
+                            placeholder="Masukkan kata sandi akun OSS Anda"
+                            value={formData.ossPassword || ""}
+                            onChange={(e) => handleInputChange("ossPassword", e.target.value)}
+                            className={`w-full min-h-[48px] pl-3.5 pr-10 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                              errors.ossPassword ? "border-error" : ""
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-lg">
+                              {showPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                          Kata sandi digunakan untuk login otomatis ke portal OSS BKPM saat pembuatan permohonan NIB.
+                        </p>
+                        {errors.ossPassword && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.ossPassword}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Section title for New Registration */}
+                    <div>
+                      <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
+                        Identitas Pemilik & Kontak
+                      </h2>
+                      <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
+                        Masukkan data pemilik usaha sesuai KTP dan kontak aktif yang dapat menerima OTP.
                       </p>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* WhatsApp */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="nomorHp">
-                      NOMOR WHATSAPP AKTIF
-                    </label>
-                    <input
-                      type="text"
-                      id="nomorHp"
-                      placeholder="Contoh: 08123456789"
-                      value={formData.nomorHp}
-                      onChange={(e) => handleInputChange("nomorHp", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
-                        errors.nomorHp ? "border-error" : ""
-                      }`}
-                    />
-                    <p className="text-[9px] text-on-surface-variant leading-relaxed font-bold">
-                      Digunakan untuk validasi pendaftaran dan pengiriman OTP resmi oleh BKPM RI.
-                    </p>
-                    {errors.nomorHp && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.nomorHp}
-                      </p>
-                    )}
-                  </div>
+                    <div className="bento-card space-y-5">
+                      {/* Nama Pemilik */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="namaPemilik">
+                          NAMA LENGKAP PEMILIK (SESUAI KTP)
+                        </label>
+                        <input
+                          type="text"
+                          id="namaPemilik"
+                          placeholder="Contoh: BUDI SANTOSO"
+                          value={formData.namaPemilik}
+                          onChange={(e) => handleInputChange("namaPemilik", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.namaPemilik ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.namaPemilik && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.namaPemilik}
+                          </p>
+                        )}
+                      </div>
 
-                  {/* Email */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
-                      ALAMAT EMAIL AKTIF
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      placeholder="Contoh: budi@gmail.com"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.email ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.email && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.email}
-                      </p>
-                    )}
-                  </div>
+                      {/* Jenis Kelamin Buttons */}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold text-on-surface-variant">
+                          JENIS KELAMIN
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("jenisKelamin", "Laki-laki")}
+                            className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
+                              formData.jenisKelamin === "Laki-laki"
+                                ? "border-primary-container bg-primary-container/5 text-primary-container"
+                                : "border-border-light hover:bg-surface-container-low text-on-surface"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-base">male</span>
+                            Laki-laki
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("jenisKelamin", "Perempuan")}
+                            className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
+                              formData.jenisKelamin === "Perempuan"
+                                ? "border-primary-container bg-primary-container/5 text-primary-container"
+                                : "border-border-light hover:bg-surface-container-low text-on-surface"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-base">female</span>
+                            Perempuan
+                          </button>
+                        </div>
+                      </div>
 
-                </div>
+                      {/* NIK */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="nik">
+                          NIK (NOMOR INDUK KEPENDUDUKAN)
+                        </label>
+                        <input
+                          type="text"
+                          id="nik"
+                          placeholder="Contoh: 327301XXXXXXXXXX"
+                          value={formData.nik}
+                          onChange={(e) => handleInputChange("nik", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white font-mono text-xs tracking-wider focus:border-primary-container focus:outline-none ${
+                            errors.nik ? "border-error" : ""
+                          }`}
+                        />
+                        {formData.nik && (
+                          <p className="text-[10px] text-primary-container font-mono font-bold">
+                            Terformat: {formatNIK(formData.nik)}
+                          </p>
+                        )}
+                        {errors.nik && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.nik}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Tanggal Lahir */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalLahir">
+                          TANGGAL LAHIR
+                        </label>
+                        <input
+                          type="date"
+                          id="tanggalLahir"
+                          value={formData.tanggalLahir}
+                          onChange={(e) => handleInputChange("tanggalLahir", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                            errors.tanggalLahir ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.tanggalLahir && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.tanggalLahir}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* WhatsApp */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="nomorHp">
+                          NOMOR WHATSAPP AKTIF
+                        </label>
+                        <input
+                          type="text"
+                          id="nomorHp"
+                          placeholder="Contoh: 08123456789"
+                          value={formData.nomorHp}
+                          onChange={(e) => handleInputChange("nomorHp", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.nomorHp ? "border-error" : ""
+                          }`}
+                        />
+                        <p className="text-[9px] text-on-surface-variant leading-relaxed font-bold">
+                          Digunakan untuk validasi pendaftaran dan pengiriman OTP resmi oleh BKPM RI.
+                        </p>
+                        {errors.nomorHp && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.nomorHp}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Email */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
+                          ALAMAT EMAIL AKTIF
+                        </label>
+                        <input
+                          type="email"
+                          id="email"
+                          placeholder="Contoh: budi@gmail.com"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                            errors.email ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.email && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.email}
+                          </p>
+                        )}
+                      </div>
+
+                    </div>
+                  </>
+                )}
 
               </div>
             )}
@@ -1506,96 +1659,100 @@ export default function WizardPage() {
                     Lokasi Usaha
                   </h2>
                   <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                    Masukkan alamat lengkap domisili KTP dan alamat operasional tempat usaha Anda.
+                    {akunOss === "sudah"
+                      ? "Masukkan alamat operasional dan titik koordinat tempat usaha Anda untuk pendaftaran izin NIB."
+                      : "Masukkan alamat lengkap domisili KTP dan alamat operasional tempat usaha Anda."}
                   </p>
                 </div>
 
-                {/* KTP Address */}
-                <div className="bento-card space-y-5">
-                  <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
-                    ALAMAT DOMISILI SESUAI KTP
-                  </h3>
+                {/* KTP Address (Only shown for new accounts) */}
+                {akunOss !== "sudah" && (
+                  <div className="bento-card space-y-5">
+                    <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
+                      ALAMAT DOMISILI SESUAI KTP
+                    </h3>
 
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
-                      Alamat Jalan, RT/RW
-                    </label>
-                    <textarea
-                      id="alamatKtp"
-                      placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
-                      rows={2}
-                      value={formData.alamatKtp}
-                      onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
-                      className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.alamatKtp ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
-                      <SearchableSelect
-                        options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
-                        value={selectedKtpProvId}
-                        onChange={handleKtpProvinceChange}
-                        placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                      <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
+                        Alamat Jalan, RT/RW
+                      </label>
+                      <textarea
+                        id="alamatKtp"
+                        placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
+                        rows={2}
+                        value={formData.alamatKtp}
+                        onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
+                        className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                          errors.alamatKtp ? "border-error" : ""
+                        }`}
                       />
-                      {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                      {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
+                        <SearchableSelect
+                          options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
+                          value={selectedKtpProvId}
+                          onChange={handleKtpProvinceChange}
+                          placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
+                        <SearchableSelect
+                          options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
+                          value={selectedKtpCityId}
+                          disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
+                          onChange={handleKtpCityChange}
+                          placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
+                        <SearchableSelect
+                          options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
+                          value={selectedKtpDistId}
+                          disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
+                          onChange={handleKtpDistrictChange}
+                          placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
+                        <SearchableSelect
+                          options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
+                          value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
+                          disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
+                          onChange={handleKtpVillageChange}
+                          placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
-                      <SearchableSelect
-                        options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
-                        value={selectedKtpCityId}
-                        disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
-                        onChange={handleKtpCityChange}
-                        placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                      <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: 16143"
+                        value={formData.kodePosKtp}
+                        onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                        className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
                       />
-                      {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
-                      <SearchableSelect
-                        options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
-                        value={selectedKtpDistId}
-                        disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
-                        onChange={handleKtpDistrictChange}
-                        placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
-                      />
-                      {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
-                      <SearchableSelect
-                        options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
-                        value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
-                        disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
-                        onChange={handleKtpVillageChange}
-                        placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
-                      />
-                      {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: 16143"
-                      value={formData.kodePosKtp}
-                      onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
-                      className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Business Address */}
                 <div className="bento-card space-y-5">
@@ -1604,40 +1761,42 @@ export default function WizardPage() {
                     ALAMAT LOKASI USAHA OPERASIONAL
                   </h3>
 
-                  <div className="flex items-center gap-2 py-1">
-                    <input
-                      type="checkbox"
-                      id="isAddressSame"
-                      checked={formData.isAddressSame}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData((prev) => ({
-                          ...prev,
-                          isAddressSame: checked,
-                          alamatUsaha: checked ? prev.alamatKtp : "",
-                          provinsi: checked ? prev.provinsiKtp : "",
-                          kotaKabupaten: checked ? prev.kotaKabupatenKtp : "",
-                          kecamatan: checked ? prev.kecamatanKtp : "",
-                          kelurahan: checked ? prev.kelurahanKtp : "",
-                          kodePos: checked ? prev.kodePosKtp : ""
-                        }));
-                        if (checked) {
-                          setSelectedProvId(selectedKtpProvId);
-                          setSelectedCityId(selectedKtpCityId);
-                          setSelectedDistId(selectedKtpDistId);
-                          setCitiesList(citiesKtpList);
-                          setDistrictsList(districtsKtpList);
-                          setVillagesList(villagesKtpList);
-                        }
-                        if (errors.alamatUsaha) setErrors((prev) => ({ ...prev, alamatUsaha: "" }));
-                        triggerAutosave();
-                      }}
-                      className="w-4 h-4 rounded text-primary-container focus:ring-primary-container"
-                    />
-                    <label htmlFor="isAddressSame" className="text-xs font-bold text-on-surface-variant cursor-pointer select-none">
-                      Alamat usaha sama dengan alamat KTP
-                    </label>
-                  </div>
+                  {akunOss !== "sudah" && (
+                    <div className="flex items-center gap-2 py-1">
+                      <input
+                        type="checkbox"
+                        id="isAddressSame"
+                        checked={formData.isAddressSame}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => ({
+                            ...prev,
+                            isAddressSame: checked,
+                            alamatUsaha: checked ? prev.alamatKtp : "",
+                            provinsi: checked ? prev.provinsiKtp : "",
+                            kotaKabupaten: checked ? prev.kotaKabupatenKtp : "",
+                            kecamatan: checked ? prev.kecamatanKtp : "",
+                            kelurahan: checked ? prev.kelurahanKtp : "",
+                            kodePos: checked ? prev.kodePosKtp : ""
+                          }));
+                          if (checked) {
+                            setSelectedProvId(selectedKtpProvId);
+                            setSelectedCityId(selectedKtpCityId);
+                            setSelectedDistId(selectedKtpDistId);
+                            setCitiesList(citiesKtpList);
+                            setDistrictsList(districtsKtpList);
+                            setVillagesList(villagesKtpList);
+                          }
+                          if (errors.alamatUsaha) setErrors((prev) => ({ ...prev, alamatUsaha: "" }));
+                          triggerAutosave();
+                        }}
+                        className="w-4 h-4 rounded text-primary-container focus:ring-primary-container"
+                      />
+                      <label htmlFor="isAddressSame" className="text-xs font-bold text-on-surface-variant cursor-pointer select-none">
+                        Alamat usaha sama dengan alamat KTP
+                      </label>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatUsaha">

@@ -3,10 +3,10 @@ import { PrismaService } from '../prisma.service';
 
 export class DraftData {
   id?: string;
-  namaPemilik!: string;
-  nik!: string;
-  tanggalLahir!: string;
-  nomorHp!: string;
+  namaPemilik?: string;
+  nik?: string;
+  tanggalLahir?: string;
+  nomorHp?: string;
   email!: string;
   alamatUsaha!: string;
   alamatKtp?: string;
@@ -58,10 +58,16 @@ export class DraftsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: DraftData): Promise<DraftData> {
-    // Check if a draft with the same NIK already exists
-    const existingDraft = await this.prisma.draft.findFirst({
-      where: { nik: data.nik },
-    });
+    // Check if a draft with the same NIK or email already exists
+    const existingDraft = data.nik
+      ? await this.prisma.draft.findFirst({
+          where: { nik: data.nik },
+        })
+      : data.email
+        ? await this.prisma.draft.findFirst({
+            where: { email: data.email },
+          })
+        : null;
 
     if (existingDraft) {
       return this.update(existingDraft.id, data);

@@ -18,6 +18,7 @@ interface LogDrawerProps {
   draftId: string;
   logs: LogEntry[];
   onPlayVideo?: () => void;
+  onCancel?: () => void;
 }
 
 export default function LogDrawer({
@@ -29,6 +30,7 @@ export default function LogDrawer({
   draftId,
   logs,
   onPlayVideo,
+  onCancel,
 }: LogDrawerProps) {
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -86,6 +88,16 @@ export default function LogDrawer({
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {isActive && onCancel && (
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1 bg-error/15 hover:bg-error text-error hover:text-white border border-error/30 hover:border-transparent px-2.5 py-1 rounded text-[10px] font-extrabold transition-all uppercase tracking-wider cursor-pointer shadow-sm"
+                title="Batalkan Otomatisasi"
+              >
+                <span className="material-symbols-outlined text-xs font-bold">cancel</span>
+                Batalkan
+              </button>
+            )}
             {!isActive && onPlayVideo && (
               <button
                 onClick={onPlayVideo}

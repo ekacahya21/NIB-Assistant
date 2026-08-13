@@ -495,7 +495,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             1: 'Inisialisasi Portal',
             2: 'Validasi NIK & OTP',
             3: 'Detail Profil & Registrasi',
-            4: 'Login & CAPTCHA',
+            4: 'Login',
             5: 'Pengelolaan Lokasi Usaha',
           };
           const prevStepName = stepNames[prevStep] || `Langkah ${prevStep}`;
@@ -775,18 +775,23 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       const duration = timers
         ? Math.round((Date.now() - timers.startTime) / 1000)
         : 0;
+      const isCancelled = this.cancelledDrafts.has(draftId);
+      this.cancelledDrafts.delete(draftId);
+
       const finalStatus =
         activeStep === 7
           ? phase === 'registration'
             ? 'DRAFT'
             : 'COMPLETED'
-          : phase === 'registration'
-            ? 'FAILED'
-            : activeStep > 2
-              ? 'FAILED_LATER'
-              : 'FAILED';
-      const isCancelled = this.cancelledDrafts.has(draftId);
-      this.cancelledDrafts.delete(draftId);
+          : isCancelled
+            ? activeStep > 1
+              ? `FAILED_STEP_${activeStep - 1}`
+              : 'FAILED'
+            : phase === 'registration'
+              ? 'FAILED'
+              : activeStep > 2
+                ? 'FAILED_LATER'
+                : 'FAILED';
 
       const dbErrorMessage =
         finalStatus === 'COMPLETED' || finalStatus === 'DRAFT'
