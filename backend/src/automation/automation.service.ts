@@ -15,6 +15,13 @@ import { PortalInteractionHelper } from './services/portal-interaction.helper';
 import { RegistrationFlowService } from './services/registration-flow.service';
 import { FilingFlowService } from './services/filing-flow.service';
 import { AutomationSessionContext } from './context/automation-session.context';
+import {
+  AutomationSubStep,
+  STEP_REGISTRY,
+  buildStepDeeplink,
+  getNextSubStep,
+  isStepCompleted,
+} from './config/automation-steps.config';
 
 // Configure Playwright Extra with the stealth evasion plugin globally
 chromium.use(stealthPlugin());
@@ -78,6 +85,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     reject: (err: any) => void;
     isCancelled: boolean;
     phase?: string;
+    resumeFromStep?: string;
   }> = [];
 
   constructor(
@@ -211,6 +219,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     akunOss?: string,
     sessionId?: string,
     phase?: string,
+    resumeFromStep?: string,
   ): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
       // Support reconnection to existing session
@@ -250,7 +259,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);
 
-      this.enqueueRequest(draftId, akunOss, subject, sessionId, phase);
+      this.enqueueRequest(draftId, akunOss, subject, sessionId, phase, resumeFromStep);
 
       const subscription = subject.subscribe({
         next: (val) => subscriber.next(val),
@@ -336,6 +345,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     subject: Subject<AutomationEvent>,
     sessionId?: string,
     phase?: string,
+    resumeFromStep?: string,
   ) {
     const maxSessions = parseInt(
       process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3',
@@ -349,7 +359,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         .update(draftId, { status: 'RUNNING', sessionId })
         .catch(() => {});
 
-      this.runPlaywrightAutomation(draftId, akunOss, subject, phase)
+      this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep)
         .catch((err) => {
           this.logger.error(
             `Error running playwright automation for draft ${draftId}: ${err.message}`,
@@ -386,6 +396,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           reject,
           isCancelled: false,
           phase,
+          resumeFromStep,
         });
       })
         .then(async () => {
@@ -393,7 +404,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           await this.draftsService
             .update(draftId, { status: 'RUNNING', sessionId })
             .catch(() => {});
-          return this.runPlaywrightAutomation(draftId, akunOss, subject, phase);
+          return this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep);
         })
         .catch((err) => {
           this.logger.error(
@@ -584,6 +595,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
     phase?: string,
+    resumeFromStep?: string,
   ): Promise<void> {
     const draft = await this.draftsService.findOne(draftId);
     if (!draft) {
@@ -732,20 +744,176 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           passwordCode,
         );
 
-        // Step 5: Kelola Lokasi Usaha
-        activeStep = 5;
-        this.activeSteps.set(draftId, activeStep);
-        await this.filingFlowService.executeManageLocationSteps(
-          sessionCtx,
-          jwtToken,
+        // Retrieve existing checkpoint data
+        let checkpointData: Record<string, string> =
+          (draft.checkpointData as Record<string, string>) || {};
+
+        // Determine target resume sub-step
+        const targetSubStep: AutomationSubStep =
+          resumeFromStep && Object.values(AutomationSubStep).includes(resumeFromStep as AutomationSubStep)
+            ? (resumeFromStep as AutomationSubStep)
+            : getNextSubStep(draft.lastCompletedStep);
+
+        this.logger.log(
+          `Filing automation started for draft ${draftId}. Target sub-step: ${targetSubStep}. Existing checkpoint: ${JSON.stringify(checkpointData)}`,
         );
 
-        // Step 6: Kelola detail Usaha
-        activeStep = 6;
-        this.activeSteps.set(draftId, activeStep);
-        await this.filingFlowService.executeManageBusinessDetailSteps(
-          sessionCtx,
-        );
+        const saveCheckpoint = async (
+          completedSubStep: AutomationSubStep,
+          newData?: Record<string, string>,
+        ) => {
+          if (newData) {
+            checkpointData = { ...checkpointData, ...newData };
+          }
+          draft.lastCompletedStep = completedSubStep;
+          draft.checkpointData = { ...checkpointData };
+
+          await this.draftsService
+            .update(draftId, {
+              lastCompletedStep: completedSubStep,
+              checkpointData: { ...checkpointData },
+            })
+            .catch((err) => {
+              this.logger.error(`Failed to update draft checkpoint: ${err.message}`);
+            });
+        };
+
+        // --- SUB-STEP 1: LOCATION (Step 5) ---
+        if (!isStepCompleted(AutomationSubStep.LOCATION, targetSubStep)) {
+          activeStep = 5;
+          this.activeSteps.set(draftId, activeStep);
+          const locationRes = await this.filingFlowService.executeManageLocationSteps(
+            sessionCtx,
+            jwtToken,
+          );
+          if (locationRes?.id_proyek_lokasi) {
+            checkpointData.id_proyek_lokasi = locationRes.id_proyek_lokasi;
+          }
+          await saveCheckpoint(AutomationSubStep.LOCATION, checkpointData);
+        }
+
+        // --- SUB-STEP 2: KBLI (Step 6) ---
+        if (!isStepCompleted(AutomationSubStep.KBLI, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.KBLI) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.KBLI, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi via deeplink KBLI: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          const kbliRes = await this.filingFlowService.executeKbliSteps(sessionCtx);
+          if (kbliRes?.id_proyek) checkpointData.id_proyek = kbliRes.id_proyek;
+          if (kbliRes?.id_proyek_lokasi) checkpointData.id_proyek_lokasi = kbliRes.id_proyek_lokasi;
+          await saveCheckpoint(AutomationSubStep.KBLI, checkpointData);
+        }
+
+        // --- SUB-STEP 3: TATA RUANG ---
+        if (!isStepCompleted(AutomationSubStep.TATA_RUANG, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.TATA_RUANG) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.TATA_RUANG, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi via deeplink Tata Ruang: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          await this.filingFlowService.executeTataRuangSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.TATA_RUANG, checkpointData);
+        }
+
+        // --- SUB-STEP 4: INVESTASI & PRODUK ---
+        if (!isStepCompleted(AutomationSubStep.INVESTASI, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.INVESTASI) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.INVESTASI, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi via deeplink Investasi: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          await this.filingFlowService.executeInvestasiProdukSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.INVESTASI, checkpointData);
+        }
+
+        // --- SUB-STEP 5: PARAMETER RISIKO ---
+        if (!isStepCompleted(AutomationSubStep.PARAMETER, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.PARAMETER) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.PARAMETER, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi via deeplink Parameter Risiko: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          await this.filingFlowService.executeParameterRisikoSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.PARAMETER, checkpointData);
+        }
+
+        // --- SUB-STEP 6: PERSETUJUAN LINGKUNGAN ---
+        if (!isStepCompleted(AutomationSubStep.LINGKUNGAN, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.LINGKUNGAN) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.LINGKUNGAN, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi via deeplink Persetujuan Lingkungan: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          await this.filingFlowService.executePersetujuanLingkunganSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.LINGKUNGAN, checkpointData);
+        }
+
+        // --- SUB-STEP 7: PENAPISAN AMDALNET ---
+        if (!isStepCompleted(AutomationSubStep.AMDALNET, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.AMDALNET) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.AMDALNET, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 6, 'info', `Navigasi ke OSS untuk penapisan AMDALnet: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          const amdalRes = await this.filingFlowService.executeAmdalnetSteps(sessionCtx);
+          if (amdalRes?.kd_izin) checkpointData.kd_izin = amdalRes.kd_izin;
+          if (amdalRes?.id_izin) checkpointData.id_izin = amdalRes.id_izin;
+          await saveCheckpoint(AutomationSubStep.AMDALNET, checkpointData);
+        }
+
+        // --- SUB-STEP 8: PENERBITAN NIB (Step 7) ---
+        if (!isStepCompleted(AutomationSubStep.NIB, targetSubStep)) {
+          activeStep = 7;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.NIB) {
+            const deeplink = buildStepDeeplink(AutomationSubStep.NIB, checkpointData);
+            if (deeplink) {
+              this.logStep(subject, 7, 'info', `Navigasi via deeplink Penerbitan NIB: ${deeplink}`);
+              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            }
+          }
+
+          await this.filingFlowService.executePenerbitanNibSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.NIB, checkpointData);
+        }
 
         // Step 7: Selesai
         activeStep = 7;
@@ -789,9 +957,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
               : 'FAILED'
             : phase === 'registration'
               ? 'FAILED'
-              : activeStep > 2
-                ? 'FAILED_LATER'
-                : 'FAILED';
+              : draft.lastCompletedStep
+                ? `FAILED_SUBSTEP_${draft.lastCompletedStep}`
+                : activeStep > 2
+                  ? 'FAILED_LATER'
+                  : 'FAILED';
 
       const dbErrorMessage =
         finalStatus === 'COMPLETED' || finalStatus === 'DRAFT'

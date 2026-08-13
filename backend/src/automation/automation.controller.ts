@@ -29,9 +29,10 @@ export class AutomationController {
     @Query('akunOss') akunOss?: string,
     @Query('sessionId') sessionId?: string,
     @Query('phase') phase?: string,
+    @Query('resumeFromStep') resumeFromStep?: string,
   ): Observable<MessageEvent> {
     return this.automationService
-      .getStream(draftId, akunOss, sessionId, phase)
+      .getStream(draftId, akunOss, sessionId, phase, resumeFromStep)
       .pipe(map((event) => ({ data: event })));
   }
 

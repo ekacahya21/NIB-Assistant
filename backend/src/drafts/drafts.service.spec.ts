@@ -55,6 +55,10 @@ describe('DraftsService', () => {
     kapasitas: '100',
     satuan: 'Pcs',
     sessionId: 'session-xyz',
+    ossPassword: null,
+    registrationCompleted: false,
+    lastCompletedStep: null,
+    checkpointData: null,
     updatedAt: new Date('2026-07-13T10:00:00Z'),
   };
 

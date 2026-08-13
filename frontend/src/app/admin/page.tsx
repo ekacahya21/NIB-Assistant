@@ -24,6 +24,9 @@ interface DraftItem {
   email: string;
   updatedAt: string;
   status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal";
+  rawStatus?: string;
+  lastCompletedStep?: string | null;
+  checkpointData?: any;
   stepDetails?: string;
   errorMessage?: string | null;
   logs?: LogEntry[] | null;
@@ -57,6 +60,17 @@ interface DraftItem {
   tanggalMulaiUsaha?: string | null;
   tanggalMulaiOperasional?: string | null;
 }
+
+const SUBSTEP_LABELS: Record<string, string> = {
+  LOCATION: "Lokasi Usaha",
+  KBLI: "KBLI",
+  TATA_RUANG: "Tata Ruang",
+  INVESTASI: "Investasi & Produk",
+  PARAMETER: "Parameter Risiko",
+  LINGKUNGAN: "Persetujuan Lingkungan",
+  AMDALNET: "AMDALnet",
+  NIB: "Penerbitan NIB",
+};
 
 interface ActivityEvent {
   id: string;
@@ -148,6 +162,10 @@ export default function AdminDashboardPage() {
             status = "Sukses";
           } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
             status = "Proses";
+          } else if (dbStatus && dbStatus.startsWith("FAILED_SUBSTEP_")) {
+            status = "Gagal";
+            const subKey = dbStatus.replace("FAILED_SUBSTEP_", "");
+            stepDetails = SUBSTEP_LABELS[subKey] || subKey;
           } else if (dbStatus && dbStatus.startsWith("FAILED_STEP_")) {
             status = "Gagal";
             const stepNum = dbStatus.split("_")[2];
@@ -163,6 +181,7 @@ export default function AdminDashboardPage() {
           return {
             ...item,
             status,
+            rawStatus: item.status,
             stepDetails,
             namaPemilik: item.namaPemilik ? item.namaPemilik.toUpperCase() : "TANPA NAMA",
             namaUsaha: item.namaUsaha ? item.namaUsaha.toUpperCase() : "DRAF USAHA BARU",
@@ -416,6 +435,14 @@ export default function AdminDashboardPage() {
         alert("Kesalahan koneksi saat membatalkan otomatisasi.");
       }
     }
+  };
+
+  const handleResumeAutomation = (id: string, fromStep?: string) => {
+    let url = `/dashboard?draftId=${id}&phase=filing`;
+    if (fromStep) {
+      url += `&resumeFromStep=${fromStep}`;
+    }
+    router.push(url);
   };
 
   // Open Log Drawer
@@ -815,14 +842,26 @@ export default function AdminDashboardPage() {
                                   </button>
                                 </>
                               ) : (
-                                <button
-                                  onClick={() => handleOpenDrawer(draft, false)}
-                                  className="px-2.5 py-1.5 rounded text-[10px] font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all border border-border-light uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
-                                  title="Lihat Riwayat Log"
-                                >
-                                  <span className="material-symbols-outlined text-xs text-zinc-500 font-semibold">history</span>
-                                  Log History
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleOpenDrawer(draft, false)}
+                                    className="px-2.5 py-1.5 rounded text-[10px] font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all border border-border-light uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                    title="Lihat Riwayat Log"
+                                  >
+                                    <span className="material-symbols-outlined text-xs text-zinc-500 font-semibold">history</span>
+                                    Log History
+                                  </button>
+                                  {(draft.status === "Gagal" || draft.lastCompletedStep) && (
+                                    <button
+                                      onClick={() => handleResumeAutomation(draft.id)}
+                                      className="px-2.5 py-1.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary hover:text-white border border-primary/30 transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                      title="Lanjutkan dari checkpoint"
+                                    >
+                                      <span className="material-symbols-outlined text-xs font-semibold">play_arrow</span>
+                                      Lanjutkan
+                                    </button>
+                                  )}
+                                </>
                               )}
 
                               <button 

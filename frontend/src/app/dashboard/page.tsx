@@ -76,6 +76,20 @@ export default function DashboardPage() {
               status = "Sukses";
             } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
               status = "Proses";
+            } else if (dbStatus && dbStatus.startsWith("FAILED_SUBSTEP_")) {
+              status = "Gagal";
+              const subKey = dbStatus.replace("FAILED_SUBSTEP_", "");
+              const SUBSTEP_MAP: Record<string, string> = {
+                LOCATION: "Lokasi Usaha",
+                KBLI: "KBLI",
+                TATA_RUANG: "Tata Ruang",
+                INVESTASI: "Investasi & Produk",
+                PARAMETER: "Parameter Risiko",
+                LINGKUNGAN: "Persetujuan Lingkungan",
+                AMDALNET: "AMDALnet",
+                NIB: "Penerbitan NIB",
+              };
+              stepDetails = SUBSTEP_MAP[subKey] || subKey;
             } else if (dbStatus && dbStatus.startsWith("FAILED_STEP_")) {
               status = "Gagal";
               const stepNum = dbStatus.split("_")[2];

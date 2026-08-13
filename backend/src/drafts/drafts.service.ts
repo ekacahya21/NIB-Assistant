@@ -51,6 +51,8 @@ export class DraftData {
   sessionId?: string;
   ossPassword?: string;
   registrationCompleted?: boolean;
+  lastCompletedStep?: string | null;
+  checkpointData?: any;
 }
 
 @Injectable()
@@ -124,6 +126,8 @@ export class DraftsService {
         sessionId: data.sessionId,
         ossPassword: data.ossPassword,
         registrationCompleted: data.registrationCompleted ?? false,
+        lastCompletedStep: data.lastCompletedStep,
+        checkpointData: data.checkpointData,
         updatedAt: new Date(),
       },
     });
@@ -192,6 +196,8 @@ export class DraftsService {
         sessionId: data.sessionId,
         ossPassword: data.ossPassword,
         registrationCompleted: data.registrationCompleted,
+        lastCompletedStep: data.lastCompletedStep,
+        checkpointData: data.checkpointData,
         updatedAt: new Date(),
       },
     });
