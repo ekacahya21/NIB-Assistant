@@ -275,8 +275,14 @@ export default function ReviewPage() {
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
               setIsWaitingForRegistration(false);
+              setShowVerificationModal(true);
+              setIsMinimized(false);
               eventSource.close();
               if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+              if (draftId) {
+                fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" })
+                  .catch((err) => console.error("Gagal membatalkan otomatisasi:", err));
+              }
             } else {
               setVerifyingStep(payload.step);
               if (payload.step === 1) setVerifyingStatusText("Membuka Portal OSS");
@@ -334,6 +340,12 @@ export default function ReviewPage() {
         setVerifyingErrorText("Koneksi backend terputus atau tidak terdeteksi. Silakan coba lagi.");
         setVerifyingStatusText("Koneksi Terputus");
         setIsWaitingForRegistration(false);
+        setShowVerificationModal(true);
+        setIsMinimized(false);
+        if (draftId) {
+          fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" })
+            .catch((err) => console.error("Gagal membatalkan otomatisasi:", err));
+        }
       };
     } catch (e) {
       setVerifyingErrorText("Gagal mendirikan koneksi.");
@@ -998,7 +1010,7 @@ export default function ReviewPage() {
                   type="button"
                   onClick={() => {
                     setShowVerificationModal(false);
-                    setIsMinimized(true);
+                    setIsMinimized(!verifyingErrorText);
                   }}
                   className="p-1.5 hover:bg-surface-container rounded-full text-on-surface-variant transition-all flex items-center justify-center"
                   title="Lanjutkan di latar belakang"
@@ -1062,22 +1074,16 @@ export default function ReviewPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm("Apakah Anda yakin ingin membatalkan registrasi akun OSS? Proses pendaftaran yang sedang berjalan akan dihentikan.")) {
-                          const draftId = sessionStorage.getItem("draft_id");
-                          if (draftId) {
-                            fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" }).catch(err => console.error("Gagal membatalkan registrasi:", err));
-                          }
-                          if (streamRef.current) streamRef.current.close();
-                          if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
-                          setIsVerifyingStep2(false);
-                          setShowVerificationModal(false);
-                          setIsMinimized(false);
-                          setIsWaitingForRegistration(false);
-                        }
+                        if (streamRef.current) streamRef.current.close();
+                        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                        setIsVerifyingStep2(false);
+                        setShowVerificationModal(false);
+                        setIsMinimized(false);
+                        setIsWaitingForRegistration(false);
                       }}
-                      className="px-3.5 py-1.5 border border-border-light hover:bg-surface-container transition-all rounded text-[10px] font-bold uppercase tracking-wider text-on-surface-variant"
+                      className="px-3.5 py-1.5 border border-border-light hover:bg-surface-container transition-all rounded text-[10px] font-bold uppercase tracking-wider text-on-surface-variant cursor-pointer"
                     >
-                      Batal
+                      Tutup
                     </button>
                     <button
                       type="button"
