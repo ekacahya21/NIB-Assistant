@@ -1337,7 +1337,7 @@ export default function ReviewPage() {
       )}
 
       {/* ── WAITING FOR REGISTRATION MODAL ── */}
-      {isWaitingForRegistration && (
+      {isWaitingForRegistration && !(isPromptingOtp || isPromptingPassword) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="w-full max-w-[440px] bg-white border border-border-light rounded-2xl shadow-xl flex flex-col p-6 space-y-6 text-center">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
