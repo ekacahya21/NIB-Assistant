@@ -1253,7 +1253,7 @@ export default function ReviewPage() {
               </div>
 
               {/* Modal Footer Controls */}
-              {!registrationCompleted && (
+              {!registrationCompleted && !verifyingErrorText && (
                 <div className="flex gap-2 justify-end border-t border-border-light pt-4 mt-2">
                   <button
                     type="button"
