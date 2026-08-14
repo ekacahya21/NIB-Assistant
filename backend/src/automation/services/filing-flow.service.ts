@@ -736,8 +736,8 @@ export class FilingFlowService {
       .waitForResponse(
         (response: any) =>
           response.url().includes('prosesLokasi') &&
-          response.status() === 200,
-        { timeout: 20000 },
+          response.status() === 200 || 201,
+        { timeout: 60000 },
       )
       .catch(() => null);
 
@@ -909,7 +909,7 @@ export class FilingFlowService {
         (await selectRuangLingkup.isEnabled().catch(() => false))
       ) {
         await selectRuangLingkup.click();
-        const option = page.locator(".v-list-item, [role='option']").first();
+        const option = page.locator(".v-list-item:visible, [role='option']:visible").first();
         await option
           .waitFor({ state: "visible", timeout: 5000 })
           .catch(() => null);
@@ -1097,7 +1097,7 @@ export class FilingFlowService {
         await page.waitForTimeout(1000);
       } else {
         const firstOption = page
-          .locator(".v-list-item, .v-overlay-container .v-list-item")
+          .locator(".v-list-item:visible, [role='option']:visible")
           .first();
         await firstOption
           .waitFor({ state: "visible", timeout: 5000 })
