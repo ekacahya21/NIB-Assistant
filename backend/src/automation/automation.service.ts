@@ -20,6 +20,7 @@ import {
   STEP_REGISTRY,
   buildStepDeeplink,
   getNextSubStep,
+  hasRequiredDataForNextStep,
   isStepCompleted,
 } from './config/automation-steps.config';
 
@@ -765,6 +766,21 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           if (newData) {
             checkpointData = { ...checkpointData, ...newData };
           }
+
+          // Validate if required data for generating next step deeplink is present
+          const validation = hasRequiredDataForNextStep(completedSubStep, checkpointData);
+          if (!validation.valid) {
+            const errMessage = `Data pendukung ID (${validation.missingIds.join(', ')}) untuk sub-step berikutnya (${validation.nextStep}) tidak ditemukan. Otomatisasi dianggap gagal.`;
+            this.logger.error(`Checkpoint validation failed at sub-step ${completedSubStep}: ${errMessage}`);
+            this.logStep(
+              subject,
+              activeStep,
+              'error',
+              `Gagal menyimpan checkpoint sub-step ${completedSubStep}: Data pendukung ID (${validation.missingIds.join(', ')}) tidak lengkap untuk sub-step berikutnya (${validation.nextStep}).`,
+            );
+            throw new Error(errMessage);
+          }
+
           draft.lastCompletedStep = completedSubStep;
           draft.checkpointData = { ...checkpointData };
 
@@ -802,6 +818,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink KBLI: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'networkIdle', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -821,6 +841,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink Tata Ruang: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -838,6 +862,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink Investasi: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -855,6 +883,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink Parameter Risiko: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -872,6 +904,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink Persetujuan Lingkungan: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -889,6 +925,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi ke OSS untuk penapisan AMDALnet: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 
@@ -908,6 +948,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             if (deeplink) {
               this.logStep(subject, 7, 'info', `Navigasi via deeplink Penerbitan NIB: ${deeplink}`);
               await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+            } else {
+              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+              this.logger.error(errMsg);
+              throw new Error(errMsg);
             }
           }
 

@@ -137,3 +137,27 @@ export function buildStepDeeplink(
       return null;
   }
 }
+
+export function hasRequiredDataForNextStep(
+  completedStep: AutomationSubStep,
+  checkpointData: Record<string, string> | null | undefined,
+): { valid: boolean; missingIds: string[]; nextStep: AutomationSubStep } {
+  const nextStep = getNextSubStep(completedStep);
+
+  // If completed step is NIB, there is no next step deeplink required
+  if (completedStep === AutomationSubStep.NIB) {
+    return { valid: true, missingIds: [], nextStep };
+  }
+
+  const requiredIds = STEP_REGISTRY[nextStep]?.requiredIds || [];
+  const missingIds = requiredIds.filter(
+    (id) => !checkpointData || !checkpointData[id],
+  );
+
+  return {
+    valid: missingIds.length === 0,
+    missingIds,
+    nextStep,
+  };
+}
+

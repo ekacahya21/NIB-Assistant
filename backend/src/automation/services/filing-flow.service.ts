@@ -1120,11 +1120,6 @@ export class FilingFlowService {
 
     await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
 
-    const btnTambahBidang = page.getByRole("button", { name: "Tambah Bidang Usaha" });
-    if (await btnTambahBidang.isVisible().catch(() => false)) {
-      await btnTambahBidang.click();
-    }
-
     const prosesBidangUsahaPromise = page
       .waitForResponse(
         (response: any) =>
@@ -1134,13 +1129,9 @@ export class FilingFlowService {
       )
       .catch(() => null);
 
-    const inputRestoran = page.getByRole("textbox", {
-      name: "Contoh : Restoran",
-    });
-    await inputRestoran.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
-    if (await inputRestoran.isVisible().catch(() => false)) {
-      await inputRestoran.fill(draft.namaUsaha);
-      await page.getByRole("button", { name: "Selanjutnya" }).click();
+    const btnTambahBidang = page.getByRole("button", { name: "Tambah Bidang Usaha" });
+    if (await btnTambahBidang.isVisible().catch(() => false)) {
+      await btnTambahBidang.click();
     }
 
     const prosesBidangUsahaRes = await prosesBidangUsahaPromise;
@@ -1150,6 +1141,15 @@ export class FilingFlowService {
         const json = await prosesBidangUsahaRes.json();
         id_proyek = json?.data?.id_proyek || json?.id_proyek;
       } catch (e) {}
+    }
+
+    const inputRestoran = page.getByRole("textbox", {
+      name: "Contoh : Restoran",
+    });
+    await inputRestoran.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    if (await inputRestoran.isVisible().catch(() => false)) {
+      await inputRestoran.fill(draft.namaUsaha);
+      await page.getByRole("button", { name: "Selanjutnya" }).click();
     }
 
     return { id_proyek };
