@@ -801,7 +801,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             const deeplink = buildStepDeeplink(AutomationSubStep.KBLI, checkpointData);
             if (deeplink) {
               this.logStep(subject, 6, 'info', `Navigasi via deeplink KBLI: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
+              await page.goto(deeplink, { waitUntil: 'networkIdle', timeout: 30000 }).catch(() => null);
             }
           }
 

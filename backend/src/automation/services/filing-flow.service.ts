@@ -736,7 +736,7 @@ export class FilingFlowService {
       .waitForResponse(
         (response: any) =>
           response.url().includes('prosesLokasi') &&
-          response.status() === 200 || 201,
+          [200, 201].includes(response.status()),
         { timeout: 60000 },
       )
       .catch(() => null);
@@ -1129,8 +1129,8 @@ export class FilingFlowService {
       .waitForResponse(
         (response: any) =>
           response.url().includes("/prosesBidangUsaha") &&
-          response.status() === 200,
-        { timeout: 25000 },
+          [200, 201].includes(response.status()),
+        { timeout: 35000 },
       )
       .catch(() => null);
 
@@ -1143,28 +1143,16 @@ export class FilingFlowService {
       await page.getByRole("button", { name: "Selanjutnya" }).click();
     }
 
-    await prosesBidangUsahaPromise;
-
-    const prosesProyekPromise = page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes("/prosesProyek") && response.status() === 200,
-        { timeout: 25000 },
-      )
-      .catch(() => null);
-
-    const prosesProyekRes = await prosesProyekPromise;
+    const prosesBidangUsahaRes = await prosesBidangUsahaPromise;
     let id_proyek: string | undefined;
-    let id_proyek_lokasi: string | undefined;
-    if (prosesProyekRes) {
+    if (prosesBidangUsahaRes) {
       try {
-        const json = await prosesProyekRes.json();
+        const json = await prosesBidangUsahaRes.json();
         id_proyek = json?.data?.id_proyek || json?.id_proyek;
-        id_proyek_lokasi = json?.data?.id_proyek_lokasi || json?.id_proyek_lokasi;
       } catch (e) {}
     }
 
-    return { id_proyek, id_proyek_lokasi };
+    return { id_proyek };
   }
 
   public async executeTataRuangSteps(
@@ -1584,7 +1572,8 @@ export class FilingFlowService {
       await page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("prosesProyek") && response.status() === 200,
+            response.url().includes("prosesProyek") &&
+            [200, 201].includes(response.status()),
           { timeout: 15000 },
         )
         .catch(() => null);
