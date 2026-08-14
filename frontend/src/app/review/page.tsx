@@ -292,12 +292,14 @@ export default function ReviewPage() {
                   setIsPromptingOtp(true);
                   setShowVerificationModal(true);
                   setIsMinimized(false);
+                  setIsWaitingForRegistration(false);
                 } else if (payload.text.includes("Silakan masukkan kata sandi")) {
                   setVerifyingStatusText("Menunggu Anda mengatur Kata Sandi...");
                   setIsPromptingPassword(true);
                   setIsPromptingOtp(false);
                   setShowVerificationModal(true);
                   setIsMinimized(false);
+                  setIsWaitingForRegistration(false);
                 } else if (payload.text.includes("OTP diterima") || payload.text.includes("Verifikasi berhasil") || payload.text.includes("SUKSES")) {
                   setIsPromptingOtp(false);
                 } else {
@@ -561,14 +563,14 @@ export default function ReviewPage() {
   };
 
   useEffect(() => {
-    if (registrationCompleted && isWaitingForRegistration) {
+    if (registrationCompleted) {
       const timer = setTimeout(() => {
         setIsWaitingForRegistration(false);
         handleProceedToAutomation();
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [registrationCompleted, isWaitingForRegistration]);
+  }, [registrationCompleted]);
 
   const handleEditSection = (stepNum: number) => {
     if (typeof window !== "undefined") {
@@ -1337,7 +1339,7 @@ export default function ReviewPage() {
       )}
 
       {/* ── WAITING FOR REGISTRATION MODAL ── */}
-      {isWaitingForRegistration && !(isPromptingOtp || isPromptingPassword) && (
+      {isWaitingForRegistration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="w-full max-w-[440px] bg-white border border-border-light rounded-2xl shadow-xl flex flex-col p-6 space-y-6 text-center">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
