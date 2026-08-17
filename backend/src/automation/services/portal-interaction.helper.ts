@@ -163,15 +163,18 @@ export class PortalInteractionHelper {
     if (!url) return;
     try {
       let jwtToken = '';
+      let refreshToken = '';
       const urlObj = new URL(url);
       jwtToken = urlObj.searchParams.get('auth-code') || '';
+      refreshToken = urlObj.searchParams.get('refresh-code') || '';
 
-      if (!jwtToken && urlObj.hash) {
+      if (urlObj.hash) {
         const hashQueryIndex = urlObj.hash.indexOf('?');
         if (hashQueryIndex !== -1) {
           const hashQuery = urlObj.hash.substring(hashQueryIndex);
           const hashParams = new URLSearchParams(hashQuery);
-          jwtToken = hashParams.get('auth-code') || '';
+          if (!jwtToken) jwtToken = hashParams.get('auth-code') || '';
+          if (!refreshToken) refreshToken = hashParams.get('refresh-code') || '';
         }
       }
 
@@ -182,10 +185,24 @@ export class PortalInteractionHelper {
         }
       }
 
+      if (!refreshToken) {
+        const matchRefresh = url.match(/refresh-code=([^&]+)/);
+        if (matchRefresh) {
+          refreshToken = matchRefresh[1];
+        }
+      }
+
       if (jwtToken) {
         context.jwtToken = jwtToken;
         this.logger.log(
           `[Tx: automation-${context.txId}] [Token Capture] Captured auth-code token successfully.`,
+        );
+      }
+
+      if (refreshToken) {
+        context.refreshToken = refreshToken;
+        this.logger.log(
+          `[Tx: automation-${context.txId}] [Token Capture] Captured refresh-code token successfully.`,
         );
       }
     } catch (err) {

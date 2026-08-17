@@ -814,15 +814,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.KBLI) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.KBLI, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi via deeplink KBLI: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'networkIdle', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.KBLI,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           const kbliRes = await this.filingFlowService.executeKbliSteps(sessionCtx);
@@ -837,15 +837,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.TATA_RUANG) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.TATA_RUANG, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi via deeplink Tata Ruang: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.TATA_RUANG,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           await this.filingFlowService.executeTataRuangSteps(sessionCtx);
@@ -858,15 +858,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.INVESTASI) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.INVESTASI, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi via deeplink Investasi: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.INVESTASI,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           await this.filingFlowService.executeInvestasiProdukSteps(sessionCtx);
@@ -879,15 +879,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.PARAMETER) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.PARAMETER, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi via deeplink Parameter Risiko: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.PARAMETER,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           await this.filingFlowService.executeParameterRisikoSteps(sessionCtx);
@@ -900,15 +900,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.LINGKUNGAN) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.LINGKUNGAN, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi via deeplink Persetujuan Lingkungan: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.LINGKUNGAN,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           await this.filingFlowService.executePersetujuanLingkunganSteps(sessionCtx);
@@ -921,15 +921,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.AMDALNET) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.AMDALNET, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 6, 'info', `Navigasi ke OSS untuk penapisan AMDALnet: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.AMDALNET,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
           }
 
           const amdalRes = await this.filingFlowService.executeAmdalnetSteps(sessionCtx);
@@ -944,15 +944,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.activeSteps.set(draftId, activeStep);
 
           if (targetSubStep === AutomationSubStep.NIB) {
-            const deeplink = buildStepDeeplink(AutomationSubStep.NIB, checkpointData);
-            if (deeplink) {
-              this.logStep(subject, 7, 'info', `Navigasi via deeplink Penerbitan NIB: ${deeplink}`);
-              await page.goto(deeplink, { waitUntil: 'load', timeout: 30000 }).catch(() => null);
-            } else {
-              const errMsg = `Deeplink untuk sub-step ${targetSubStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
-              this.logger.error(errMsg);
-              throw new Error(errMsg);
-            }
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.NIB,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              7,
+            );
           }
 
           await this.filingFlowService.executePenerbitanNibSteps(sessionCtx);
@@ -1086,6 +1086,104 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       }
       subject.complete();
     }
+  }
+
+  private async navigateToSubStepDeeplink(
+    page: any,
+    subStep: AutomationSubStep,
+    checkpointData: Record<string, string>,
+    jwtToken: string | undefined,
+    sessionCtx: AutomationSessionContext,
+    subject: Subject<AutomationEvent>,
+    stepNumber: number,
+  ) {
+    const deeplink = buildStepDeeplink(subStep, checkpointData);
+    if (!deeplink) {
+      const errMsg = `Deeplink untuk sub-step ${subStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+      this.logger.error(errMsg);
+      throw new Error(errMsg);
+    }
+
+    // Check if authCode exists in browser localStorage for beranda-stg.oss.go.id
+    const hasAuthCode = await page
+      .evaluate(() => {
+        try {
+          return !!(
+            localStorage.getItem('authCode') ||
+            localStorage.getItem('token') ||
+            localStorage.getItem('access_token') ||
+            localStorage.getItem('auth_code')
+          );
+        } catch (e) {
+          return false;
+        }
+      })
+      .catch(() => false);
+
+    const baseUrl = process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id';
+
+    if (!hasAuthCode && jwtToken) {
+      // Retrieve refresh-code from context or page localStorage if available
+      let refreshToken = sessionCtx.refreshToken || '';
+      if (!refreshToken) {
+        refreshToken = await page
+          .evaluate(() => {
+            try {
+              return (
+                localStorage.getItem('refresh-code') ||
+                localStorage.getItem('refreshToken') ||
+                localStorage.getItem('refresh_token') ||
+                ''
+              );
+            } catch (e) {
+              return '';
+            }
+          })
+          .catch(() => '');
+      }
+
+      let authInitUrl = `${baseUrl}/lokasi-usaha?auth-code=${encodeURIComponent(jwtToken)}`;
+      if (refreshToken) {
+        authInitUrl += `&refresh-code=${encodeURIComponent(refreshToken)}`;
+      }
+
+      this.logger.log(
+        `Inisialisasi autentikasi beranda-stg.oss.go.id via: ${authInitUrl}`,
+      );
+      this.logStep(
+        subject,
+        stepNumber,
+        'info',
+        `Menginisialisasi autentikasi portal beranda via auth-code & refresh-code...`,
+      );
+
+      await page
+        .goto(authInitUrl, { waitUntil: 'load', timeout: 30000 })
+        .catch((err: any) => {
+          this.logger.warn(
+            `Navigasi authInitUrl ke ${authInitUrl} mengalami error: ${err?.message}`,
+          );
+        });
+
+      await page.waitForTimeout(2000);
+    }
+
+    this.logStep(
+      subject,
+      stepNumber,
+      'info',
+      `Navigasi via deeplink ${subStep}: ${deeplink}`,
+    );
+
+    await page
+      .goto(deeplink, { waitUntil: 'load', timeout: 30000 })
+      .catch((err: any) => {
+        this.logger.warn(
+          `Navigasi page.goto ke ${deeplink} mengalami error: ${err?.message}`,
+        );
+      });
+
+    await page.waitForTimeout(2000);
   }
 
   private async initializeBrowser(

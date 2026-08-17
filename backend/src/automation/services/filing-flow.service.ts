@@ -1759,7 +1759,7 @@ export class FilingFlowService {
     return { ...kbliRes, ...amdalRes };
   }
 
-  private async patchPiniaStoreState(page: any) {
+  public async patchPiniaStoreState(page: any) {
     try {
       await page
         .evaluate(() => {
