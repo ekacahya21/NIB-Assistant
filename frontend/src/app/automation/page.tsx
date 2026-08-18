@@ -52,6 +52,12 @@ export default function AutomationPage() {
   const [selectedKbli2025, setSelectedKbli2025] = useState<string>( "");
   const [isSubmittingKbli2025, setIsSubmittingKbli2025] = useState<boolean>(false);
 
+  // Email Update States
+  const [isPromptingEmail, setIsPromptingEmail] = useState<boolean>(false);
+  const [newEmailInput, setNewEmailInput] = useState<string>("");
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState<boolean>(false);
+  const [emailPromptError, setEmailPromptError] = useState<string>("");
+
   // Parameter & Risk States
   const [isPromptingParameter, setIsPromptingParameter] = useState<boolean>(false);
   const [riskData, setRiskData] = useState<{
@@ -202,9 +208,18 @@ export default function AutomationPage() {
     }
   };
 
+  const startElapsedTimer = () => {
+    if (!elapsedTimerRef.current) {
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+  };
+
   useEffect(() => {
     let timerId: any;
-    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter || isPromptingKbli2025) {
+    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter || isPromptingKbli2025 || isPromptingEmail) {
+      clearElapsedTimer();
       setTimeLeft(120);
       timerId = setInterval(() => {
         setTimeLeft((prev) => {
@@ -217,12 +232,13 @@ export default function AutomationPage() {
       }, 1000);
     } else {
       setTimeLeft(120);
+      startElapsedTimer();
     }
 
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter, isPromptingKbli2025]);
+  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter, isPromptingKbli2025, isPromptingEmail]);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -254,9 +270,7 @@ export default function AutomationPage() {
         setStepDurations({});
         setElapsedSeconds(0);
         clearElapsedTimer();
-        elapsedTimerRef.current = setInterval(() => {
-          setElapsedSeconds((prev) => prev + 1);
-        }, 1000);
+        startElapsedTimer();
       };
 
       eventSource.onmessage = (event) => {
@@ -315,6 +329,7 @@ export default function AutomationPage() {
               setIsPromptingProduct(false);
               setIsPromptingParameter(false);
               setIsPromptingKbli2025(false);
+              setIsPromptingEmail(false);
               if (payload.text.toLowerCase().includes("ktp")) {
                 setErrorType("ktp_mismatch");
               } else if (payload.text.toLowerCase().includes("nik")) {
@@ -342,6 +357,7 @@ export default function AutomationPage() {
                 setStatusText("Menunggu Anda mengatur Kata Sandi...");
                 setIsPromptingPassword(true);
                 setIsPromptingOtp(false);
+                setIsPromptingEmail(false);
               } else if (payload.text.includes("OTP diterima") || payload.text.includes("Verifikasi berhasil") || payload.text.includes("SUKSES")) {
                 setIsPromptingOtp(false);
               } else if (payload.text.includes("Mengisi") || payload.text.includes("Mengklik")) {
@@ -350,10 +366,20 @@ export default function AutomationPage() {
                 setStatusText("Membuka Portal OSS");
               }
             }
+            if (payload.text.includes("memperbarui email")) {
+              setStatusText("Perbarui Email Akun OSS");
+              setIsPromptingEmail(true);
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+              setIsPromptingProduct(false);
+              setIsPromptingParameter(false);
+              setIsPromptingKbli2025(false);
+            }
             if (payload.step === 3 && failedStepRef.current === null) {
               setStatusText("Mengisi detail akun & mendaftar...");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
+              setIsPromptingEmail(false);
               if (typeof window !== "undefined") {
                 sessionStorage.setItem("akun_oss", "sudah");
               }
@@ -366,13 +392,16 @@ export default function AutomationPage() {
                 setStatusText("Menunggu Anda memasukkan Kata Sandi...");
                 setIsPromptingPassword(true);
                 setIsPromptingOtp(false);
+                setIsPromptingEmail(false);
               } else if (payload.text.includes("CAPTCHA")) {
                 setStatusText("Menunggu Anda menyelesaikan CAPTCHA...");
                 setIsPromptingOtp(true);
                 setIsPromptingPassword(false);
+                setIsPromptingEmail(false);
               } else if (payload.text.includes("Login berhasil")) {
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
+                setIsPromptingEmail(false);
                 setStatusText("Login Berhasil!");
               } else {
                 setStatusText("Autentikasi & Login OSS...");
@@ -382,6 +411,7 @@ export default function AutomationPage() {
               setStatusText("Mengelola Lokasi Usaha...");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
+              setIsPromptingEmail(false);
             }
              if (payload.step === 6 && failedStepRef.current === null) {
               if (payload.text.includes("MENGISI_RINCIAN_PRODUK")) {
@@ -435,6 +465,7 @@ export default function AutomationPage() {
               setStatusText("Proses Otomatisasi Selesai!");
               setIsPromptingOtp(false);
               setIsPromptingPassword(false);
+              setIsPromptingEmail(false);
               // Redirect to result page after 2 seconds
               setTimeout(() => {
                 router.push(`/result?state=success&draftId=${draftId}`);
@@ -453,6 +484,7 @@ export default function AutomationPage() {
         setIsPromptingProduct(false);
         setIsPromptingParameter(false);
         setIsPromptingKbli2025(false);
+        setIsPromptingEmail(false);
         clearElapsedTimer();
         if (failedStepRef.current === null) {
           addLog("Koneksi backend terputus atau tidak terdeteksi.", "error");
@@ -605,6 +637,7 @@ export default function AutomationPage() {
       setIsPromptingProduct(false);
       setIsPromptingParameter(false);
       setIsPromptingKbli2025(false);
+      setIsPromptingEmail(false);
       setSelectedKbli2025("");
       clearElapsedTimer();
       setElapsedSeconds(0);
@@ -642,6 +675,7 @@ export default function AutomationPage() {
     addLog("Melakukan sinkronisasi session state browser...", "info");
     setIsPromptingOtp(false);
     setIsPromptingPassword(false);
+    setIsPromptingEmail(false);
   };
 
   const handleOtpSubmit = (e: React.FormEvent) => {
@@ -701,6 +735,37 @@ export default function AutomationPage() {
         setConfirmPassword("");
         setShowNewPassword(false);
         setShowConfirmPassword(false);
+      });
+  };
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmailInput.trim()) {
+      setEmailPromptError("Alamat email baru harus diisi.");
+      return;
+    }
+    if (!newEmailInput.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      setEmailPromptError("Format email tidak valid.");
+      return;
+    }
+
+    setEmailPromptError("");
+    setIsSubmittingEmail(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+
+    fetch(`${API_URL}/automation/email/${draftId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: newEmailInput })
+    })
+      .then(() => {
+        addLog(`Email baru (${newEmailInput}) terkirim ke backend.`, "success");
+      })
+      .catch((err) => console.log("Offline or connection error", err))
+      .finally(() => {
+        setIsSubmittingEmail(false);
+        setIsPromptingEmail(false);
+        setNewEmailInput("");
       });
   };
 
@@ -1002,8 +1067,8 @@ export default function AutomationPage() {
                     {stepLabels.map(({ label, icon, step }, idx) => {
                       const isCompleted = currentStep > step;
                       const isCurrent = currentStep === step;
-                      const isActionRequired = isCurrent && (isPromptingOtp || isPromptingPassword);
-                      const isPromptActive = isPromptingOtp || isPromptingPassword;
+                      const isActionRequired = isCurrent && (isPromptingOtp || isPromptingPassword || isPromptingEmail);
+                      const isPromptActive = isPromptingOtp || isPromptingPassword || isPromptingEmail;
                       const shouldHide = isPromptActive && !isCurrent;
                       const isLastStep = idx === stepLabels.length - 1;
                       
@@ -1106,7 +1171,7 @@ export default function AutomationPage() {
                                   <span className="w-2.5 h-2.5 border-2 border-primary-container border-t-transparent rounded-full animate-spin shrink-0" />
                                 )}
                                 {isActionRequired 
-                                  ? (isPromptingOtp ? "⚠️ Masukkan OTP dari Email" : (isBelumAkun() ? "⚠️ Atur Kata Sandi Baru" : "⚠️ Masukkan Kata Sandi"))
+                                  ? (isPromptingOtp ? "⚠️ Masukkan OTP dari Email" : isPromptingEmail ? "⚠️ Perbarui Email Akun OSS" : (isBelumAkun() ? "⚠️ Atur Kata Sandi Baru" : "⚠️ Masukkan Kata Sandi"))
                                   : "Sedang diproses..."
                                 }
                               </p>
@@ -1134,9 +1199,11 @@ export default function AutomationPage() {
                       <span>
                         {isPromptingOtp 
                           ? (currentStep === 4 ? "https://oss.go.id/login/captcha" : "https://oss.go.id/register/otp")
-                          : isPromptingPassword 
-                            ? (isBelumAkun() ? "https://oss.go.id/register/setup-password" : "https://oss.go.id/login/auth")
-                            : "https://oss.go.id/register"
+                          : isPromptingEmail
+                            ? "https://oss.go.id/login/update-email"
+                            : isPromptingPassword 
+                              ? (isBelumAkun() ? "https://oss.go.id/register/setup-password" : "https://oss.go.id/login/auth")
+                              : "https://oss.go.id/register"
                         }
                       </span>
                     </div>
@@ -1216,6 +1283,43 @@ export default function AutomationPage() {
                             Saya Sudah Selesaikan CAPTCHA di Chrome
                           </button>
                         )}
+                      </form>
+                    </div>
+                  ) : isPromptingEmail ? (
+                    <div className="p-8 bg-white space-y-6 animate-fadeIn">
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 rounded bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto">
+                          <span className="material-symbols-outlined text-2xl animate-bounce text-[#1A4384]">mail</span>
+                        </div>
+                        <h3 className="text-sm font-extrabold uppercase tracking-wider text-on-surface">Perbarui Email Akun OSS</h3>
+                        <p className="text-[11px] text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+                          Email Anda saat ini sudah digunakan oleh akun lain. Silakan masukkan alamat email baru yang aktif untuk melanjutkan verifikasi.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleEmailSubmit} className="space-y-4 max-w-xs mx-auto">
+                        <div className="flex flex-col gap-3 text-left">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-on-surface-variant uppercase">Alamat Email Baru</label>
+                            <input
+                              type="email"
+                              placeholder="Contoh: nama@email.com"
+                              value={newEmailInput}
+                              onChange={(e) => setNewEmailInput(e.target.value)}
+                              className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                              required
+                            />
+                          </div>
+                          {emailPromptError && <p className="text-[10px] text-error font-semibold leading-normal">{emailPromptError}</p>}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isSubmittingEmail || !newEmailInput}
+                          className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSubmittingEmail ? "Mengirim..." : "Simpan & Lanjutkan"}
+                        </button>
                       </form>
                     </div>
                   ) : isPromptingPassword ? (
