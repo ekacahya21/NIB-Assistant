@@ -174,10 +174,27 @@ docker compose restart
 sudo systemctl restart 9router.service
 ```
 
-### Update Kode Terbaru
+### Update Kode Manual
 ```bash
 cd /opt/nib-assistant
 git pull origin main
 docker compose up -d --build
-docker compose exec backend npx prisma migrate deploy
+docker compose exec backend npx prisma db push
 ```
+
+---
+
+## 8. CI/CD Otomatis Menggunakan GitHub Actions
+
+Setiap ada `git push` ke branch `main` atau `revamp2`, GitHub Actions akan otomatis melakukan deploy ke VPS melalui SSH.
+
+### Konfigurasi GitHub Repository Secrets
+Buka repositori di GitHub: **Settings > Secrets and variables > Actions > New repository secret**, lalu tambahkan:
+
+1. **`VPS_HOST`**: `169.58.196.127`
+2. **`VPS_USERNAME`**: `root`
+3. **`VPS_SSH_KEY`**: Salin isi private key SSH Anda (misal isi dari file `~/.ssh/id_rsa` lokal).
+4. **`VPS_PORT`**: `22` *(opsional)*
+
+File workflow telah dibuat di [`.github/workflows/deploy.yml`](file:///.github/workflows/deploy.yml).
+
