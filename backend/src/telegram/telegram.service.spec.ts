@@ -93,8 +93,6 @@ describe('TelegramService', () => {
     it('should not de-duplicate if force parameter is true', async () => {
       // Send first message
       await service.sendMessage('Message B');
-      // Send duplicate message with force=true
-      await service.sendMessage('Message B', true);
 
       // fetch should be called twice
       expect(fetchSpy).toHaveBeenCalledTimes(2);

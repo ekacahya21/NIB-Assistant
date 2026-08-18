@@ -66,7 +66,7 @@ export class TelegramService implements OnModuleInit {
    * Sends a message to the configured Telegram channel/group.
    * Handles de-duplication, environment prefixing, and silent fallback.
    */
-  async sendMessage(rawMessage: string, force = false): Promise<void> {
+  async sendMessage(rawMessage: string): Promise<void> {
     if (!this.botToken || !this.chatId) {
       return;
     }
@@ -75,14 +75,6 @@ export class TelegramService implements OnModuleInit {
     this.pruneCache();
 
     const messageKey = this.generateHash(rawMessage);
-    const lastSentTime = this.sentErrors.get(messageKey);
-
-    if (!force && lastSentTime && now - lastSentTime < this.COOLDOWN_MS) {
-      this.logger.log(
-        `Duplicate alert suppressed for Telegram to prevent spamming. Message prefix: "${rawMessage.substring(0, 50)}..."`,
-      );
-      return;
-    }
 
     // Update timestamp before sending
     this.sentErrors.set(messageKey, now);
