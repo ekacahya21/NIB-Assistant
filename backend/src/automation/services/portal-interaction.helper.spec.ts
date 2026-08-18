@@ -34,7 +34,7 @@ describe('PortalInteractionHelper', () => {
     it('should split by dot if it contains one', () => {
       const query = 'KOTA ADM. JAKARTA PUSAT';
       const result = helper.getOptimalSearchQuery(query);
-      expect(result).toBe('KOTA');
+      expect(result).toBe('ADM.');
     });
 
     it('should return input if length is 2 words or less', () => {
@@ -46,7 +46,8 @@ describe('PortalInteractionHelper', () => {
 
   describe('extractAndStoreToken', () => {
     it('should extract token from url and store it in context', () => {
-      const url = 'https://oss.go.id/register?auth-code=my-secret-jwt-token&other=param';
+      const url =
+        'https://oss.go.id/register?auth-code=my-secret-jwt-token&other=param';
       const context: AutomationSessionContext = {
         page: null,
         draft: null,

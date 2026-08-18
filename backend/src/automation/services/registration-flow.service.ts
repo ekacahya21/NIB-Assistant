@@ -47,11 +47,7 @@ export class RegistrationFlowService {
       .fill(draft.nik);
 
     // Wait dynamically for NIK and Email verification status in parallel
-    context.logStep(
-      2,
-      'info',
-      `Mengisi Email Pemilik: ${draft.email}...`,
-    );
+    context.logStep(2, 'info', `Mengisi Email Pemilik: ${draft.email}...`);
     await page.getByRole('textbox', { name: 'Contoh: nama@email.com' }).click();
     await page
       .getByRole('textbox', { name: 'Contoh: nama@email.com' })
@@ -124,7 +120,9 @@ export class RegistrationFlowService {
         'error',
         `Pendaftaran GAGAL: OTP tidak valid atau batas waktu habis. Diterima: '${otpCode}', tipe: ${typeof otpCode}, panjang: ${otpCode?.length}. Silakan coba lagi.`,
       );
-      throw new Error('Batas waktu pengisian OTP telah habis atau OTP tidak valid.');
+      throw new Error(
+        'Batas waktu pengisian OTP telah habis atau OTP tidak valid.',
+      );
     }
 
     context.logStep(
@@ -161,7 +159,11 @@ export class RegistrationFlowService {
       throw new Error(`Verifikasi OTP gagal: ${errorMsg}`);
     }
 
-    await this.interactionHelper.logSessionState(page, txId, 'After OTP Verification');
+    await this.interactionHelper.logSessionState(
+      page,
+      txId,
+      'After OTP Verification',
+    );
 
     // 8. Setting up password
     await page.waitForTimeout(5000);
@@ -298,7 +300,11 @@ export class RegistrationFlowService {
       );
     }
 
-    await this.interactionHelper.logSessionState(page, txId, 'After Password Creation');
+    await this.interactionHelper.logSessionState(
+      page,
+      txId,
+      'After Password Creation',
+    );
 
     return passwordCode;
   }
@@ -316,11 +322,7 @@ export class RegistrationFlowService {
     } else if (cleanPhone.startsWith('0')) {
       cleanPhone = cleanPhone.substring(1);
     }
-    context.logStep(
-      3,
-      'info',
-      `Mengisi nomor ponsel: ${draft.nomorHp}...`,
-    );
+    context.logStep(3, 'info', `Mengisi nomor ponsel: ${draft.nomorHp}...`);
     await page.getByRole('textbox', { name: '81x-xxxx-xxxxx' }).click();
     await page
       .getByRole('textbox', { name: '81x-xxxx-xxxxx' })
@@ -375,12 +377,9 @@ export class RegistrationFlowService {
 
     // Search and Select Provinsi
     const cleanProvinsi = (draft.provinsiKtp || draft.provinsi).trim();
-    const searchProvinsi = this.interactionHelper.getOptimalSearchQuery(cleanProvinsi);
-    context.logStep(
-      3,
-      'info',
-      `Mencari provinsi KTP: ${cleanProvinsi}...`,
-    );
+    const searchProvinsi =
+      this.interactionHelper.getOptimalSearchQuery(cleanProvinsi);
+    context.logStep(3, 'info', `Mencari provinsi KTP: ${cleanProvinsi}...`);
 
     const provPromise = page
       .waitForResponse(
@@ -398,18 +397,18 @@ export class RegistrationFlowService {
     );
     await provPromise;
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanProvinsi, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanProvinsi,
+      context,
+    );
     await page.waitForTimeout(200);
 
     // Trim "Kota" / "Kabupaten" and search using partial "like" match
     const rawKota = draft.kotaKabupatenKtp || draft.kotaKabupaten;
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.interactionHelper.getOptimalSearchQuery(cleanKota);
-    context.logStep(
-      3,
-      'info',
-      `Mencari kabupaten/kota KTP: ${rawKota}...`,
-    );
+    context.logStep(3, 'info', `Mencari kabupaten/kota KTP: ${rawKota}...`);
 
     const kotaPromise = page
       .waitForResponse(
@@ -432,12 +431,9 @@ export class RegistrationFlowService {
 
     // Search and Select Kecamatan
     const cleanKecamatan = (draft.kecamatanKtp || draft.kecamatan).trim();
-    const searchKecamatan = this.interactionHelper.getOptimalSearchQuery(cleanKecamatan);
-    context.logStep(
-      3,
-      'info',
-      `Mencari kecamatan KTP: ${cleanKecamatan}...`,
-    );
+    const searchKecamatan =
+      this.interactionHelper.getOptimalSearchQuery(cleanKecamatan);
+    context.logStep(3, 'info', `Mencari kecamatan KTP: ${cleanKecamatan}...`);
 
     const kecPromise = page
       .waitForResponse(
@@ -455,12 +451,17 @@ export class RegistrationFlowService {
     );
     await kecPromise;
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanKecamatan, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanKecamatan,
+      context,
+    );
     await page.waitForTimeout(200);
 
     // Search and Select Desa / Kelurahan
     const cleanKelurahan = (draft.kelurahanKtp || draft.kelurahan).trim();
-    const searchKelurahan = this.interactionHelper.getOptimalSearchQuery(cleanKelurahan);
+    const searchKelurahan =
+      this.interactionHelper.getOptimalSearchQuery(cleanKelurahan);
     context.logStep(
       3,
       'info',
@@ -483,7 +484,11 @@ export class RegistrationFlowService {
     );
     await kelPromise;
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanKelurahan, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanKelurahan,
+      context,
+    );
     await page.waitForTimeout(200);
 
     context.logStep(

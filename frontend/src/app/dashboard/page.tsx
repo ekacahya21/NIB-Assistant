@@ -17,6 +17,7 @@ interface DraftItem {
   email: string;
   updatedAt: string;
   status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal";
+  stepDetails?: string;
   kbliCode?: string;
   kbliTitle?: string;
   alamatUsaha?: string;
@@ -68,12 +69,31 @@ export default function DashboardPage() {
           const backendDrafts: DraftItem[] = data.map((item: any) => {
             // Infer status dynamically from backend DB status
             let status: "Draft" | "Proses" | "Sukses" | "Butuh OTP" | "Gagal" = "Draft";
+            let stepDetails: string | undefined = undefined;
             const dbStatus = item.status ? item.status.toUpperCase() : null;
             
             if (dbStatus === "COMPLETED") {
               status = "Sukses";
             } else if (dbStatus === "RUNNING" || dbStatus === "QUEUED") {
               status = "Proses";
+            } else if (dbStatus && dbStatus.startsWith("FAILED_SUBSTEP_")) {
+              status = "Gagal";
+              const subKey = dbStatus.replace("FAILED_SUBSTEP_", "");
+              const SUBSTEP_MAP: Record<string, string> = {
+                LOCATION: "Lokasi Usaha",
+                KBLI: "KBLI",
+                TATA_RUANG: "Tata Ruang",
+                INVESTASI: "Investasi & Produk",
+                PARAMETER: "Parameter Risiko",
+                LINGKUNGAN: "Persetujuan Lingkungan",
+                AMDALNET: "AMDALnet",
+                NIB: "Penerbitan NIB",
+              };
+              stepDetails = SUBSTEP_MAP[subKey] || subKey;
+            } else if (dbStatus && dbStatus.startsWith("FAILED_STEP_")) {
+              status = "Gagal";
+              const stepNum = dbStatus.split("_")[2];
+              stepDetails = `Step ${stepNum}`;
             } else if (dbStatus === "FAILED_LATER") {
               status = "Gagal";
             } else if (dbStatus === "FAILED") {
@@ -99,6 +119,7 @@ export default function DashboardPage() {
               email: item.email || "",
               updatedAt: item.updatedAt || new Date().toISOString(),
               status,
+              stepDetails,
               kbliCode: item.kbliCode,
               kbliTitle: item.kbliTitle,
               alamatUsaha: item.alamatUsaha,
@@ -397,7 +418,7 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Status badges mapping */}
-                    <StatusBadge status={draft.status} />
+                    <StatusBadge status={draft.status} stepDetails={draft.stepDetails} />
                   </div>
 
                   {/* Middle row: Owner details */}

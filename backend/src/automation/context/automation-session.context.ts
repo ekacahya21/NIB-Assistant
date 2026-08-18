@@ -8,6 +8,7 @@ export interface AutomationSessionContext {
   akunOss: 'belum' | 'sudah';
   txId: string;
   jwtToken?: string;
+  refreshToken?: string;
   logStep: (
     step: number,
     status: 'info' | 'success' | 'warn' | 'error',

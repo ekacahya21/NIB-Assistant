@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from '@zorilla/puppeteer-extra-plugin-stealth';
@@ -10,6 +15,14 @@ import { PortalInteractionHelper } from './services/portal-interaction.helper';
 import { RegistrationFlowService } from './services/registration-flow.service';
 import { FilingFlowService } from './services/filing-flow.service';
 import { AutomationSessionContext } from './context/automation-session.context';
+import {
+  AutomationSubStep,
+  STEP_REGISTRY,
+  buildStepDeeplink,
+  getNextSubStep,
+  hasRequiredDataForNextStep,
+  isStepCompleted,
+} from './config/automation-steps.config';
 
 // Configure Playwright Extra with the stealth evasion plugin globally
 chromium.use(stealthPlugin());
@@ -59,7 +72,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   >();
   private readonly cancelledDrafts = new Set<string>();
   private readonly sessionLogs = new Map<string, Array<any>>();
-
+  private readonly activeSteps = new Map<string, number>();
 
   // Queue and browser management
   private activeSessionsCount = 0;
@@ -72,6 +85,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     resolve: () => void;
     reject: (err: any) => void;
     isCancelled: boolean;
+    phase?: string;
+    resumeFromStep?: string;
   }> = [];
 
   constructor(
@@ -112,7 +127,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         }
       }
       if (prunedCount > 0) {
-        this.logger.log(`Pruned ${prunedCount} video recording files older than 7 days.`);
+        this.logger.log(
+          `Pruned ${prunedCount} video recording files older than 7 days.`,
+        );
       } else {
         this.logger.log('No video recording files older than 7 days found.');
       }
@@ -202,24 +219,48 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     draftId: string,
     akunOss?: string,
     sessionId?: string,
+    phase?: string,
+    resumeFromStep?: string,
   ): Observable<AutomationEvent> {
     return new Observable<AutomationEvent>((subscriber) => {
-      // Prevent double session for the same draftId
+      // Support reconnection to existing session
       if (this.activeSubjects.has(draftId)) {
-        subscriber.next({
-          step: 1,
-          status: 'error',
-          text: 'Sesi otomatisasi untuk data ini sudah berjalan atau sedang mengantre.',
+        this.logger.log(
+          `Client reconnecting to existing session for draft: ${draftId}`,
+        );
+        const subject = this.activeSubjects.get(draftId)!;
+
+        // Replay log history
+        const logs = this.sessionLogs.get(draftId) || [];
+        for (const log of logs) {
+          subscriber.next({
+            step: log.step,
+            status: log.status,
+            text: log.text,
+            data: log.data,
+          });
+        }
+
+        // Subscribe to future events
+        const subscription = subject.subscribe({
+          next: (val) => subscriber.next(val),
+          error: (err) => subscriber.error(err),
+          complete: () => subscriber.complete(),
         });
-        subscriber.complete();
-        return;
+
+        return () => {
+          this.logger.log(
+            `Client disconnected from reconnected SSE stream for draft: ${draftId}`,
+          );
+          subscription.unsubscribe();
+        };
       }
 
       const subject = new Subject<AutomationEvent>();
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);
 
-      this.enqueueRequest(draftId, akunOss, subject, sessionId);
+      this.enqueueRequest(draftId, akunOss, subject, sessionId, phase, resumeFromStep);
 
       const subscription = subject.subscribe({
         next: (val) => subscriber.next(val),
@@ -232,7 +273,14 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           `Client disconnected from SSE stream for draft: ${draftId}`,
         );
         subscription.unsubscribe();
-        this.cancelStream(draftId, subject);
+        const currentActiveStep = this.activeSteps.get(draftId) || 1;
+        if (phase === 'registration' && currentActiveStep < 3) {
+          this.cancelStream(draftId, subject);
+        } else {
+          this.logger.log(
+            `Phase ${phase} for draft ID ${draftId} is at step ${currentActiveStep} and will continue in background.`,
+          );
+        }
       };
     });
   }
@@ -244,7 +292,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   cancelStream(draftId: string, subject?: Subject<AutomationEvent>) {
     // If a subject is provided, only cancel if it is still the active stream
     if (subject && this.activeSubjects.get(draftId) !== subject) {
-      this.logger.log(`Ignoring cancellation request for old/finished stream of draft ID: ${draftId}`);
+      this.logger.log(
+        `Ignoring cancellation request for old/finished stream of draft ID: ${draftId}`,
+      );
       return;
     }
 
@@ -295,6 +345,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
     sessionId?: string,
+    phase?: string,
+    resumeFromStep?: string,
   ) {
     const maxSessions = parseInt(
       process.env.PLAYWRIGHT_MAX_CONCURRENT_SESSIONS || '3',
@@ -308,7 +360,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         .update(draftId, { status: 'RUNNING', sessionId })
         .catch(() => {});
 
-      this.runPlaywrightAutomation(draftId, akunOss, subject)
+      this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep)
         .catch((err) => {
           this.logger.error(
             `Error running playwright automation for draft ${draftId}: ${err.message}`,
@@ -344,6 +396,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           resolve,
           reject,
           isCancelled: false,
+          phase,
+          resumeFromStep,
         });
       })
         .then(async () => {
@@ -351,7 +405,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           await this.draftsService
             .update(draftId, { status: 'RUNNING', sessionId })
             .catch(() => {});
-          return this.runPlaywrightAutomation(draftId, akunOss, subject);
+          return this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep);
         })
         .catch((err) => {
           this.logger.error(
@@ -453,7 +507,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             1: 'Inisialisasi Portal',
             2: 'Validasi NIK & OTP',
             3: 'Detail Profil & Registrasi',
-            4: 'Login & CAPTCHA',
+            4: 'Login',
             5: 'Pengelolaan Lokasi Usaha',
           };
           const prevStepName = stepNames[prevStep] || `Langkah ${prevStep}`;
@@ -510,6 +564,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         step,
         status,
         text: richText,
+        data,
         timestamp: new Date().toISOString(),
       });
     }
@@ -540,6 +595,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     draftId: string,
     akunOss: string | undefined,
     subject: Subject<AutomationEvent>,
+    phase?: string,
+    resumeFromStep?: string,
   ): Promise<void> {
     const draft = await this.draftsService.findOne(draftId);
     if (!draft) {
@@ -558,7 +615,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
     this.sessionLogs.set(draftId, []);
 
-    const isRegister = akunOss === 'belum';
+    const isRegister =
+      phase === 'registration' ||
+      (phase === undefined &&
+        (akunOss === 'belum' || !draft.registrationCompleted));
+    const isFiling = phase === 'filing' || phase === undefined;
     const timerNow = Date.now();
     this.executionTimers.set(draftId, {
       startTime: timerNow,
@@ -569,8 +630,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     let browser: any = null;
     let context: any = null;
     let page: any = null;
-    let activeStep = 1;
-    let passwordCode = '';
+    let activeStep = isRegister ? 1 : 4;
+    this.activeSteps.set(draftId, activeStep);
+    let passwordCode = draft.ossPassword || '';
     let finalErrorMessage: string | null = null;
 
     // Delete previous recordings if they exist to clear disk space for retry
@@ -603,50 +665,310 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         subject,
         akunOss: isRegister ? 'belum' : 'sudah',
         txId: draftId,
-        logStep: (step, status, text, data) => this.logStep(subject, step, status, text, data),
-        waitForOtp: () => this.waitForUserInput<string>(draftId, this.activeOtps),
-        waitForPassword: () => this.waitForUserInput<string>(draftId, this.activePasswords),
-        waitForProductInput: () => this.waitForUserInput<any>(draftId, this.activeProductInputs),
-        waitForParameterInput: () => this.waitForUserInput<string>(draftId, this.activeParameterInputs),
+        logStep: (step, status, text, data) =>
+          this.logStep(subject, step, status, text, data),
+        waitForOtp: () =>
+          this.waitForUserInput<string>(draftId, this.activeOtps),
+        waitForPassword: () =>
+          this.waitForUserInput<string>(draftId, this.activePasswords),
+        waitForProductInput: () =>
+          this.waitForUserInput<any>(draftId, this.activeProductInputs),
+        waitForParameterInput: () =>
+          this.waitForUserInput<string>(draftId, this.activeParameterInputs),
       };
 
       // Step 1: Initialize Browser
-      const initResult = await this.initializeBrowser(sessionCtx);
-      browser = initResult.browser;
-      context = initResult.context;
-      page = initResult.page;
-      sessionCtx.page = page;
+      if (activeStep === 1) {
+        const initResult = await this.initializeBrowser(sessionCtx);
+        browser = initResult.browser;
+        context = initResult.context;
+        page = initResult.page;
+        sessionCtx.page = page;
+      }
 
       if (isRegister) {
         // Step 2: Registration & Verification
         activeStep = 2;
-        passwordCode = await this.registrationFlowService.executeRegistrationSteps(sessionCtx);
+        this.activeSteps.set(draftId, activeStep);
+        passwordCode =
+          await this.registrationFlowService.executeRegistrationSteps(
+            sessionCtx,
+          );
 
         // Step 3: Fill Detailed Profile Information
         activeStep = 3;
-        await this.registrationFlowService.executeDetailProfileSteps(sessionCtx);
+        this.activeSteps.set(draftId, activeStep);
+        await this.registrationFlowService.executeDetailProfileSteps(
+          sessionCtx,
+        );
+
+        // Save credentials immediately after successful registration
+        await this.draftsService.update(draftId, {
+          ossPassword: passwordCode,
+          registrationCompleted: true,
+        });
+
+        this.logStep(
+          subject,
+          3,
+          'success',
+          'Pendaftaran akun OSS berhasil! Kredensial telah disimpan dan siap digunakan.',
+        );
+
+        if (phase === 'registration') {
+          activeStep = 7; // Mark Phase 1 complete
+          this.activeSteps.set(draftId, activeStep);
+          this.logStep(
+            subject,
+            7,
+            'success',
+            'Pendaftaran akun OSS selesai dengan sukses!',
+          );
+        }
       }
 
-      // Step 4: Login & Authentication
-      activeStep = 4;
-      const jwtToken = await this.filingFlowService.executeLoginSteps(sessionCtx, passwordCode);
+      if (isFiling && activeStep < 7) {
+        // If starting directly from filing phase, initialize browser
+        if (!page) {
+          const initResult = await this.initializeBrowser(sessionCtx);
+          browser = initResult.browser;
+          context = initResult.context;
+          page = initResult.page;
+          sessionCtx.page = page;
+        }
 
-      // Step 5: Kelola Lokasi Usaha
-      activeStep = 5;
-      await this.filingFlowService.executeManageLocationSteps(sessionCtx, jwtToken);
+        // Step 4: Login & Authentication
+        activeStep = 4;
+        this.activeSteps.set(draftId, activeStep);
+        const jwtToken = await this.filingFlowService.executeLoginSteps(
+          sessionCtx,
+          passwordCode,
+        );
 
-      // Step 6: Kelola detail Usaha
-      activeStep = 6;
-      await this.filingFlowService.executeManageBusinessDetailSteps(sessionCtx);
+        // Retrieve existing checkpoint data
+        let checkpointData: Record<string, string> =
+          (draft.checkpointData as Record<string, string>) || {};
 
-      // Step 7: Selesai
-      activeStep = 7;
-      this.logStep(
-        subject,
-        7,
-        'success',
-        'Otomatisasi NIB selesai dengan sukses!',
-      );
+        // Determine target resume sub-step
+        const targetSubStep: AutomationSubStep =
+          resumeFromStep && Object.values(AutomationSubStep).includes(resumeFromStep as AutomationSubStep)
+            ? (resumeFromStep as AutomationSubStep)
+            : getNextSubStep(draft.lastCompletedStep);
+
+        this.logger.log(
+          `Filing automation started for draft ${draftId}. Target sub-step: ${targetSubStep}. Existing checkpoint: ${JSON.stringify(checkpointData)}`,
+        );
+
+        const saveCheckpoint = async (
+          completedSubStep: AutomationSubStep,
+          newData?: Record<string, string>,
+        ) => {
+          if (newData) {
+            checkpointData = { ...checkpointData, ...newData };
+          }
+
+          // Validate if required data for generating next step deeplink is present
+          const validation = hasRequiredDataForNextStep(completedSubStep, checkpointData);
+          if (!validation.valid) {
+            const errMessage = `Data pendukung ID (${validation.missingIds.join(', ')}) untuk sub-step berikutnya (${validation.nextStep}) tidak ditemukan. Otomatisasi dianggap gagal.`;
+            this.logger.error(`Checkpoint validation failed at sub-step ${completedSubStep}: ${errMessage}`);
+            this.logStep(
+              subject,
+              activeStep,
+              'error',
+              `Gagal menyimpan checkpoint sub-step ${completedSubStep}: Data pendukung ID (${validation.missingIds.join(', ')}) tidak lengkap untuk sub-step berikutnya (${validation.nextStep}).`,
+            );
+            throw new Error(errMessage);
+          }
+
+          draft.lastCompletedStep = completedSubStep;
+          draft.checkpointData = { ...checkpointData };
+
+          await this.draftsService
+            .update(draftId, {
+              lastCompletedStep: completedSubStep,
+              checkpointData: { ...checkpointData },
+            })
+            .catch((err) => {
+              this.logger.error(`Failed to update draft checkpoint: ${err.message}`);
+            });
+        };
+
+        // --- SUB-STEP 1: LOCATION (Step 5) ---
+        if (!isStepCompleted(AutomationSubStep.LOCATION, targetSubStep)) {
+          activeStep = 5;
+          this.activeSteps.set(draftId, activeStep);
+          const locationRes = await this.filingFlowService.executeManageLocationSteps(
+            sessionCtx,
+            jwtToken,
+          );
+          if (locationRes?.id_proyek_lokasi) {
+            checkpointData.id_proyek_lokasi = locationRes.id_proyek_lokasi;
+          }
+          await saveCheckpoint(AutomationSubStep.LOCATION, checkpointData);
+        }
+
+        // --- SUB-STEP 2: KBLI (Step 6) ---
+        if (!isStepCompleted(AutomationSubStep.KBLI, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.KBLI) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.KBLI,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          const kbliRes = await this.filingFlowService.executeKbliSteps(sessionCtx);
+          if (kbliRes?.id_proyek) checkpointData.id_proyek = kbliRes.id_proyek;
+          if (kbliRes?.id_proyek_lokasi) checkpointData.id_proyek_lokasi = kbliRes.id_proyek_lokasi;
+          await saveCheckpoint(AutomationSubStep.KBLI, checkpointData);
+        }
+
+        // --- SUB-STEP 3: TATA RUANG ---
+        if (!isStepCompleted(AutomationSubStep.TATA_RUANG, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.TATA_RUANG) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.TATA_RUANG,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          await this.filingFlowService.executeTataRuangSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.TATA_RUANG, checkpointData);
+        }
+
+        // --- SUB-STEP 4: INVESTASI & PRODUK ---
+        if (!isStepCompleted(AutomationSubStep.INVESTASI, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.INVESTASI) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.INVESTASI,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          await this.filingFlowService.executeInvestasiProdukSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.INVESTASI, checkpointData);
+        }
+
+        // --- SUB-STEP 5: PARAMETER RISIKO ---
+        if (!isStepCompleted(AutomationSubStep.PARAMETER, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.PARAMETER) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.PARAMETER,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          await this.filingFlowService.executeParameterRisikoSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.PARAMETER, checkpointData);
+        }
+
+        // --- SUB-STEP 6: PERSETUJUAN LINGKUNGAN ---
+        if (!isStepCompleted(AutomationSubStep.LINGKUNGAN, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.LINGKUNGAN) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.LINGKUNGAN,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          await this.filingFlowService.executePersetujuanLingkunganSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.LINGKUNGAN, checkpointData);
+        }
+
+        // --- SUB-STEP 7: PENAPISAN AMDALNET ---
+        if (!isStepCompleted(AutomationSubStep.AMDALNET, targetSubStep)) {
+          activeStep = 6;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.AMDALNET) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.AMDALNET,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              6,
+            );
+          }
+
+          const amdalRes = await this.filingFlowService.executeAmdalnetSteps(sessionCtx);
+          if (amdalRes?.kd_izin) checkpointData.kd_izin = amdalRes.kd_izin;
+          if (amdalRes?.id_izin) checkpointData.id_izin = amdalRes.id_izin;
+          await saveCheckpoint(AutomationSubStep.AMDALNET, checkpointData);
+        }
+
+        // --- SUB-STEP 8: PENERBITAN NIB (Step 7) ---
+        if (!isStepCompleted(AutomationSubStep.NIB, targetSubStep)) {
+          activeStep = 7;
+          this.activeSteps.set(draftId, activeStep);
+
+          if (targetSubStep === AutomationSubStep.NIB) {
+            await this.navigateToSubStepDeeplink(
+              page,
+              AutomationSubStep.NIB,
+              checkpointData,
+              jwtToken,
+              sessionCtx,
+              subject,
+              7,
+            );
+          }
+
+          await this.filingFlowService.executePenerbitanNibSteps(sessionCtx);
+          await saveCheckpoint(AutomationSubStep.NIB, checkpointData);
+        }
+
+        // Step 7: Selesai
+        activeStep = 7;
+        this.activeSteps.set(draftId, activeStep);
+        this.logStep(
+          subject,
+          7,
+          'success',
+          'Otomatisasi NIB selesai dengan sukses!',
+        );
+      }
     } catch (error: any) {
       console.error(
         'Playwright execution error inside runPlaywrightAutomation:',
@@ -665,17 +987,28 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       const duration = timers
         ? Math.round((Date.now() - timers.startTime) / 1000)
         : 0;
-      const finalStatus =
-        activeStep === 7
-          ? 'COMPLETED'
-          : activeStep > 2
-            ? 'FAILED_LATER'
-            : 'FAILED';
       const isCancelled = this.cancelledDrafts.has(draftId);
       this.cancelledDrafts.delete(draftId);
 
+      const finalStatus =
+        activeStep === 7
+          ? phase === 'registration'
+            ? 'DRAFT'
+            : 'COMPLETED'
+          : isCancelled
+            ? activeStep > 1
+              ? `FAILED_STEP_${activeStep - 1}`
+              : 'FAILED'
+            : phase === 'registration'
+              ? 'FAILED'
+              : draft.lastCompletedStep
+                ? `FAILED_SUBSTEP_${draft.lastCompletedStep}`
+                : activeStep > 2
+                  ? 'FAILED_LATER'
+                  : 'FAILED';
+
       const dbErrorMessage =
-        finalStatus === 'COMPLETED'
+        finalStatus === 'COMPLETED' || finalStatus === 'DRAFT'
           ? null
           : isCancelled
             ? 'Sesi dibatalkan oleh pengguna.'
@@ -716,6 +1049,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.activeBrowsers.delete(draftId);
       this.activeSubjects.delete(draftId);
       this.draftMetadata.delete(draftId);
+      this.activeSteps.delete(draftId);
       if (browser) {
         await browser.close().catch(() => {});
       }
@@ -754,6 +1088,104 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async navigateToSubStepDeeplink(
+    page: any,
+    subStep: AutomationSubStep,
+    checkpointData: Record<string, string>,
+    jwtToken: string | undefined,
+    sessionCtx: AutomationSessionContext,
+    subject: Subject<AutomationEvent>,
+    stepNumber: number,
+  ) {
+    const deeplink = buildStepDeeplink(subStep, checkpointData);
+    if (!deeplink) {
+      const errMsg = `Deeplink untuk sub-step ${subStep} tidak dapat dibuat karena data checkpoint tidak lengkap (${JSON.stringify(checkpointData)}).`;
+      this.logger.error(errMsg);
+      throw new Error(errMsg);
+    }
+
+    // Check if authCode exists in browser localStorage for beranda-stg.oss.go.id
+    const hasAuthCode = await page
+      .evaluate(() => {
+        try {
+          return !!(
+            localStorage.getItem('authCode') ||
+            localStorage.getItem('token') ||
+            localStorage.getItem('access_token') ||
+            localStorage.getItem('auth_code')
+          );
+        } catch (e) {
+          return false;
+        }
+      })
+      .catch(() => false);
+
+    const baseUrl = process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id';
+
+    if (!hasAuthCode && jwtToken) {
+      // Retrieve refresh-code from context or page localStorage if available
+      let refreshToken = sessionCtx.refreshToken || '';
+      if (!refreshToken) {
+        refreshToken = await page
+          .evaluate(() => {
+            try {
+              return (
+                localStorage.getItem('refresh-code') ||
+                localStorage.getItem('refreshToken') ||
+                localStorage.getItem('refresh_token') ||
+                ''
+              );
+            } catch (e) {
+              return '';
+            }
+          })
+          .catch(() => '');
+      }
+
+      let authInitUrl = `${baseUrl}/lokasi-usaha?auth-code=${encodeURIComponent(jwtToken)}`;
+      if (refreshToken) {
+        authInitUrl += `&refresh-code=${encodeURIComponent(refreshToken)}`;
+      }
+
+      this.logger.log(
+        `Inisialisasi autentikasi beranda-stg.oss.go.id via: ${authInitUrl}`,
+      );
+      this.logStep(
+        subject,
+        stepNumber,
+        'info',
+        `Menginisialisasi autentikasi portal beranda via auth-code & refresh-code...`,
+      );
+
+      await page
+        .goto(authInitUrl, { waitUntil: 'load', timeout: 30000 })
+        .catch((err: any) => {
+          this.logger.warn(
+            `Navigasi authInitUrl ke ${authInitUrl} mengalami error: ${err?.message}`,
+          );
+        });
+
+      await page.waitForTimeout(2000);
+    }
+
+    this.logStep(
+      subject,
+      stepNumber,
+      'info',
+      `Navigasi via deeplink ${subStep}: ${deeplink}`,
+    );
+
+    await page
+      .goto(deeplink, { waitUntil: 'load', timeout: 30000 })
+      .catch((err: any) => {
+        this.logger.warn(
+          `Navigasi page.goto ke ${deeplink} mengalami error: ${err?.message}`,
+        );
+      });
+
+    await page.waitForTimeout(2000);
+  }
+
   private async initializeBrowser(
     sessionCtx: AutomationSessionContext,
   ): Promise<{ browser: any; context: any; page: any }> {
@@ -761,7 +1193,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     this.logStep(subject, 1, 'info', 'Menginisialisasi browser...');
     const browser = await chromium.launch({
       headless: process.env.PLAYWRIGHT_HEADLESS === 'true',
-      slowMo: process.env.PLAYWRIGHT_SLOW_MO ? parseInt(process.env.PLAYWRIGHT_SLOW_MO) : 200,
+      slowMo: process.env.PLAYWRIGHT_SLOW_MO
+        ? parseInt(process.env.PLAYWRIGHT_SLOW_MO)
+        : 200,
     });
     this.activeBrowsers.set(txId, browser);
 
@@ -809,7 +1243,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      await this.interactionHelper.logSessionState(page, `automation-${txId}`, 'Browser Init');
+      await this.interactionHelper.logSessionState(
+        page,
+        `automation-${txId}`,
+        'Browser Init',
+      );
 
       return { browser, context, page };
     } catch (err) {
@@ -823,10 +1261,14 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     inputMap: Map<string, T>,
     timeoutMs = 120000,
   ): Promise<T> {
-    this.logger.log(`[waitForUserInput] Called for draftId: "${draftId}". Map currently has key: ${inputMap.has(draftId)}`);
+    this.logger.log(
+      `[waitForUserInput] Called for draftId: "${draftId}". Map currently has key: ${inputMap.has(draftId)}`,
+    );
     if (inputMap.has(draftId)) {
       const val = inputMap.get(draftId)!;
-      this.logger.log(`[waitForUserInput] Immediate hit for draftId: "${draftId}". Deleting key and returning value.`);
+      this.logger.log(
+        `[waitForUserInput] Immediate hit for draftId: "${draftId}". Deleting key and returning value.`,
+      );
       inputMap.delete(draftId);
       return val;
     }
@@ -835,9 +1277,13 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       let isResolved = false;
 
       const subscription = this.userConfirmations.subscribe((id) => {
-        this.logger.log(`[waitForUserInput Subscription] Received notification for id: "${id}". Target draftId: "${draftId}". Map has key: ${inputMap.has(draftId)}. Cancelled drafts has key: ${this.cancelledDrafts.has(draftId)}`);
+        this.logger.log(
+          `[waitForUserInput Subscription] Received notification for id: "${id}". Target draftId: "${draftId}". Map has key: ${inputMap.has(draftId)}. Cancelled drafts has key: ${this.cancelledDrafts.has(draftId)}`,
+        );
         if (this.cancelledDrafts.has(draftId)) {
-          this.logger.warn(`[waitForUserInput Subscription] Draft "${draftId}" is cancelled. Rejecting promise.`);
+          this.logger.warn(
+            `[waitForUserInput Subscription] Draft "${draftId}" is cancelled. Rejecting promise.`,
+          );
           isResolved = true;
           subscription.unsubscribe();
           clearTimeout(timer);
@@ -847,7 +1293,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
         if (id === draftId && inputMap.has(draftId)) {
           const val = inputMap.get(draftId)!;
-          this.logger.log(`[waitForUserInput Subscription] Found value for draftId: "${draftId}". Resolving promise.`);
+          this.logger.log(
+            `[waitForUserInput Subscription] Found value for draftId: "${draftId}". Resolving promise.`,
+          );
           inputMap.delete(draftId);
           isResolved = true;
           subscription.unsubscribe();
@@ -858,7 +1306,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
       const timer = setTimeout(() => {
         if (!isResolved) {
-          this.logger.error(`[waitForUserInput Timeout] Timeout occurred for draftId: "${draftId}" after ${timeoutMs}ms.`);
+          this.logger.error(
+            `[waitForUserInput Timeout] Timeout occurred for draftId: "${draftId}" after ${timeoutMs}ms.`,
+          );
           subscription.unsubscribe();
           reject(new Error('Batas waktu input habis.'));
         }

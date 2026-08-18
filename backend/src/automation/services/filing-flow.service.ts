@@ -112,7 +112,9 @@ export class FilingFlowService {
           'error',
           `Batas waktu pengisian kata sandi telah habis atau kata sandi tidak valid. Diterima: '${finalPassword}', tipe: ${typeof finalPassword}. Silakan coba lagi.`,
         );
-        throw new Error('Batas waktu pengisian kata sandi telah habis atau tidak valid.');
+        throw new Error(
+          'Batas waktu pengisian kata sandi telah habis atau tidak valid.',
+        );
       }
 
       context.logStep(
@@ -127,144 +129,102 @@ export class FilingFlowService {
       await page.fill(passwordSelector, finalPassword);
       await page.waitForTimeout(1000);
 
-      // Check if captcha is visible on the page
-      const isCaptchaVisible = await page
-        .locator(
-          'input[placeholder*="Captcha"], input[name*="captcha"], #captcha',
-        )
-        .isVisible()
-        .catch(() => false);
-      
       let isRedirected = false;
 
-      if (isCaptchaVisible) {
+      context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
+      const loginButtonSelector =
+        'button[type="button"], button[type="submit"]';
+      await page.click(loginButtonSelector);
+
+      // Wait for redirection
+      context.logStep(
+        4,
+        'info',
+        'Menunggu pengalihan (redirection) setelah masuk...',
+      );
+      const startTime = Date.now();
+      let localErrorMsg = '';
+
+      while (Date.now() - startTime < 30000) {
+        const currentUrl = page.url();
+        if (
+          currentUrl &&
+          !currentUrl.includes('/login') &&
+          !currentUrl.includes('ui-login.oss.go.id') &&
+          !currentUrl.includes('ui-login-stg.oss.go.id')
+        ) {
+          isRedirected = true;
+          break;
+        }
+
+        // Quick check for visible validation errors to abort immediately
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isErrorVisible = await errorLocator
+          .isVisible()
+          .catch(() => false);
+        if (isErrorVisible) {
+          localErrorMsg = await errorLocator
+            .textContent()
+            .catch(() => 'Username atau Kata Sandi salah.');
+          break;
+        }
+
+        await page.waitForTimeout(1000);
+      }
+
+      if (localErrorMsg) {
+        context.logStep(
+          4,
+          'error',
+          `Login GAGAL di portal OSS: ${localErrorMsg.trim()}`,
+        );
+        passwordCode = '';
+        this.cachedPasswords.delete(txId);
         context.logStep(
           4,
           'warn',
-          'Keamanan CAPTCHA terdeteksi di portal OSS. Silakan selesaikan CAPTCHA langsung di jendela browser Chrome, lalu klik Masuk.',
+          'Mencoba kembali dengan meminta kata sandi ulang...',
         );
-        // Wait for the user to complete login manually
-        let isLoginConfirmed = false;
-        const startTime = Date.now();
-        while (Date.now() - startTime < 120000) {
-          // Timeout after 120 seconds
-          const currentUrl = page.url();
-          if (
-            currentUrl &&
-            !currentUrl.includes('/login') &&
-            !currentUrl.includes('ui-login.oss.go.id')
-          ) {
-            isLoginConfirmed = true;
-            isRedirected = true;
-            break;
-          }
-          // Accessing OTP/Confirmation using helper callbacks or stream map
-          const hasConfirmation = await context.waitForOtp().then(() => true).catch(() => false);
-          if (hasConfirmation) {
-            isLoginConfirmed = true;
-            isRedirected = true;
-            break;
-          }
-          await page.waitForTimeout(1000);
-        }
-        if (!isLoginConfirmed) {
+        await page.waitForTimeout(2000);
+        continue; // Restart the retry loop
+      }
+
+      if (!isRedirected) {
+        // Fallback post-loop check for validation error messages
+        const errorLocator = page
+          .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
+          .first();
+        const isLoginErrorVisible = await errorLocator
+          .isVisible()
+          .catch(() => false);
+        if (isLoginErrorVisible) {
+          const errorMsg = await errorLocator
+            .textContent()
+            .catch(() => 'Username atau Kata Sandi salah.');
           context.logStep(
             4,
             'error',
-            'Batas waktu penyelesaian login/CAPTCHA habis (120 detik).',
-          );
-          throw new Error('Batas waktu login habis.');
-        }
-      } else {
-        context.logStep(4, 'info', 'Mengklik tombol "Masuk"...');
-        const loginButtonSelector =
-          'button[type="button"], button[type="submit"]';
-        await page.click(loginButtonSelector);
-
-        // Wait for redirection
-        context.logStep(
-          4,
-          'info',
-          'Menunggu pengalihan (redirection) setelah masuk...',
-        );
-        const startTime = Date.now();
-        let localErrorMsg = '';
-
-        while (Date.now() - startTime < 30000) {
-          const currentUrl = page.url();
-          if (
-            currentUrl &&
-            !currentUrl.includes('/login') &&
-            !currentUrl.includes('ui-login.oss.go.id') &&
-            !currentUrl.includes('ui-login-stg.oss.go.id')
-          ) {
-            isRedirected = true;
-            break;
-          }
-
-          // Quick check for visible validation errors to abort immediately
-          const errorLocator = page
-            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-            .first();
-          const isErrorVisible = await errorLocator
-            .isVisible()
-            .catch(() => false);
-          if (isErrorVisible) {
-            localErrorMsg = await errorLocator
-              .textContent()
-              .catch(() => 'Username atau Kata Sandi salah.');
-            break;
-          }
-
-          await page.waitForTimeout(1000);
-        }
-
-        if (localErrorMsg) {
-          context.logStep(
-            4,
-            'error',
-            `Login GAGAL di portal OSS: ${localErrorMsg.trim()}`,
+            `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
           );
           passwordCode = '';
           this.cachedPasswords.delete(txId);
-          context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
+          context.logStep(
+            4,
+            'warn',
+            'Mencoba kembali dengan meminta kata sandi ulang...',
+          );
           await page.waitForTimeout(2000);
           continue; // Restart the retry loop
         }
 
-        if (!isRedirected) {
-          // Fallback post-loop check for validation error messages
-          const errorLocator = page
-            .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)
-            .first();
-          const isLoginErrorVisible = await errorLocator
-            .isVisible()
-            .catch(() => false);
-          if (isLoginErrorVisible) {
-            const errorMsg = await errorLocator
-              .textContent()
-              .catch(() => 'Username atau Kata Sandi salah.');
-            context.logStep(
-              4,
-              'error',
-              `Login GAGAL di portal OSS: ${errorMsg.trim()}`,
-            );
-            passwordCode = '';
-            this.cachedPasswords.delete(txId);
-            context.logStep(4, 'warn', 'Mencoba kembali dengan meminta kata sandi ulang...');
-            await page.waitForTimeout(2000);
-            continue; // Restart the retry loop
-          }
-
-          context.logStep(
-            4,
-            'error',
-            'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik (kemungkinan kredensial salah atau CAPTCHA muncul).',
-          );
-          throw new Error(
-            'Login ditolak atau butuh penyelesaian CAPTCHA manual.',
-          );
-        }
+        context.logStep(
+          4,
+          'error',
+          'Login GAGAL: Tidak ada pengalihan setelah tombol masuk diklik.',
+        );
+        throw new Error('Login ditolak.');
       }
 
       if (isRedirected) {
@@ -273,7 +233,9 @@ export class FilingFlowService {
     }
 
     if (!loginSuccess) {
-      throw new Error('Gagal login setelah batas maksimal percobaan. Silakan periksa kembali akun Anda.');
+      throw new Error(
+        'Gagal login setelah batas maksimal percobaan. Silakan periksa kembali akun Anda.',
+      );
     }
 
     context.logStep(
@@ -282,7 +244,11 @@ export class FilingFlowService {
       'Login berhasil! Sesi terautentikasi berhasil didirikan.',
     );
 
-    await this.interactionHelper.logSessionState(page, txId, 'After Successful Login');
+    await this.interactionHelper.logSessionState(
+      page,
+      txId,
+      'After Successful Login',
+    );
 
     context.logStep(
       4,
@@ -295,6 +261,25 @@ export class FilingFlowService {
       // Ignore timeout if dashboard remains active
     }
     await page.waitForTimeout(5000);
+
+    // Wait for the loading spinner to disappear, reload if stuck
+    const spinnerSelector =
+      '.v-progress-circular, .v-loading, [role="progressbar"], .loading-spinner';
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      if (await loader.isVisible()) {
+        context.logStep(4, 'info', 'Menunggu loading spinner menghilang...');
+        await loader.waitFor({ state: 'detached', timeout: 10000 });
+      }
+    } catch (err) {
+      context.logStep(
+        4,
+        'warn',
+        'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...',
+      );
+      await page.reload({ waitUntil: 'networkidle' }).catch(() => null);
+      await page.waitForTimeout(5000);
+    }
 
     const currentUrl = page.url();
     let jwtToken = context.jwtToken || '';
@@ -337,42 +322,89 @@ export class FilingFlowService {
     jwtAccessToken: string,
   ) {
     const { page, draft } = context;
+    context.logStep(5, 'info', 'Memulai pengelolaan lokasi usaha (Step 5)...');
+
+    // Wait for the loading spinner to disappear, reload if stuck
+    const spinnerSelector =
+      '.v-progress-circular, .v-loading, [role="progressbar"], .loading-spinner';
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      await loader
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .catch(() => null);
+      if (await loader.isVisible()) {
+        context.logStep(5, 'info', 'Menunggu loading spinner menghilang...');
+        await loader.waitFor({ state: 'detached', timeout: 15000 });
+      }
+    } catch (err) {
     context.logStep(
       5,
-      'info',
-      'Memulai pengelolaan lokasi usaha (Step 5)...',
-    );
+        'warn',
+        'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...',
+      );
+      await page.reload({ waitUntil: 'load' }).catch(() => null);
+      await page.waitForTimeout(5000);
+      try {
+        const loader = page.locator(spinnerSelector).first();
+        await loader
+          .waitFor({ state: 'visible', timeout: 2000 })
+          .catch(() => null);
+        if (await loader.isVisible()) {
+          await loader
+            .waitFor({ state: 'detached', timeout: 15000 })
+            .catch(() => null);
+        }
+      } catch (e) {}
+    }
 
     // pilih menu kelola lokasi usaha
-    await page
-      .getByTestId('top-menus')
-      .locator('div')
-      .filter({ hasText: 'Perizinan Berusaha' })
-      .click();
-    await page
-      .getByTestId('desktop-dropdown-panel')
-      .getByText('Kelola Usaha')
-      .click();
-    await page
-      .getByTestId('category-right-panel')
-      .getByText('Lokasi Usaha')
-      .first()
-      .click();
+    await page.getByText('Perizinan Berusaha', { exact: true }).click();
+    await page.getByText('Kelola Usaha', { exact: true }).click();
+    await page.getByText('Lokasi Usaha', { exact: true }).click();
 
     // wait for redirected page loaded
-    await page.waitForURL(/.*\/lokasi-usaha.*/, {
-      waitUntil: 'networkidle',
-      timeout: 15000,
-    });
+    await page
+      .waitForURL(/.*\/(lokasi-usaha|kelola-usaha).*/, {
+        waitUntil: 'load',
+        timeout: 15000,
+      })
+      .catch(() => null);
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.interactionHelper.dismissPopupIfVisible(page, context, 5);
 
+    const cardSelector = '.lokasi-usaha-card';
+    const cardLocator = page.locator(cardSelector);
+    if (
+      await cardLocator
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false)
+    ) {
+      context.logStep(
+        5,
+        'info',
+        'Lokasi usaha sudah terdaftar dari sesi sebelumnya. Memilih lokasi yang ada...',
+      );
+      await cardLocator.first().getByRole('checkbox').click();
+      await page
+        .getByRole('button', { name: 'Lengkapi Detail Kegiatan' })
+        .click();
+      context.logStep(
+        5,
+        'success',
+        '✨ [Selesai] Pengelolaan Lokasi Usaha berhasil diselesaikan.',
+      );
+      return;
+    }
+
     await page.getByRole('button', { name: 'Tambah Lokasi' }).click();
-    await page.waitForURL(/.*\/lokasi-usaha\/tambah-lokasi.*/, {
-      waitUntil: 'networkidle',
+    await page
+      .waitForURL(/.*\/(lokasi-usaha|kelola-usaha)\/tambah-lokasi.*/, {
+        waitUntil: 'load',
       timeout: 15000,
-    });
+      })
+      .catch(() => null);
 
     await page.getByRole('button', { name: 'Tambah Posisi Lokasi' }).click();
     const daratRadio = page.getByRole('radio', { name: 'Darat' });
@@ -451,12 +483,9 @@ export class FilingFlowService {
 
     // Select Provinsi
     const cleanProvinsi = (draft.provinsi || draft.provinsiKtp).trim();
-    const searchProvinsi = this.interactionHelper.getOptimalSearchQuery(cleanProvinsi);
-    context.logStep(
-      5,
-      'info',
-      `Mencari provinsi usaha: ${cleanProvinsi}...`,
-    );
+    const searchProvinsi =
+      this.interactionHelper.getOptimalSearchQuery(cleanProvinsi);
+    context.logStep(5, 'info', `Mencari provinsi usaha: ${cleanProvinsi}...`);
 
     const provPromise = page
       .waitForResponse(
@@ -473,18 +502,18 @@ export class FilingFlowService {
     await provinsiSelect.fill(searchProvinsi);
     await provPromise;
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanProvinsi, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanProvinsi,
+      context,
+    );
     await page.waitForTimeout(200);
 
     // Select Kota/Kabupaten (combobox index 1)
     const rawKota = draft.kotaKabupaten || draft.kotaKabupatenKtp;
     const cleanKota = rawKota.replace(/kota|kabupaten/gi, '').trim();
     const searchKota = this.interactionHelper.getOptimalSearchQuery(cleanKota);
-    context.logStep(
-      5,
-      'info',
-      `Mencari kabupaten/kota usaha: ${rawKota}...`,
-    );
+    context.logStep(5, 'info', `Mencari kabupaten/kota usaha: ${rawKota}...`);
 
     const kotaPromise = page
       .waitForResponse(
@@ -501,12 +530,9 @@ export class FilingFlowService {
 
     // Select Kecamatan (combobox index 2)
     const cleanKecamatan = (draft.kecamatan || draft.kecamatanKtp).trim();
-    const searchKecamatan = this.interactionHelper.getOptimalSearchQuery(cleanKecamatan);
-    context.logStep(
-      5,
-      'info',
-      `Mencari kecamatan usaha: ${cleanKecamatan}...`,
-    );
+    const searchKecamatan =
+      this.interactionHelper.getOptimalSearchQuery(cleanKecamatan);
+    context.logStep(5, 'info', `Mencari kecamatan usaha: ${cleanKecamatan}...`);
 
     const kecPromise = page
       .waitForResponse(
@@ -522,12 +548,17 @@ export class FilingFlowService {
       .locator('input')
       .fill(searchKecamatan);
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanKecamatan, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanKecamatan,
+      context,
+    );
     await page.waitForTimeout(200);
 
     // Select Desa / Kelurahan (combobox index 3)
     const cleanKelurahan = (draft.kelurahan || draft.kelurahanKtp).trim();
-    const searchKelurahan = this.interactionHelper.getOptimalSearchQuery(cleanKelurahan);
+    const searchKelurahan =
+      this.interactionHelper.getOptimalSearchQuery(cleanKelurahan);
     context.logStep(
       5,
       'info',
@@ -548,7 +579,11 @@ export class FilingFlowService {
       .locator('input')
       .fill(searchKelurahan);
     await page.waitForTimeout(200);
-    await this.interactionHelper.selectOptionRobust(page, cleanKelurahan, context);
+    await this.interactionHelper.selectOptionRobust(
+      page,
+      cleanKelurahan,
+      context,
+    );
     await page.waitForTimeout(200);
 
     // input kode pos
@@ -581,16 +616,30 @@ export class FilingFlowService {
 
       // 2. Generate Photo PDF or fallback
       if (draft.fotoLokasi) {
-        const photoBuffer = await this.documentsService.convertPhotoToPdf(
-          draft.fotoLokasi,
-        );
-        fs.writeFileSync(photoPath, photoBuffer);
-        createdPhoto = true;
-        context.logStep(
-          5,
-          'info',
-          'Dokumen Foto Lokasi PDF berhasil dibuat.',
-        );
+        try {
+          const photoBuffer = await this.documentsService.convertPhotoToPdf(
+            draft.fotoLokasi,
+          );
+          fs.writeFileSync(photoPath, photoBuffer);
+          createdPhoto = true;
+          context.logStep(
+            5,
+            'info',
+            'Dokumen Foto Lokasi PDF berhasil dibuat.',
+          );
+        } catch (photoErr) {
+          this.logger.warn(
+            'Gagal mengubah foto lokasi ke PDF, menggunakan fallback: ',
+            photoErr,
+          );
+          fs.writeFileSync(photoPath, npsBuffer);
+          createdPhoto = true;
+          context.logStep(
+            5,
+            'info',
+            'Konversi Foto Lokasi gagal, menggunakan fallback dokumen administrasi.',
+          );
+        }
       } else {
         // Fallback: Copy NPS PDF to photo path
         fs.writeFileSync(photoPath, npsBuffer);
@@ -604,6 +653,17 @@ export class FilingFlowService {
 
       const fileInputs = page.locator('input[type="file"]');
       const inputCount = await fileInputs.count();
+      console.log(`[DEBUG] Found ${inputCount} file inputs on the form.`);
+      for (let i = 0; i < inputCount; i++) {
+        const accept = await fileInputs.nth(i).getAttribute('accept');
+        const outerHTML = await fileInputs
+          .nth(i)
+          .evaluate((el: any) => el.outerHTML);
+        console.log(
+          `[DEBUG] File Input ${i}: accept="${accept}", outerHTML="${outerHTML}"`,
+        );
+      }
+
       if (inputCount < 2) {
         throw new Error('Jumlah input upload file kurang dari 2.');
       }
@@ -612,43 +672,32 @@ export class FilingFlowService {
       const upload1Promise = page
         .waitForResponse(
           (response: any) =>
-            (response.url().includes('/dokumen') ||
-              response.url().includes('/file') ||
-              response.url().includes('/upload')) &&
+            response.url().includes('/file/upload') &&
             response.status() === 200,
           { timeout: 25000 },
         )
         .catch(() => null);
 
-      context.logStep(
-        5,
-        'info',
-        'Mengunggah Dokumen Administrasi Lokasi...',
-      );
-      await fileInputs.first().setInputFiles(npsPath);
+      context.logStep(5, 'info', 'Mengunggah Dokumen Administrasi Lokasi...');
+      await fileInputs.nth(0).setInputFiles(npsPath);
       await upload1Promise;
 
       const upload2Promise = page
         .waitForResponse(
           (response: any) =>
-            (response.url().includes('/dokumen') ||
-              response.url().includes('/file') ||
-              response.url().includes('/upload')) &&
+            response.url().includes('/file/upload') &&
             response.status() === 200,
           { timeout: 25000 },
         )
         .catch(() => null);
 
       context.logStep(5, 'info', 'Mengunggah Foto Lokasi...');
-      await fileInputs.last().setInputFiles(photoPath);
+      await fileInputs.nth(1).setInputFiles(photoPath);
       await upload2Promise;
+      await page.waitForTimeout(5000);
 
       // Wait for any loading/progressbar indicator to detach
-      context.logStep(
-        5,
-        'info',
-        'Menunggu proses unggah selesai di portal...',
-      );
+      context.logStep(5, 'info', 'Menunggu proses unggah selesai di portal...');
       await page
         .locator(
           '.v-progress-linear, .v-progress-circular, [role="progressbar"]',
@@ -659,11 +708,7 @@ export class FilingFlowService {
         .waitForLoadState('networkidle', { timeout: 10000 })
         .catch(() => null);
 
-      context.logStep(
-        5,
-        'success',
-        'Kedua berkas PDF berhasil diunggah.',
-      );
+      context.logStep(5, 'success', 'Kedua berkas PDF berhasil diunggah.');
     } catch (pdfErr: any) {
       this.logger.error('Gagal memproses/mengunggah dokumen PDF:', pdfErr);
       context.logStep(
@@ -686,9 +731,32 @@ export class FilingFlowService {
       'info',
       'Mengklik tombol "Simpan Posisi Lokasi" untuk mendaftarkan lokasi...',
     );
+
+    const prosesLokasiPromise = page
+      .waitForResponse(
+        (response: any) =>
+          response.url().includes('prosesLokasi') &&
+          [200, 201].includes(response.status()),
+        { timeout: 60000 },
+      )
+      .catch(() => null);
+
     await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
-    await page.locator('.lokasi-usaha-card').first().waitFor({ state: 'visible', timeout: 15000 });
-    
+
+    const prosesLokasiRes = await prosesLokasiPromise;
+    let id_proyek_lokasi: string | undefined;
+    if (prosesLokasiRes) {
+      try {
+        const json = await prosesLokasiRes.json();
+        id_proyek_lokasi = json?.data?.id_proyek_lokasi || json?.id_proyek_lokasi;
+      } catch (e) {}
+    }
+
+    await page
+      .locator('.lokasi-usaha-card')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
+
     // Cleanup temp files
     try {
       if (createdNps && fs.existsSync(npsPath)) {
@@ -701,8 +769,6 @@ export class FilingFlowService {
       this.logger.warn('Gagal menghapus file PDF temporer:', cleanupErr);
     }
 
-    // TODO mark this state to database, so that we can continue from here if further process is failed / interrupted
-
     // select newly created location
     await page
       .locator('.lokasi-usaha-card')
@@ -712,884 +778,708 @@ export class FilingFlowService {
     await page
       .getByRole('button', { name: 'Lengkapi Detail Kegiatan' })
       .click();
+
+    return { id_proyek_lokasi };
   }
 
-  public async executeManageBusinessDetailSteps(
+  public async executeKbliSteps(
     context: AutomationSessionContext,
-  ) {
+  ): Promise<{ id_proyek?: string; id_proyek_lokasi?: string }> {
     const { page, draft } = context;
     const draftId = draft.id;
-    context.logStep(
-      6,
-      'info',
-      'Memulai pengelolaan detail usaha (Step 5)...',
-    );
+    context.logStep(6, "info", "Memulai pengisian KBLI & Bidang Usaha...");
 
-    // check lokasi usaha questions, if exists, select 'Tidak'
-    const obvitnasQuestion = page.getByRole('radiogroup', {
-      name: 'Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?',
+    // Prevent the "Informasi Angka Pengenal Impor (API)" popup from showing up by patching the Pinia store state in the browser
+    await this.patchPiniaStoreState(page);
+
+    // check lokasi usaha questions, if exists, select "Tidak"
+    const obvitnasQuestion = page.getByRole("radiogroup", {
+      name: "Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?",
     });
-    if (await obvitnasQuestion.isVisible()) {
-      await obvitnasQuestion.getByLabel('Tidak').check();
+    if (await obvitnasQuestion.isVisible().catch(() => false)) {
+      await obvitnasQuestion.getByLabel("Tidak").check().catch(() => null);
       await page.waitForTimeout(500);
     }
-    const psnQuestion = page.getByRole('radiogroup', {
-      name: 'Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?',
+    const psnQuestion = page.getByRole("radiogroup", {
+      name: "Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?",
     });
-    if (await psnQuestion.isVisible()) {
-      await psnQuestion.getByLabel('Tidak').check();
+    if (await psnQuestion.isVisible().catch(() => false)) {
+      await psnQuestion.getByLabel("Tidak").check().catch(() => null);
       await page.waitForTimeout(500);
     }
 
     const getListKbliPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('/getListKBLI') && response.status() === 200,
+          response.url().includes("/getListKBLI") && response.status() === 200,
         { timeout: 25000 },
       )
       .catch(() => null);
 
-    context.logStep(6, 'info', 'Memilih KBLI...');
-    await page.getByRole('button', { name: 'Selanjutnya' }).click();
-    await getListKbliPromise;
-    await page
-      .getByPlaceholder('Pilih jenis kegiatan usaha')
-      .locator('input')
-      .waitFor({ state: 'visible', timeout: 10000 });
-
-    // select jenis kegiatan usaha
-    await page
-      .getByPlaceholder('Pilih jenis kegiatan usaha')
-      .locator('input')
-      .click();
-    await page.getByText('Kegiatan Usaha Utama').click();
-
-    // check if there's any popup message, close by clicking "Mengerti"
-    await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
-
-    // choose kbli
-    const searchKbli = this.interactionHelper.getOptimalSearchQuery(draft.kbliCode);
-    context.logStep(
-      6,
-      'info',
-      `Mencari kegiatan usaha: ${draft.kbliCode}...`,
-    );
-    const kbliSearchInput = page.getByPlaceholder('kode KBLI').locator('input');
-    await kbliSearchInput.click();
-    await kbliSearchInput.fill(searchKbli);
-    const getListKbli2025Promise = page
-      .waitForResponse(
-        (response: any) => {
-          const matches = response.url().includes('/getListKBLI') && response.status() === 200;
-          if (!matches) return false;
-          const postData = response.request().postData();
-          return !!(postData && postData.includes('kbli_2020'));
-        },
-        { timeout: 20000 },
-      )
-      .catch(() => null);
-
-    await page.getByText(searchKbli).first().click();
-
-    // check if there's any popup message, close by clicking "Mengerti"
-    await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
-
-    const kbli2025Select = page.getByTestId('kbli-select').first();
-    let isKbli2025Visible = false;
-    try {
-      await kbli2025Select.waitFor({ state: 'visible', timeout: 1500 });
-      isKbli2025Visible = true;
-    } catch (e) {
-      // KBLI 2025 select not visible
+    context.logStep(6, "info", "Memilih KBLI...");
+    const btnSelanjutnya = page.getByRole("button", { name: "Selanjutnya" });
+    if (await btnSelanjutnya.isVisible().catch(() => false)) {
+      await btnSelanjutnya.click();
+      await getListKbliPromise;
     }
 
-    if (isKbli2025Visible) {
-      const listKbliResponse = await getListKbli2025Promise;
+    // Wait for the loading spinner to disappear
+    const spinnerSelector =
+      ".v-progress-circular, .v-loading, [role='progressbar'], .loading-spinner";
+    try {
+      const loader = page.locator(spinnerSelector).first();
+      await loader
+        .waitFor({ state: "visible", timeout: 3000 })
+        .catch(() => null);
+      if (await loader.isVisible()) {
+        await loader
+          .waitFor({ state: "detached", timeout: 15000 })
+          .catch(() => null);
+      }
+    } catch (e) {}
+
+    // Ensure Pinia store remains patched
+    await this.patchPiniaStoreState(page);
+
+    const jenisKegiatanSelect = page
+      .getByTestId("jenis-kegiatan-select")
+      .locator("input");
+    await jenisKegiatanSelect
+      .waitFor({ state: "visible", timeout: 15000 })
+      .catch(() => null);
+
+    if (await jenisKegiatanSelect.isVisible().catch(() => false)) {
+      await jenisKegiatanSelect.click();
+
+      const option = page.getByText("Kegiatan Usaha Utama");
+      await option.waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+      if (!(await option.isVisible().catch(() => false))) {
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(1000);
+        await jenisKegiatanSelect.click();
+        await option
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => null);
+      }
+      await option.click().catch(() => null);
+      await page.waitForTimeout(1500);
+    }
+
+    await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
+    await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
+    await page.waitForTimeout(1000);
+
+    let modalProcessed = false;
+    const modalAdjustKbli = page.getByTestId("button-modal-kembali-kbli-2025");
+    if (await modalAdjustKbli.isVisible().catch(() => false)) {
       context.logStep(
         6,
-        'info',
-        'Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...',
+        "info",
+        "Penyesuaian KBLI 2025 modal terdeteksi. Menyelesaikan penyesuaian...",
       );
 
-      let kbliOptions: any[] = [];
-      if (listKbliResponse) {
-        try {
-          const json = await listKbliResponse.json();
-          if (json && Array.isArray(json.data)) {
-            kbliOptions = json.data.map((item: any) => ({
-              code: item.kode,
-              title: item.judul,
-            }));
-          }
-        } catch (err) {
-          this.logger.error('Failed to parse getListKBLI response', err);
+      const selectKbli = page.getByTestId("kbli-select").first();
+      if (
+        (await selectKbli.isVisible().catch(() => false)) &&
+        (await selectKbli.isEnabled().catch(() => false))
+      ) {
+        await selectKbli.click();
+        const searchKbliQuery = this.interactionHelper.getOptimalSearchQuery(
+          draft.kbliCode,
+        );
+        await selectKbli.locator("input").fill(searchKbliQuery);
+        const option = page
+          .locator(".v-list-item, [role='option']")
+          .filter({ hasText: searchKbliQuery })
+          .first();
+        await option
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => null);
+        if (await option.isVisible()) {
+          await option.click();
         }
+        await page.waitForTimeout(1000);
       }
 
-      if (kbliOptions.length > 0) {
-        context.logStep(6, 'warn', 'PILIH_KBLI_2025', {
-          options: kbliOptions,
-        });
-
-        // Wait up to 120 seconds for user response
-        const chosenKbli = await context.waitForParameterInput().catch(() => '');
-
-        if (!chosenKbli) {
-          context.logStep(
-            6,
-            'error',
-            'Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.',
-          );
-          throw new Error('Batas waktu pemilihan KBLI 2025 habis.');
+      const selectRuangLingkup = page.getByPlaceholder(
+        "Pilih ruang lingkup kegiatan",
+      );
+      if (
+        (await selectRuangLingkup.isVisible().catch(() => false)) &&
+        (await selectRuangLingkup.isEnabled().catch(() => false))
+      ) {
+        await selectRuangLingkup.click();
+        const option = page.locator(".v-list-item:visible, [role='option']:visible").first();
+        await option
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => null);
+        if (await option.isVisible()) {
+          await option.click();
         }
+        await page.waitForTimeout(1000);
+      }
 
-        const option = kbliOptions.find((o) => o.code === chosenKbli);
-        const chosenKbliTitle = option ? option.title : 'KBLI 2025 Terpilih';
+      const modalCheckbox = page
+        .locator(".v-overlay-container")
+        .getByRole("checkbox")
+        .first();
+      if (await modalCheckbox.isVisible().catch(() => false)) {
+        await modalCheckbox.click();
+      } else {
+        const declText = page
+          .getByText("Dengan ini saya menyatakan bahwa data")
+          .first();
+        if (await declText.isVisible().catch(() => false)) {
+          await declText.click().catch(() => null);
+        }
+      }
+      await page.waitForTimeout(1000);
 
-        context.logStep(
-          6,
-          'info',
-          `Memperbarui database ke KBLI 2025: ${chosenKbli}...`,
-        );
-        await this.draftsService.update(draftId, {
-          kbliCode: chosenKbli,
-          kbliTitle: chosenKbliTitle,
-        });
+      await page.getByRole("button", { name: "Simpan", exact: true }).click();
+      await page.waitForTimeout(3000);
+      modalProcessed = true;
+    }
 
-        // Select KBLI 2025 in portal
-        const selectContainer = kbli2025Select.locator('input');
-        await selectContainer.click();
-        await selectContainer.fill(chosenKbli);
+    if (!modalProcessed) {
+      const searchKbli = this.interactionHelper.getOptimalSearchQuery(
+        draft.kbliCode,
+      );
+      context.logStep(
+        6,
+        "info",
+        `Mencari kegiatan usaha: ${draft.kbliCode}...`,
+      );
+      await this.patchPiniaStoreState(page);
+
+      const getListKbli2025Promise = page
+        .waitForResponse(
+          (response: any) => {
+            const matches =
+              response.url().includes("/getListKBLI") &&
+              response.status() === 200;
+            if (!matches) return false;
+            const postData = response.request().postData();
+            return !!(postData && postData.includes("kbli_2020"));
+          },
+          { timeout: 20000 },
+        )
+        .catch(() => null);
+
+      const kbliSearch = page.getByTestId("kbli-select").first();
+      if (await kbliSearch.isVisible().catch(() => false)) {
+        await kbliSearch.click();
+        await page.waitForTimeout(1500);
+        const kbliSearchInput = kbliSearch.locator("input");
+        await kbliSearchInput.pressSequentially(searchKbli, { delay: 100 });
+        await page.waitForTimeout(500);
 
         const optionLocator = page
-          .locator('.ant-select-item-option-content')
-          .filter({ hasText: chosenKbli })
+          .locator(".v-list-item, [role='option']")
+          .filter({ hasText: searchKbli })
           .first();
-        await optionLocator.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+        await optionLocator
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => null);
         if (await optionLocator.isVisible()) {
           await optionLocator.click();
         } else {
-          await page.getByText(chosenKbli).first().click();
+          const fallbackOption = page
+            .locator(".v-list-item, [role='option']")
+            .first();
+          await fallbackOption
+            .waitFor({ state: "visible", timeout: 5000 })
+            .catch(() => null);
+          if (await fallbackOption.isVisible()) {
+            await fallbackOption.click();
+          }
+        }
+      }
+
+      await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
+
+      const kbli2025Select = page.getByTestId("kbli-select").nth(1);
+      let isKbli2025Visible = false;
+      try {
+        await kbli2025Select.waitFor({ state: "visible", timeout: 1500 });
+        isKbli2025Visible = true;
+      } catch (e) {}
+
+      if (isKbli2025Visible) {
+        const listKbliResponse = await getListKbli2025Promise;
+        context.logStep(
+          6,
+          "info",
+          "Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...",
+        );
+
+        let kbliOptions: any[] = [];
+        if (listKbliResponse) {
+          try {
+            const json = await listKbliResponse.json();
+            if (json && Array.isArray(json.data)) {
+              kbliOptions = json.data.map((item: any) => ({
+                code: item.kode,
+                title: item.judul,
+              }));
+            }
+          } catch (err) {
+            this.logger.error("Failed to parse getListKBLI response", err);
+          }
+        }
+
+        if (kbliOptions.length > 0) {
+          context.logStep(6, "warn", "PILIH_KBLI_2025", {
+            options: kbliOptions,
+          });
+
+          const chosenKbli = await context
+            .waitForParameterInput()
+            .catch(() => "");
+
+          if (!chosenKbli) {
+            context.logStep(
+              6,
+              "error",
+              "Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.",
+            );
+            throw new Error("Batas waktu pemilihan KBLI 2025 habis.");
+          }
+
+          const option = kbliOptions.find((o) => o.code === chosenKbli);
+          const chosenKbliTitle = option ? option.title : "KBLI 2025 Terpilih";
+
+          context.logStep(
+            6,
+            "info",
+            `Memperbarui database ke KBLI 2025: ${chosenKbli}...`,
+          );
+          await this.draftsService.update(draftId, {
+            kbliCode: chosenKbli,
+            kbliTitle: chosenKbliTitle,
+          });
+
+          await kbli2025Select.click();
+          const selectContainer = kbli2025Select.locator("input");
+          await selectContainer.fill(chosenKbli);
+
+          const optionLocator = page
+            .locator(".v-list-item, [role='option']")
+            .filter({ hasText: chosenKbli })
+            .first();
+          await optionLocator
+            .waitFor({ state: "visible", timeout: 5000 })
+            .catch(() => null);
+          if (await optionLocator.isVisible()) {
+            await optionLocator.click();
+          } else {
+            const textOption = page.getByText(chosenKbli).first();
+            if (await textOption.isVisible().catch(() => false)) {
+              await textOption.click().catch(() => null);
+            }
+          }
         }
       }
     }
 
-    context.logStep(6, 'info', 'Memilih ruang lingkup kegiatan...');
-    const ruangLingkupCombobox = page.getByRole('combobox', { name: 'Pilih ruang lingkup kegiatan' });
-    await ruangLingkupCombobox.waitFor({ state: 'visible', timeout: 10000 });
-    await ruangLingkupCombobox.click();
+    await this.patchPiniaStoreState(page);
 
-    // check if 'Seluruh' ruang lingkup is exists, then click it
-    const seluruhRuangLingkup = page.getByText('Seluruh');
-    if (await seluruhRuangLingkup.isVisible()) {
-      await seluruhRuangLingkup.click();
+    context.logStep(6, "info", "Memilih ruang lingkup kegiatan...");
+    const ruangLingkupCombobox = page
+      .getByTestId("ruang-lingkup-select")
+      .locator("input");
+    if (await ruangLingkupCombobox.isVisible().catch(() => false)) {
+      await ruangLingkupCombobox.waitFor({ state: "visible", timeout: 10000 });
+      await ruangLingkupCombobox.click();
+
+      const seluruhRuangLingkup = page.getByText("Seluruh");
+      if (await seluruhRuangLingkup.isVisible().catch(() => false)) {
+        await seluruhRuangLingkup.click();
+        await page.waitForTimeout(1000);
+      } else {
+        const firstOption = page
+          .locator(".v-list-item:visible, [role='option']:visible")
+          .first();
+        await firstOption
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => null);
+        if (await firstOption.isVisible()) {
+          await firstOption.click();
+          await page.waitForTimeout(1000);
+        }
+      }
     }
 
-    // select bidang usaha
-    const bidangUsaha = page.getByTestId('radio-bidang-usaha');
-    await bidangUsaha.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
-    if (await bidangUsaha.isVisible()) {
-      await bidangUsaha.getByRole('radio').first().click();
+    const firstRadio = page
+      .getByTestId("radio-bidang-usaha")
+      .getByRole("radio")
+      .first();
+    if (await firstRadio.isVisible().catch(() => false)) {
+      await firstRadio.click();
+      await page.waitForTimeout(1500);
     }
 
-    // click tombol tambah bidang usaha
-    await page.getByRole('button', { name: 'Tambah Bidang Usaha' }).click();
+    await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
 
-    // wait for prosesBidangUsaha
     const prosesBidangUsahaPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('/prosesBidangUsaha') &&
-          response.status() === 200,
-        { timeout: 25000 },
+          response.url().includes("/prosesBidangUsaha") &&
+          [200, 201].includes(response.status()),
+        { timeout: 35000 },
       )
       .catch(() => null);
-    await prosesBidangUsahaPromise;
-    
-    const inputRestoran = page.getByRole('textbox', { name: 'Contoh : Restoran' });
-    await inputRestoran.waitFor({ state: 'visible', timeout: 10000 });
-    await inputRestoran.fill(draft.namaUsaha);
-    await page.getByRole('button', { name: 'Selanjutnya' }).click();
 
-    // wait for prosesProyek
-    const prosesProyekPromise = page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('/prosesProyek') && response.status() === 200,
-        { timeout: 25000 },
-      )
-      .catch(() => null);
-    await prosesProyekPromise;
+    const btnTambahBidang = page.getByRole("button", { name: "Tambah Bidang Usaha" });
+    if (await btnTambahBidang.isVisible().catch(() => false)) {
+      await btnTambahBidang.click();
+    }
 
-    // check for pernyataan mandiri
-    context.logStep(6, 'info', 'Menyetujui pernyataan mandiri...');
-    const pernyataanMandiriCheckbox = page.getByText('Saya menyatakan pemberian ini');
-    await pernyataanMandiriCheckbox.waitFor({ state: 'visible', timeout: 10000 });
-    await pernyataanMandiriCheckbox.click();
+    const prosesBidangUsahaRes = await prosesBidangUsahaPromise;
+    let id_proyek: string | undefined;
+    if (prosesBidangUsahaRes) {
+      try {
+        const json = await prosesBidangUsahaRes.json();
+        id_proyek = json?.data?.id_proyek || json?.id_proyek;
+      } catch (e) {}
+    }
 
-    // click tombol proses
-    await page.getByRole('button', { name: 'Proses' }).click();
+    const inputRestoran = page.getByRole("textbox", {
+      name: "Contoh : Restoran",
+    });
+    await inputRestoran.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    if (await inputRestoran.isVisible().catch(() => false)) {
+      await inputRestoran.fill(draft.namaUsaha);
+      await page.getByRole("button", { name: "Selanjutnya" }).click();
+    }
 
-    // process
-    context.logStep(6, 'info', 'Memproses...');
-    await page
-      .getByTestId('modal-proses')
-      .getByRole('button', { name: 'Proses' })
-      .click();
+    return { id_proyek };
+  }
 
-    // wait for submitPernyataanMandiri
-    context.logStep(6, 'info', 'Menunggu submitPernyataanMandiri...');
-    const submitPernyataanMandiriPromise = page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('/submitPernyataanMandiri') &&
-          response.status() === 200,
-        { timeout: 25000 },
-      )
-      .catch(() => null);
-    await submitPernyataanMandiriPromise;
+  public async executeTataRuangSteps(
+    context: AutomationSessionContext,
+  ): Promise<void> {
+    const { page } = context;
+    context.logStep(6, "info", "Memproses Pernyataan Tata Ruang...");
 
-    // wait for detailPerizinan
-    const detailPerizinanPromise = page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('/detailPerizinan') &&
-          response.status() === 200,
-        { timeout: 25000 },
-      )
-      .catch(() => null);
-    await detailPerizinanPromise;
+    const pernyataanMandiriCheckbox = page.locator("#agreement-checkbox");
+    await pernyataanMandiriCheckbox.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    if (await pernyataanMandiriCheckbox.isVisible().catch(() => false)) {
+      context.logStep(6, "info", "Menyetujui pernyataan mandiri...");
+      await pernyataanMandiriCheckbox.click();
 
-    // wait for Perizinan Berusaha tab to be visible before clicking Lanjut
-    const perizinanTab = page.getByRole('tab', { name: 'Perizinan Berusaha' });
-    await perizinanTab.waitFor({ state: 'visible', timeout: 15000 });
-    await perizinanTab.click();
-    await page.getByRole('button', { name: 'Lanjut' }).click();
+      await page.getByRole("button", { name: "Proses" }).click();
 
-    // Apakah kegiatan usaha ini sudah berjalan?
-    const isRunning = draft.sudahBerjalan === 'sudah';
-    const runningOptionText = isRunning ? 'Sudah Berjalan' : 'Belum Berjalan';
-    context.logStep(
-      6,
-      'info',
-      `Mengisi status berjalan: ${runningOptionText}`,
-    );
-    const runningCombobox = page
-      .getByTestId('select-box-flag-berjalan')
-      .first();
+      context.logStep(6, "info", "Memproses...");
+      await page
+        .getByTestId("modal-proses")
+        .getByRole("button", { name: "Proses" })
+        .click();
 
-    // Wait up to 60s for the page to load and the combobox to be visible
-    await runningCombobox
-      .waitFor({ state: 'visible', timeout: 60000 })
-      .catch(() => null);
+      context.logStep(6, "info", "Menunggu submitPernyataanMandiri...");
+      const submitPernyataanMandiriPromise = page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("/submitPernyataanMandiri") &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+      await submitPernyataanMandiriPromise;
 
-    await runningCombobox.click();
-    await runningCombobox.locator('input').fill(runningOptionText);
-    await page.getByText(runningOptionText, { exact: true }).click();
-    await page.waitForTimeout(500);
+      const detailPerizinanPromise = page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("/detailPerizinan") &&
+            response.status() === 200,
+          { timeout: 25000 },
+        )
+        .catch(() => null);
+      await detailPerizinanPromise;
 
-    // Conditional Date Pickers for Sudah Berjalan
+      const perizinanTab = page.getByRole("tab", { name: "Perizinan Berusaha" });
+      await perizinanTab.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+      if (await perizinanTab.isVisible().catch(() => false)) {
+        await perizinanTab.click();
+        await page.getByRole("button", { name: "Lanjut" }).click();
+      }
+    }
+  }
+
+  public async executeInvestasiProdukSteps(
+    context: AutomationSessionContext,
+  ): Promise<void> {
+    const { page, draft } = context;
+    const draftId = draft.id;
+    context.logStep(6, "info", "Memulai pengisian Data Investasi & Produk...");
+
+    const isRunning = draft.sudahBerjalan === "sudah";
+    const runningOptionText = isRunning ? "Sudah Berjalan" : "Belum Berjalan";
+    context.logStep(6, "info", `Mengisi status berjalan: ${runningOptionText}`);
+
+    const pageLoader = page.locator(".page-loader");
+    await pageLoader.waitFor({ state: "detached", timeout: 30000 }).catch(() => null);
+
+    const runningCombobox = page.getByTestId("select-box-flag-berjalan").first();
+    await runningCombobox.waitFor({ state: "visible", timeout: 60000 }).catch(() => null);
+
+    if (await runningCombobox.isVisible().catch(() => false)) {
+      await runningCombobox.click();
+      await runningCombobox.locator("input").fill(runningOptionText);
+      await page
+        .locator(".v-list-item-title, .v-list-item")
+        .getByText(runningOptionText, { exact: true })
+        .first()
+        .click();
+      await page.waitForTimeout(500);
+    }
+
     if (isRunning) {
       if (draft.tanggalMulaiUsaha) {
         const dateObj = new Date(draft.tanggalMulaiUsaha);
         const targetYear = dateObj.getFullYear();
         const monthNames = [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
+          "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
         ];
         const targetMonth = monthNames[dateObj.getMonth()];
         const targetDay = dateObj.getDate().toString();
 
         context.logStep(
           6,
-          'info',
+          "info",
           `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`,
         );
 
-        // 1. Click the datepicker trigger
-        const container = page.getByTestId('date-time-picker-tgl-berjalan').nth(1);
-        await container.scrollIntoViewIfNeeded().catch(() => {});
-        await container.click();
+        const container = page.getByTestId("date-time-picker-tgl-berjalan").nth(1);
+        if (await container.isVisible().catch(() => false)) {
+          await container.scrollIntoViewIfNeeded().catch(() => {});
+          await container.click();
 
-        // picker locator
-        const pickerContainer = page.locator('.v-picker');
-
-        // 2. Select Year (e.g. 2020)
-        const yearSelect = pickerContainer
-          .locator('button, div, span')
-          .filter({ hasText: /^\d{4}$/ })
-          .first();
-        const currentYearText = await yearSelect.innerText().catch(() => '');
-        let currentYear = parseInt(currentYearText) || new Date().getFullYear();
-
-        if (currentYear !== targetYear) {
-          await yearSelect.click().catch(() => {});
-          await page.waitForTimeout(1000);
-
-          let targetYearOption = pickerContainer
-            .locator('div, li, button, span')
-            .filter({ hasText: new RegExp(`^${targetYear}$`) })
+          const pickerContainer = page.locator(".v-picker");
+          const yearSelect = pickerContainer
+            .locator("button, div, span")
+            .filter({ hasText: /^\d{4}$/ })
             .first();
+          const currentYearText = await yearSelect.innerText().catch(() => "");
+          let currentYear = parseInt(currentYearText) || new Date().getFullYear();
 
-          if (!(await targetYearOption.isVisible())) {
-            targetYearOption = pickerContainer
-              .locator('button, div, li, span')
+          if (currentYear !== targetYear) {
+            await yearSelect.click().catch(() => {});
+            await page.waitForTimeout(1000);
+
+            let targetYearOption = pickerContainer
+              .locator("div, li, button, span")
               .filter({ hasText: new RegExp(`^${targetYear}$`) })
               .first();
-          }
 
-          if (await targetYearOption.isVisible()) {
-            await targetYearOption.scrollIntoViewIfNeeded().catch(() => {});
-            await targetYearOption.click({ force: true });
-          } else {
-            // Fallback: Click year decrement/increment button next to Year text
-            const leftArrows = await pickerContainer
-              .locator('button, span, i')
-              .filter({ hasText: /^(<|chevron_left|left)$/i })
-              .all();
-            const yearLeftArrow = leftArrows[1] || leftArrows[0];
-            if (yearLeftArrow) {
-              while (currentYear > targetYear) {
-                await yearLeftArrow.click();
-                await page.waitForTimeout(200);
-                const updatedYearText = await yearSelect.innerText();
-                currentYear = parseInt(updatedYearText) || currentYear - 1;
-              }
-              while (currentYear < targetYear) {
-                const rightArrows = await pickerContainer
-                  .locator('button, span, i')
-                  .filter({ hasText: /^(>|chevron_right|right)$/i })
-                  .all();
-                const yearRightArrow = rightArrows[1] || rightArrows[0];
-                if (yearRightArrow) {
-                  await yearRightArrow.click();
-                  await page.waitForTimeout(200);
-                  const updatedYearText = await yearSelect.innerText();
-                  currentYear = parseInt(updatedYearText) || currentYear + 1;
-                } else {
-                  break;
-                }
-              }
+            if (await targetYearOption.isVisible().catch(() => false)) {
+              await targetYearOption.scrollIntoViewIfNeeded().catch(() => {});
+              await targetYearOption.click({ force: true });
             }
           }
-          await page.waitForTimeout(500);
-        }
 
-        // 3. Select Month (e.g. 'Apr')
-        const monthSelect = pickerContainer
-          .locator('button, div, span')
-          .filter({
-            hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
-          })
-          .first();
-        const currentMonthText = await monthSelect.innerText().catch(() => '');
-        if (currentMonthText.toLowerCase() !== targetMonth.toLowerCase()) {
-          await monthSelect.click().catch(() => {});
-          await page.waitForTimeout(500);
-
-          const targetMonthOption = pickerContainer
-            .locator('button, div, span')
-            .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
+          const monthSelect = pickerContainer
+            .locator("button, div, span")
+            .filter({
+              hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
+            })
             .first();
-          if (await targetMonthOption.isVisible()) {
-            await targetMonthOption.click();
-          } else {
-            // Fallback: Click month decrement button (the 1st left arrow)
-            const leftArrows = await pickerContainer
-              .locator('button, span, i')
-              .filter({ hasText: /^(<|chevron_left|left)$/i })
-              .all();
-            const monthLeftArrow = leftArrows[0];
-            if (monthLeftArrow) {
-              let limit = 0;
-              while (limit < 12) {
-                const checkText = await monthSelect.innerText();
-                if (checkText.toLowerCase() === targetMonth.toLowerCase())
-                  break;
-                await monthLeftArrow.click();
-                await page.waitForTimeout(200);
-                limit++;
-              }
+          if (await monthSelect.isVisible().catch(() => false)) {
+            await monthSelect.click().catch(() => {});
+            await page.waitForTimeout(500);
+
+            const targetMonthOption = pickerContainer
+              .locator("button, div, span")
+              .filter({ hasText: new RegExp(`^${targetMonth}$`, "i") })
+              .first();
+            if (await targetMonthOption.isVisible().catch(() => false)) {
+              await targetMonthOption.click();
             }
           }
-          await page.waitForTimeout(500);
-        }
 
-        // 4. Select Day (e.g. '8')
-        const dayButton = pickerContainer
-          .locator('button, div, span')
-          .filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) })
-          .first();
-        if (await dayButton.isVisible()) {
-          await dayButton.click();
-        } else {
-          await dayButton.click({ force: true }).catch(() => {});
-        }
-        await page.waitForTimeout(1000);
-      }
-    }
-
-    if (draft.tanggalMulaiOperasional) {
-      const dateObj = new Date(draft.tanggalMulaiOperasional);
-      const targetYear = dateObj.getFullYear();
-      const monthNames = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      const targetMonth = monthNames[dateObj.getMonth()];
-
-      context.logStep(
-        6,
-        'info',
-        `Mengisi perkiraan operasional: ${targetMonth} ${targetYear}`,
-      );
-
-      // 1. Click the datepicker trigger
-      const containerOp = page
-        .getByTestId('date-time-picker-jangka-waktu-penyelesaian')
-        .filter({ visible: true })
-        .first();
-      await containerOp.scrollIntoViewIfNeeded().catch(() => {});
-      await containerOp.click();
-
-      // picker locator
-      const pickerContainerOp = page.locator('.v-picker');
-
-      // 2. Select Year (e.g. 2020)
-      const yearSelectOp = pickerContainerOp
-        .locator('button, div, span')
-        .filter({ hasText: /^\d{4}$/ })
-        .first();
-      const currentYearTextOp = await yearSelectOp.innerText().catch(() => '');
-      let currentYearOp =
-        parseInt(currentYearTextOp) || new Date().getFullYear();
-
-      if (currentYearOp !== targetYear) {
-        await yearSelectOp
-          .getByTestId('year-btn')
-          .click()
-          .catch(() => {});
-        await page.waitForTimeout(1000);
-
-        let targetYearOptionOp = pickerContainerOp
-          .locator('.v-overlay-container, .v-menu, .ant-select-dropdown')
-          .locator('div, li, button, span')
-          .filter({ hasText: new RegExp(`^${targetYear}$`) })
-          .first();
-
-        if (!(await targetYearOptionOp.isVisible())) {
-          targetYearOptionOp = pickerContainerOp
-            .locator('button, div, li, span')
-            .filter({ hasText: new RegExp(`^${targetYear}$`) })
+          const dayButton = pickerContainer
+            .locator("button, div, span")
+            .filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) })
             .first();
-        }
-
-        if (await targetYearOptionOp.isVisible()) {
-          await targetYearOptionOp.scrollIntoViewIfNeeded().catch(() => {});
-          await targetYearOptionOp.click({ force: true });
-        } else {
-          // Fallback: Click year decrement/increment button next to Year text
-          const leftArrowsOp = await pickerContainerOp
-            .locator('button, span, i')
-            .filter({ hasText: /^(<|chevron_left|left)$/i })
-            .all();
-          const yearLeftArrowOp = leftArrowsOp[1] || leftArrowsOp[0];
-          if (yearLeftArrowOp) {
-            while (currentYearOp > targetYear) {
-              await yearLeftArrowOp.click().catch(() => {});
-              await page.waitForTimeout(200);
-              const updatedYearTextOp = await yearSelectOp.innerText();
-              currentYearOp = parseInt(updatedYearTextOp) || currentYearOp - 1;
-            }
-            while (currentYearOp < targetYear) {
-              const rightArrowsOp = await pickerContainerOp
-                .locator('button, span, i')
-                .filter({ hasText: /^(>|chevron_right|right)$/i })
-                .all();
-              const yearRightArrowOp = rightArrowsOp[1] || rightArrowsOp[0];
-              if (yearRightArrowOp) {
-                await yearRightArrowOp.click().catch(() => {});
-                await page.waitForTimeout(200);
-                const updatedYearTextOp = await yearSelectOp.innerText();
-                currentYearOp =
-                  parseInt(updatedYearTextOp) || currentYearOp + 1;
-              } else {
-                break;
-              }
-            }
+          if (await dayButton.isVisible().catch(() => false)) {
+            await dayButton.click();
           }
+          await page.waitForTimeout(1000);
         }
-        await page.waitForTimeout(500);
       }
-
-      // 3. Select Month (e.g. 'Apr')
-      const monthSelectOp = pickerContainerOp
-        .locator('button, div, span')
-        .filter({
-          hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
-        })
-        .first();
-      const currentMonthTextOp = await monthSelectOp
-        .innerText()
-        .catch(() => '');
-      if (currentMonthTextOp.toLowerCase() !== targetMonth.toLowerCase()) {
-        await monthSelectOp.click().catch(() => {});
-        await page.waitForTimeout(500);
-
-        const targetMonthOptionOp = pickerContainerOp
-          .locator('button, div, span')
-          .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
-          .first();
-        if (await targetMonthOptionOp.isVisible()) {
-          await targetMonthOptionOp.click();
-        } else {
-          // Fallback: Click month decrement button (the 1st left arrow)
-          const leftArrowsOp = await pickerContainerOp
-            .locator('button, span, i')
-            .filter({ hasText: /^(<|chevron_left|left)$/i })
-            .all();
-          const monthLeftArrowOp = leftArrowsOp[0];
-          if (monthLeftArrowOp) {
-            let limitOp = 0;
-            while (limitOp < 12) {
-              const checkTextOp = await monthSelectOp.innerText();
-              if (checkTextOp.toLowerCase() === targetMonth.toLowerCase())
-                break;
-              await monthLeftArrowOp.click();
-              await page.waitForTimeout(200);
-              limitOp++;
-            }
-          }
-        }
-        await page.waitForTimeout(500);
-      }
-      await page.waitForTimeout(1000);
     }
 
     // Input investasi
-    const investasiLainVal = draft.modalUsaha || '0';
+    const investasiLainVal = draft.modalUsaha || "0";
     context.logStep(
       6,
-      'info',
-      `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString('id-ID')}`,
+      "info",
+      `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString("id-ID")}`,
     );
     const investasiLainInput = page
-      .getByTestId('input-investasi-lain')
-      .locator('input');
-    if (await investasiLainInput.isVisible()) {
+      .getByTestId("input-investasi-lain")
+      .locator("input");
+    if (await investasiLainInput.isVisible().catch(() => false)) {
       await investasiLainInput.fill(investasiLainVal);
       await page.waitForTimeout(500);
     }
 
-    // Modal Kerja 3 Bulan
-    const modalKerjaVal = draft.modalKerja || '0';
-    context.logStep(
-      6,
-      'info',
-      `Mengisi modal kerja 3 bulan: Rp ${parseInt(modalKerjaVal).toLocaleString('id-ID')}`,
-    );
+    const modalKerjaVal = draft.modalKerja || "0";
     const workingCapitalInput = page
-      .getByTestId('input-modal-kerja')
-      .locator('input');
-    if (await workingCapitalInput.isVisible()) {
+      .getByTestId("input-modal-kerja")
+      .locator("input");
+    if (await workingCapitalInput.isVisible().catch(() => false)) {
       await workingCapitalInput.fill(modalKerjaVal);
       await page.waitForTimeout(500);
     }
 
-    // Sumber Pembiayaan
-    const fundingSource = draft.sumberPembiayaan || 'modal_sendiri';
-    context.logStep(
-      6,
-      'info',
-      `Mengisi sumber pembiayaan: ${fundingSource === 'pinjaman' ? 'Pinjaman' : 'Modal Sendiri'}`,
-    );
-    if (fundingSource === 'pinjaman') {
+    const fundingSource = draft.sumberPembiayaan || "modal_sendiri";
+    if (fundingSource === "pinjaman") {
       await page
-        .getByText('Pinjaman', { exact: true })
+        .getByText("Pinjaman", { exact: true })
         .click()
         .catch(() => {});
     } else {
       await page
-        .getByText('Modal Sendiri', { exact: true })
+        .getByText("Modal Sendiri", { exact: true })
         .click()
         .catch(() => {});
     }
     await page.waitForTimeout(500);
 
-    // Hasil Penjualan Tahunan
-    const omzetVal = draft.omzetTahunan || '0';
-    context.logStep(
-      6,
-      'info',
-      `Mengisi omzet tahunan: Rp ${parseInt(omzetVal).toLocaleString('id-ID')}`,
-    );
+    const omzetVal = draft.omzetTahunan || "0";
     const salesInput = page
-      .getByTestId('pendapatan_tahunan')
-      .locator('input')
+      .getByTestId("pendapatan_tahunan")
+      .locator("input")
       .first();
-    if (await salesInput.isVisible()) {
+    if (await salesInput.isVisible().catch(() => false)) {
       await salesInput.fill(omzetVal);
       await page.waitForTimeout(500);
     }
 
-    // Jumlah pekerja laki-laki & perempuan
-    let maleLaborVal = draft.jumlahPekerjaLakiLaki;
-    let femaleLaborVal = draft.jumlahPekerjaPerempuan;
+    let maleLaborVal = draft.jumlahPekerjaLakiLaki || draft.jumlahPekerja || "0";
+    let femaleLaborVal = draft.jumlahPekerjaPerempuan || "0";
 
-    if (!maleLaborVal && !femaleLaborVal && draft.jumlahPekerja) {
-      maleLaborVal = draft.jumlahPekerja;
-      femaleLaborVal = '0';
-    }
-
-    maleLaborVal = maleLaborVal || '0';
-    femaleLaborVal = femaleLaborVal || '0';
-
-    context.logStep(
-      6,
-      'info',
-      `Mengisi pekerja laki laki: ${maleLaborVal}`,
-    );
     const maleLaborInput = page
-      .getByTestId('laborcard-labor-male')
-      .locator('input')
+      .getByTestId("laborcard-labor-male")
+      .locator("input")
       .first();
-    if (await maleLaborInput.isVisible()) {
+    if (await maleLaborInput.isVisible().catch(() => false)) {
       await maleLaborInput.fill(maleLaborVal);
       await page.waitForTimeout(500);
     }
 
-    context.logStep(
-      6,
-      'info',
-      `Mengisi pekerja perempuan: ${femaleLaborVal}`,
-    );
     const femaleLaborInput = page
-      .getByTestId('laborcard-labor-female')
-      .locator('input')
+      .getByTestId("laborcard-labor-female")
+      .locator("input")
       .first();
-    if (await femaleLaborInput.isVisible()) {
+    if (await femaleLaborInput.isVisible().catch(() => false)) {
       await femaleLaborInput.fill(femaleLaborVal);
       await page.waitForTimeout(500);
     }
 
-    // Tambah Produk/Jasa
-    context.logStep(6, 'info', 'Membuka modal Tambah Produk/Jasa...');
-    const getSatuanPromise = page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('/getSatuanProduk/') &&
-          response.status() === 200,
-        { timeout: 15000 },
-      )
-      .catch(() => null);
+    const btnTambahProduk = page.getByRole("button", { name: "Tambah Produk/Jasa" });
+    if (await btnTambahProduk.isVisible().catch(() => false)) {
+      context.logStep(6, "info", "Membuka modal Tambah Produk/Jasa...");
+      const getSatuanPromise = page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("/getSatuanProduk/") &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
 
-    await page.getByRole('button', { name: 'Tambah Produk/Jasa' }).click();
-    const getSatuanResponse = await getSatuanPromise;
+      await btnTambahProduk.click();
+      const getSatuanResponse = await getSatuanPromise;
 
-    let allowedUnits: string[] = [];
-    if (getSatuanResponse) {
-      try {
-        const json = await getSatuanResponse.json();
-        if (json && Array.isArray(json.data)) {
-          allowedUnits = json.data
-            .map((u: any) => u.satuan_ukur)
-            .filter(Boolean);
-          context.logStep(
-            6,
-            'info',
-            `Satuan resmi yang diizinkan untuk KBLI ini: ${allowedUnits.join(', ')}`,
-          );
-        }
-      } catch (e) {
-        console.error('Gagal mengurai response getSatuanProduk:', e);
-      }
-    }
-    await page.waitForTimeout(1000);
-
-    // Check if we already have the product info in the draft (e.g. from previous runs)
-    let productInfo = {
-      jenisProdukJasa: draft.jenisProdukJasa,
-      cangkupanProduk: draft.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
-      kapasitas: draft.kapasitas,
-      satuan: draft.satuan,
-    };
-
-    if (
-      !productInfo.jenisProdukJasa ||
-      !productInfo.kapasitas ||
-      !productInfo.satuan
-    ) {
-      // Prompt the user since it is missing!
-      context.logStep(6, 'warn', 'MENGISI_RINCIAN_PRODUK', {
-        allowedUnits,
-      });
-
-      // Wait up to 120 seconds for user response
-      const userInput = await context.waitForProductInput();
-
-      if (!userInput) {
-        context.logStep(
-          6,
-          'error',
-          'Pendaftaran GAGAL: Batas waktu pengisian rincian produk habis.',
-        );
-        throw new Error('Batas waktu pengisian rincian produk habis.');
+      let allowedUnits: string[] = [];
+      if (getSatuanResponse) {
+        try {
+          const json = await getSatuanResponse.json();
+          if (json && Array.isArray(json.data)) {
+            allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
+          }
+        } catch (e) {}
       }
 
-      productInfo = {
-        jenisProdukJasa: userInput.jenisProdukJasa,
-        cangkupanProduk:
-          userInput.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
-        kapasitas: userInput.kapasitas,
-        satuan: userInput.satuan,
+      let productInfo = {
+        jenisProdukJasa: draft.jenisProdukJasa,
+        cangkupanProduk: draft.cangkupanProduk || "Tidak Mengajukan Fasilitas",
+        kapasitas: draft.kapasitas,
+        satuan: draft.satuan,
       };
 
-      // Also save to database so next time it is cached/persisted
-      try {
-        await this.draftsService.update(draftId, {
-          jenisProdukJasa: productInfo.jenisProdukJasa,
-          cangkupanProduk: productInfo.cangkupanProduk,
-          kapasitas: productInfo.kapasitas,
-          satuan: productInfo.satuan,
-        });
-      } catch (dbErr) {
-        console.error('Gagal menyimpan rincian produk ke DB:', dbErr);
+      if (!productInfo.jenisProdukJasa || !productInfo.kapasitas || !productInfo.satuan) {
+        context.logStep(6, "warn", "MENGISI_RINCIAN_PRODUK", { allowedUnits });
+        const userInput = await context.waitForProductInput();
+        if (!userInput) {
+          throw new Error("Batas waktu pengisian rincian produk habis.");
+        }
+        productInfo = {
+          jenisProdukJasa: userInput.jenisProdukJasa,
+          cangkupanProduk: userInput.cangkupanProduk || "Tidak Mengajukan Fasilitas",
+          kapasitas: userInput.kapasitas,
+          satuan: userInput.satuan,
+        };
+        await this.draftsService.update(draftId, { ...productInfo }).catch(() => null);
       }
-    }
 
-    // Now fill the modal with productInfo!
-    context.logStep(
-      6,
-      'info',
-      `Mengisi Jenis Produk/Jasa: ${productInfo.jenisProdukJasa}`,
-    );
-    const productTypeCombobox = page
-      .getByTestId('product-service-card-product-type')
-      .locator('input')
-      .first();
-    await productTypeCombobox.click();
-    await productTypeCombobox.fill(productInfo.jenisProdukJasa);
-    await page.waitForTimeout(500);
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(1000);
+      const productTypeCombobox = page
+        .getByTestId("product-service-card-product-type")
+        .locator("input")
+        .first();
+      await productTypeCombobox.click();
+      await productTypeCombobox.fill(productInfo.jenisProdukJasa);
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(1000);
 
-    const coverageCombobox = page.locator(
-      'input[placeholder="Masukan Cangkupan Produk Fasilitas Berusaha"]',
-    );
-    if (await coverageCombobox.isVisible()) {
-      context.logStep(
-        6,
-        'info',
-        `Mengisi Cangkupan Produk: ${productInfo.cangkupanProduk}`,
-      );
-      await coverageCombobox.click();
-      await coverageCombobox.fill(productInfo.cangkupanProduk);
+      const capacityInput = page
+        .getByTestId("product-service-card-capacity")
+        .locator("input");
+      await capacityInput.fill(productInfo.kapasitas);
       await page.waitForTimeout(500);
 
-      const option = page
-        .getByRole('option', { name: productInfo.cangkupanProduk })
-        .first();
-      const textOption = page
-        .getByText(productInfo.cangkupanProduk, { exact: false })
-        .first();
-      if (await option.isVisible()) {
-        await option.click();
-      } else if (await textOption.isVisible()) {
-        await textOption.click();
-      } else {
-        await page.keyboard.press('Enter');
+      let unitToFill = productInfo.satuan;
+      if (allowedUnits.length > 0) {
+        const matched = allowedUnits.find((u) => u.toLowerCase() === unitToFill.toLowerCase());
+        unitToFill = matched || allowedUnits[0];
       }
+
+      const unitCombobox = page
+        .getByTestId("product-service-card-unit")
+        .locator("input");
+      await unitCombobox.click();
+      await unitCombobox.fill(unitToFill);
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
       await page.waitForTimeout(1000);
+
+      await page.getByRole("button", { name: "Simpan", exact: true }).click();
+      await page.waitForTimeout(2000);
+
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("getTableKBLIdanProduk") &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
     }
+  }
 
-    context.logStep(
-      6,
-      'info',
-      `Mengisi Kapasitas: ${productInfo.kapasitas}`,
-    );
-    const capacityInput = page
-      .getByTestId('product-service-card-capacity')
-      .locator('input');
-    await capacityInput.fill(productInfo.kapasitas);
-    await page.waitForTimeout(500);
+  public async executeParameterRisikoSteps(
+    context: AutomationSessionContext,
+  ): Promise<void> {
+    const { page } = context;
+    context.logStep(6, "info", "Memulai pengisian Parameter Risiko...");
 
-    // Resolve satuan value
-    let unitToFill = productInfo.satuan;
-    if (allowedUnits.length > 0) {
-      const matched = allowedUnits.find(
-        (u) => u.toLowerCase() === unitToFill.toLowerCase(),
-      );
-      if (matched) {
-        unitToFill = matched;
-      } else {
-        unitToFill = allowedUnits[0];
-        context.logStep(
-          6,
-          'info',
-          `Satuan "${productInfo.satuan}" tidak diizinkan. Menggunakan "${unitToFill}"...`,
-        );
-      }
-    }
-
-    context.logStep(6, 'info', `Mengisi Satuan: ${unitToFill}`);
-    const unitCombobox = page
-      .getByTestId('product-service-card-unit')
-      .locator('input');
-    await unitCombobox.click();
-    await unitCombobox.fill(unitToFill);
-    await page.waitForTimeout(500);
-
-    const unitOption = page.getByRole('option', { name: unitToFill }).first();
-    const unitTextOption = page.getByText(unitToFill, { exact: false }).first();
-    if (await unitOption.isVisible()) {
-      await unitOption.click();
-    } else if (await unitTextOption.isVisible()) {
-      await unitTextOption.click();
-    } else {
-      await page.keyboard.press('Enter');
-    }
-    await page.waitForTimeout(1000);
-
-    // Save Product/Service
-    context.logStep(6, 'info', 'Menyimpan data Produk/Jasa...');
-    await page.getByRole('button', { name: 'Simpan', exact: true }).click();
-    await page.waitForTimeout(2000);
-
-    // Wait for getTableKBLIdanProduk response
-    await page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('getTableKBLIdanProduk') &&
-          response.status() === 200,
-        { timeout: 15000 },
-      )
-      .catch(() => null);
-
-    // Setup listeners for risk analysis and parameter validation APIs
     const getResikoPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('/getResikoNonPesorangan') &&
+          response.url().includes("/getResikoNonPesorangan") &&
           response.status() === 200,
         { timeout: 20000 },
       )
@@ -1598,158 +1488,24 @@ export class FilingFlowService {
     const getKriteriaPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('/getKriteriaKegiatan') &&
+          response.url().includes("/getKriteriaKegiatan") &&
           response.status() === 200,
         { timeout: 20000 },
       )
       .catch(() => null);
 
-    // Click Selanjutnya to validate and load the Risk screen
-    context.logStep(
-      6,
-      'info',
-      'Mengklik Selanjutnya untuk validasi Risiko Usaha...',
-    );
-    await page
-      .getByRole('button', { name: 'Selanjutnya', exact: true })
-      .click();
-    await page.waitForTimeout(1000);
-
-    // Check for validation errors on the page
-    const errorContainers = page.locator('.v-input--error');
-    const containerCount = await errorContainers.count();
-    const visibleErrors: string[] = [];
-
-    const processedTexts = new Set<string>();
-    for (let i = 0; i < containerCount; i++) {
-      const container = errorContainers.nth(i);
-      if (await container.isVisible()) {
-        const outerHtml = await container
-          .evaluate((el: any) => el.outerHTML)
-          .catch(() => '');
-        this.logger.error(`[Step 6 Error Container] Outer HTML: ${outerHtml}`);
-
-        let labelText = '';
-        const possibleLabel = container
-          .locator('.v-label, .v-field-label, label, .v-input__label')
-          .first();
-        if (await possibleLabel.isVisible()) {
-          labelText = (await possibleLabel.innerText()).trim();
-        }
-
-        // Try to get input attributes inside the container as descriptive fallbacks
-        let fallbackLabel = '';
-        const inputEl = container.locator('input, textarea, select').first();
-        if (await inputEl.isVisible().catch(() => false)) {
-          const placeholder = await inputEl.getAttribute('placeholder').catch(() => null);
-          const ariaLabel = await inputEl.getAttribute('aria-label').catch(() => null);
-          const testIdAttr = await inputEl.getAttribute('data-testid').catch(() => null);
-          const nameAttr = await inputEl.getAttribute('name').catch(() => null);
-          const idAttr = await inputEl.getAttribute('id').catch(() => null);
-
-          if (placeholder && placeholder.trim()) {
-            fallbackLabel = placeholder.trim();
-          } else if (ariaLabel && ariaLabel.trim()) {
-            fallbackLabel = ariaLabel.trim();
-          } else if (testIdAttr && testIdAttr.trim()) {
-            fallbackLabel = testIdAttr.trim();
-          } else if (nameAttr && nameAttr.trim()) {
-            fallbackLabel = nameAttr.trim();
-          } else if (idAttr && idAttr.trim()) {
-            fallbackLabel = idAttr.trim();
-          }
-        }
-
-        const errorMsgEl = container
-          .locator('.v-messages__message, .error--text')
-          .first();
-        let errorText = 'Wajib diisi';
-        if (await errorMsgEl.isVisible()) {
-          errorText = (await errorMsgEl.innerText()).trim();
-          processedTexts.add(errorText);
-        }
-
-        // If labelText is empty, matches errorText, or is generic "Wajib diisi", use fallbackLabel
-        const isInvalidLabel = !labelText || 
-          labelText.toLowerCase() === errorText.toLowerCase() || 
-          labelText.toLowerCase() === 'wajib diisi';
-
-        if (isInvalidLabel && fallbackLabel) {
-          labelText = fallbackLabel;
-        }
-
-        // Clean up common technical suffixes/prefixes or action verbs from labels/placeholders
-        if (labelText) {
-          labelText = labelText
-            .replace(/Masukkan\s+/gi, '')
-            .replace(/Pilih\s+/gi, '')
-            .replace(/Contoh\s*:\s*/gi, '')
-            .replace(/Contoh\s+/gi, '')
-            .trim();
-          labelText = labelText.charAt(0).toUpperCase() + labelText.slice(1);
-        }
-
-        if (!labelText) {
-          // Last resort fallback
-          const innerText = await container.innerText().catch(() => '');
-          const firstLine = innerText.split('\n')[0]?.trim() || '';
-          if (firstLine && firstLine.toLowerCase() !== errorText.toLowerCase() && firstLine.toLowerCase() !== 'wajib diisi') {
-            labelText = firstLine;
-          }
-        }
-
-        if (labelText) {
-          visibleErrors.push(`${labelText} (${errorText})`);
-        } else {
-          visibleErrors.push(errorText);
-        }
-      }
+    context.logStep(6, "info", "Mengklik Selanjutnya untuk validasi Risiko Usaha...");
+    const btnSelanjutnya = page.getByRole("button", { name: "Selanjutnya", exact: true });
+    await btnSelanjutnya.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    if (await btnSelanjutnya.isVisible().catch(() => false)) {
+      await btnSelanjutnya.click({ force: true });
+      await page.waitForTimeout(1000);
     }
 
-    const orphanErrors = page.locator('.error--text, .v-messages__message');
-    const orphanCount = await orphanErrors.count();
-    for (let i = 0; i < orphanCount; i++) {
-      const el = orphanErrors.nth(i);
-      if (await el.isVisible()) {
-        const errorText = (await el.innerText()).trim();
-        if (errorText && !processedTexts.has(errorText)) {
-          visibleErrors.push(errorText);
-        }
-      }
-    }
-
-    if (visibleErrors.length > 0) {
-      const errorMsg = `Kesalahan pengisian formulir: ${visibleErrors.join(', ')}`;
-      context.logStep(6, 'error', `Pendaftaran GAGAL: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-
-    // Await responses
     const resikoResponse = await getResikoPromise;
     const kriteriaResponse = await getKriteriaPromise;
 
-    let riskInfo: any = null;
     let allowedParameters: string[] = [];
-
-    if (resikoResponse) {
-      try {
-        const json = await resikoResponse.json();
-        riskInfo = {
-          tingkatRisiko: json.keterangan_resiko,
-          skalaUsaha: json.keterangan_skala_usaha,
-          jenisPerizinan: json.jenis_perizinan,
-          perizinanTunggal: !!json.flag_perizinan_tunggal,
-        };
-        context.logStep(
-          6,
-          'info',
-          `Analisis Risiko: ${riskInfo.tingkatRisiko} | Skala: ${riskInfo.skalaUsaha} | Perizinan: ${riskInfo.jenisPerizinan}`,
-        );
-      } catch (e) {
-        console.error('Gagal mengurai response getResikoNonPesorangan:', e);
-      }
-    }
-
     if (kriteriaResponse) {
       try {
         const json = await kriteriaResponse.json();
@@ -1758,228 +1514,287 @@ export class FilingFlowService {
             .map((item: any) => item.parameter_kewenangan)
             .filter(Boolean);
         }
-      } catch (e) {
-        console.error('Gagal mengurai response getKriteriaKegiatan:', e);
-      }
+      } catch (e) {}
     }
 
-    await page.waitForTimeout(2000); // wait for page animation/rendering
-
-    // If parameter dropdown exists and has options, prompt user
     if (allowedParameters.length > 0) {
-      context.logStep(6, 'warn', 'MENGISI_PARAMETER_RISIKO', {
-        tingkatRisiko: riskInfo?.tingkatRisiko || '',
-        skalaUsaha: riskInfo?.skalaUsaha || '',
-        jenisPerizinan: riskInfo?.jenisPerizinan || '',
-        perizinanTunggal: riskInfo?.perizinanTunggal || false,
-        parameterOptions: allowedParameters,
-      });
-
-      // Wait up to 120s for user parameter selection
-      const selectedParam = await context.waitForParameterInput().catch(() => '');
-
+      context.logStep(6, "warn", "MENGISI_PARAMETER_RISIKO", { parameterOptions: allowedParameters });
+      const selectedParam = await context.waitForParameterInput().catch(() => "");
       if (!selectedParam) {
-        context.logStep(
-          6,
-          'error',
-          'Pendaftaran GAGAL: Batas waktu pemilihan parameter risiko habis.',
-        );
-        throw new Error('Batas waktu pemilihan parameter risiko habis.');
+        throw new Error("Batas waktu pemilihan parameter risiko habis.");
       }
 
-      context.logStep(
-        6,
-        'info',
-        `Mengisi parameter kewenangan: ${selectedParam}`,
-      );
-
-      // Target Parameter Dropdown on portal
-      const paramCombobox = page.getByRole('combobox').first();
-      if (await paramCombobox.isVisible()) {
+      const paramCombobox = page.getByRole("combobox").first();
+      if (await paramCombobox.isVisible().catch(() => false)) {
         await paramCombobox.click();
         await page.waitForTimeout(500);
-
-        await page.getByText(selectedParam).first().click();
-        context.logStep(
-          6,
-          'info',
-          `Mengklik item list overlay: ${selectedParam}`,
-        );
+        await page.getByText(selectedParam).first().click().catch(() => null);
         await page.waitForTimeout(1000);
       }
     }
 
-    // Finally click Selanjutnya to save risk/parameter and complete Step 6
-    context.logStep(
-      6,
-      'info',
-      'Menyimpan analisis Risiko & Parameter...',
-    );
-    await page
-      .getByRole('button', { name: 'Selanjutnya', exact: true })
-      .click({ force: true });
-    await page.waitForTimeout(3000);
+    context.logStep(6, "info", "Menyimpan analisis Risiko & Parameter...");
+    if (await btnSelanjutnya.isVisible().catch(() => false)) {
+      await btnSelanjutnya.click({ force: true });
+      await page.waitForTimeout(3000);
+    }
+  }
 
-    context.logStep(6, "info", "Memilih 'Belum' memiliki amdal..");
-    await page.getByRole('radio', { name: 'Belum' }).check();
+  public async executePersetujuanLingkunganSteps(
+    context: AutomationSessionContext,
+  ): Promise<void> {
+    const { page } = context;
+    context.logStep(6, "info", "Memulai pengisian Persetujuan Lingkungan...");
 
-    context.logStep(6, "info", 'Klik tombol Proses..');
-    await page.getByRole('button', { name: 'Proses' }).click();
-    await page.waitForTimeout(1500);
+    const radioBelum = page.getByRole("radio", { name: "Belum" });
+    await radioBelum.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    if (await radioBelum.isVisible().catch(() => false)) {
+      context.logStep(6, "info", "Memilih Belum memiliki amdal..");
+      await radioBelum.check();
 
-    context.logStep(6, "info", 'Klik tombol Ya, Lanjut..');
-    await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
-    await page.waitForTimeout(1500);
+      context.logStep(6, "info", "Klik tombol Proses..");
+      await page.getByRole("button", { name: "Proses" }).click();
+      await page.waitForTimeout(1500);
 
-    // Wait for submitLingkungan response
+      context.logStep(6, "info", "Klik tombol Ya, Lanjut..");
+      await page.getByRole("button", { name: "Ya, Lanjut" }).click();
+      await page.waitForTimeout(1500);
+
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("submitLingkungan") &&
+            response.status() === 200,
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+
+      await page
+        .waitForResponse(
+          (response: any) =>
+            response.url().includes("prosesProyek") &&
+            [200, 201].includes(response.status()),
+          { timeout: 15000 },
+        )
+        .catch(() => null);
+
+      const tabPersyaratan = page.getByRole("tab", { name: "Persyaratan Dasar" });
+      await tabPersyaratan.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+      if (await tabPersyaratan.isVisible().catch(() => false)) {
+        await tabPersyaratan.click();
+      }
+    }
+  }
+
+  public async executeAmdalnetSteps(
+    context: AutomationSessionContext,
+  ): Promise<{ kd_izin?: string; id_izin?: string }> {
+    const { page, draft } = context;
+    context.logStep(6, "info", "Memulai proses penapisan AMDALnet...");
+
+    const btnProsesPenapisan = page.getByRole("button", { name: "Proses Penapisan" });
+    await btnProsesPenapisan.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+
+    let kd_izin: string | undefined;
+    let id_izin: string | undefined;
+
+    if (await btnProsesPenapisan.isVisible().catch(() => false)) {
+      context.logStep(6, "info", "Klik tombol Proses Penapisan (memaksa di tab yang sama)....");
+      await page.evaluate(() => {
+        window.open = function (url) {
+          window.location.href = url ? url.toString() : "";
+          return window;
+        };
+      }).catch(() => null);
+
+      let interceptedIdIzin = "";
+      let interceptedKdIzin = "";
+      const requestListener = (request: any) => {
+        const url = request.url();
+        if (url.includes("id_izin=")) {
+          const matchId = url.match(/[?&]id_izin=([^&]+)/);
+          if (matchId && !interceptedIdIzin) interceptedIdIzin = matchId[1];
+        }
+        if (url.includes("kd_izin=")) {
+          const matchKd = url.match(/[?&]kd_izin=([^&]+)/);
+          if (matchKd && !interceptedKdIzin) interceptedKdIzin = matchKd[1];
+        }
+      };
+
+      page.on("request", requestListener);
+      await btnProsesPenapisan.click();
+      await page.waitForTimeout(3000);
+      page.off("request", requestListener);
+
+      kd_izin = interceptedKdIzin || "029000000100";
+      id_izin = interceptedIdIzin || draft.idIzin;
+
+      if (id_izin) {
+        const proyekScope = page.locator(`#sub-project-card-${id_izin}`);
+        await proyekScope.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+        if (await proyekScope.isVisible().catch(() => false)) {
+          const proyekCheck = proyekScope.locator(".el-checkbox").first();
+          await proyekCheck.click().catch(() => null);
+          await page.waitForTimeout(1000);
+
+          const elSwitch = proyekScope.locator(".el-switch").first();
+          const isAlreadyChecked = await elSwitch
+            .evaluate((el: Element) => el.classList.contains("is-checked"))
+            .catch(() => false);
+
+          if (!isAlreadyChecked) {
+            await elSwitch.click().catch(() => null);
+          }
+
+          const sectorSelect = page.locator(`#sector-select-${id_izin}`);
+          if (await sectorSelect.isVisible().catch(() => false)) {
+            await sectorSelect.click();
+            const multiSectorOpt = page.getByText("Multi Sektor");
+            if (await multiSectorOpt.isVisible().catch(() => false)) {
+              await multiSectorOpt.click();
+            } else {
+              await page.getByRole("listitem").first().click().catch(() => null);
+            }
+          }
+        }
+      }
+    }
+
+    return { kd_izin, id_izin };
+  }
+
+  public async executePenerbitanNibSteps(
+    context: AutomationSessionContext,
+  ): Promise<void> {
+    const { page } = context;
+    context.logStep(7, "info", "Memulai penerbitan & finalisasi draft NIB...");
+
+    const cardLocator = page.locator(".lokasi-usaha-card").first();
+    if (await cardLocator.isVisible().catch(() => false)) {
+      await cardLocator.getByRole("checkbox").click().catch(() => null);
+      await page.getByRole("button", { name: "Lengkapi Detail Kegiatan" }).click().catch(() => null);
+      await page.waitForTimeout(2000);
+    }
+
+    const yaRadio = page.locator(".el-radio").filter({ hasText: /^Ya$/i }).first();
+    if (await yaRadio.isVisible().catch(() => false)) {
+      await yaRadio.click().catch(() => null);
+      await page.waitForTimeout(500);
+    }
+
+    const tapakSatuKab = page
+      .locator(".el-radio")
+      .filter({ hasText: /tapak proyek berada di satu kabupaten\/kota/i })
+      .first();
+    if (await tapakSatuKab.isVisible().catch(() => false)) {
+      await tapakSatuKab.click().catch(() => null);
+      await page.waitForTimeout(500);
+    }
+
+    const nextButtonFinal = page.getByRole("button", { name: "Selanjutnya" });
+    if (await nextButtonFinal.isVisible().catch(() => false)) {
+      await nextButtonFinal.click().catch(() => null);
+      await page.waitForTimeout(1000);
+    }
+
     await page
       .waitForResponse(
         (response: any) =>
-          response.url().includes('submitLingkungan') &&
+          response.url().includes("penapisan-kewenangan") &&
           response.status() === 200,
         { timeout: 15000 },
       )
       .catch(() => null);
 
-    // Wait for prosesProyek response
-    await page
-      .waitForResponse(
-        (response: any) =>
-          response.url().includes('prosesProyek') && response.status() === 200,
-        { timeout: 15000 },
-      )
-      .catch(() => null);
-
-    // TODO move to new step from this state, step name: Proses Penapisan Izin Lingkungan
-    context.logStep(6, "info", 'Klik tab Persyaratan Dasar..');
-    await page.getByRole('tab', { name: 'Persyaratan Dasar' }).click();
-
-    const btnProsesPenapisan = page.getByRole('button', {
-      name: 'Proses Penapisan',
-    });
-
-    if (await btnProsesPenapisan.isVisible()) {
-      context.logStep(6, "info", 'Klik tombol Proses Penapisan (memaksa di tab yang sama)..');
-      
-      // Force any new tab action to happen in the current tab to keep the video recording continuous
-      await page.evaluate(() => {
-        window.open = function(url) {
-          window.location.href = url ? url.toString() : '';
-          return window;
-        };
-        document.addEventListener('click', function(e) {
-          const target = e.target as HTMLElement;
-          const a = target.closest('a');
-          if (a && a.getAttribute('target') === '_blank') {
-            a.removeAttribute('target');
-          }
-          const form = target.closest('form');
-          if (form && form.getAttribute('target') === '_blank') {
-            form.removeAttribute('target');
-          }
-        }, { capture: true });
-      });
-
-      // Capture the kdIzin from the very first navigation request before the SPA rewrites the URL
-      let interceptedIdIzin = '';
-      const requestListener = (request: any) => {
-        const url = request.url();
-        if (request.isNavigationRequest() && url.includes('id_izin=')) {
-          const match = url.match(/[?&]id_izin=([^&]+)/);
-          if (match && !interceptedIdIzin) {
-            interceptedIdIzin = match[1];
-          }
-        }
-      };
-      page.on('request', requestListener);
-
-      await btnProsesPenapisan.click();
-      await page.waitForTimeout(1500);
-
-      context.logStep(
-        6,
-        'info',
-        'Menunggu halaman penapisan izin lingkungan dimuat...',
-      );
-
-      // wait for response list-proyek on the main tab
-      await page
-        .waitForResponse(
-          (response: any) => {
-            if (response.url().includes('list-proyek')) {
-              context.logStep(6, "info", `Response URL: ${response.url()} | Status: ${response.status()}`);
-              return response.status() === 200
-            }
-            return false;
-          },
-          { timeout: 15000 },
-        )
-        .catch(() => null);
-      
-      // Stop listening to requests
-      page.off('request', requestListener);
-      context.logStep(6, "info", 'Mendapatkan response list-proyek');
-
-      // Extract kdIzin from the intercepted original navigation request.
-      const idIzinMatch = page.url().match(/[?&]id_izin=([^&]+)/);
-      const idIzin = interceptedIdIzin || (idIzinMatch ? idIzinMatch[1] : draft.idIzin || '');
-      context.logStep(6, "info", `ID Izin: ${idIzin}`);
-
-      const proyekScope = page.locator(`#sub-project-card-${idIzin}`);
-      await proyekScope.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
-        context.logStep(6, "error", 'Proyek tidak ditemukan..');
-        throw new Error('Proyek tidak ditemukan..');
-      });
-      const proyekCheck = proyekScope.locator('.el-checkbox').first();
-      context.logStep(6, "info", 'Mencentang checkbox proyek...');
-      await proyekCheck.click();
-      await page.waitForTimeout(1000);
-
-      // wait for response check-license-status
-      await page
+    const saveButton = page.getByRole("button", { name: "Simpan" }).first();
+    if (await saveButton.isVisible().catch(() => false)) {
+      const updateDataPermohonanPromise = page
         .waitForResponse(
           (response: any) =>
-            response.url().includes('check-license-status') &&
+            response.url().includes("api/projects") &&
             response.status() === 200,
-          { timeout: 15000 },
+          { timeout: 20000 },
         )
         .catch(() => null);
-      context.logStep(
-        6,
-        'info',
-        'Mendapatkan response check-license-status',
-      );
 
-      const elSwitch = proyekScope.locator('.el-switch').first();
-      const isAlreadyChecked = await elSwitch.evaluate(
-        (el: Element) => el.classList.contains('is-checked'),
-      ).catch(() => false);
-      
-      if (!isAlreadyChecked) {
-        context.logStep(6, 'info', 'Mengaktifkan switch pemenuhan persyaratan...');
-        await elSwitch.click();
-      } else {
-        context.logStep(6, 'info', 'Switch pemenuhan persyaratan sudah aktif.');
-      }
+      await saveButton.click();
+      await page.waitForTimeout(1000);
 
-      context.logStep(6, 'info', 'Membuka pilihan sektor...');
-      await page.locator(`#sector-select-${idIzin}`).click();
-      
-      const multiSectorOpt = page.getByText('Multi Sektor');
-      if (await multiSectorOpt.isVisible()) {
-        context.logStep(6, 'info', 'Memilih opsi Multi Sektor...');
-        await multiSectorOpt.click();
-      } else {
-        const targetKbli = draft.kbliCode || '';
-        const targetItem = page.getByRole('listitem').filter({ hasText: targetKbli }).first();
-        if (targetKbli && await targetItem.isVisible()) {
-          context.logStep(6, 'info', `Memilih sektor sesuai KBLI ${targetKbli}...`);
-          await targetItem.click();
-        } else {
-          context.logStep(6, 'info', 'Memilih sektor pertama yang tersedia...');
-          await page.getByRole('listitem').first().click();
+      const popupConfirm = page.locator(".el-message-box__wrapper, .el-message-box").first();
+      if (await popupConfirm.isVisible().catch(() => false)) {
+        const popupSimpanBtn = page
+          .locator(".el-message-box__btns button, .el-message-box button")
+          .filter({ hasText: /^Simpan$/i })
+          .first();
+        if (await popupSimpanBtn.isVisible().catch(() => false)) {
+          await popupSimpanBtn.click().catch(() => null);
         }
       }
+
+      await updateDataPermohonanPromise;
+      await page.waitForTimeout(2000);
+
+      const finalOkBtn = page
+        .locator("button, .v-btn, .el-button, [role='button']")
+        .filter({ hasText: /Oke,\s*Mengerti/i })
+        .first();
+
+      if (await finalOkBtn.isVisible().catch(() => false)) {
+        await finalOkBtn.click().catch(() => null);
+        await page.waitForTimeout(1000);
+      }
     }
+  }
+
+  public async executeManageBusinessDetailSteps(
+    context: AutomationSessionContext,
+  ) {
+    const kbliRes = await this.executeKbliSteps(context);
+    await this.executeTataRuangSteps(context);
+    await this.executeInvestasiProdukSteps(context);
+    await this.executeParameterRisikoSteps(context);
+    await this.executePersetujuanLingkunganSteps(context);
+    const amdalRes = await this.executeAmdalnetSteps(context);
+    await this.executePenerbitanNibSteps(context);
+    return { ...kbliRes, ...amdalRes };
+  }
+
+  public async patchPiniaStoreState(page: any) {
+    try {
+      await page
+        .evaluate(() => {
+          if ((window as any).__piniaPatchInterval) {
+            clearInterval((window as any).__piniaPatchInterval);
+          }
+          (window as any).__piniaPatchInterval = setInterval(() => {
+            try {
+              const nuxtEl = document.querySelector("#__nuxt");
+              if (nuxtEl && (nuxtEl as any).__vue_app__) {
+                const pinia = (nuxtEl as any).__vue_app__.config
+                  .globalProperties.$pinia;
+                if (
+                  pinia &&
+                  pinia.state &&
+                  pinia.state.value &&
+                  pinia.state.value["nib-profile"]
+                ) {
+                  const storeState = pinia.state.value["nib-profile"];
+                  if (
+                    storeState &&
+                    storeState.state &&
+                    storeState.state.dataPermohonan
+                  ) {
+                    if (!storeState.state.dataPermohonan.dataNib) {
+                      storeState.state.dataPermohonan.dataNib = {};
+                    }
+                    storeState.state.dataPermohonan.dataNib.jenis_api = "01";
+                  }
+                }
+              }
+            } catch (e) {}
+          }, 100);
+        })
+        .catch(() => null);
+    } catch (e) {}
   }
 }

@@ -46,6 +46,7 @@ export default function WizardPage() {
     jenisKelamin: "Laki-laki",
     nomorHp: "",
     email: "",
+    ossPassword: "",
     // Step 2: Lokasi Usaha
     alamatKtp: "",
     provinsiKtp: "",
@@ -84,12 +85,348 @@ export default function WizardPage() {
     satuan: ""
   });
 
+  // Account Type & UI toggle states
+  const [akunOss, setAkunOss] = useState<string>("belum");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+
   // Geocoding Coordinates State
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeError, setGeocodeError] = useState("");
 
   // Validation Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Step 2 Verification States
+  const [isVerifyingStep2, setIsVerifyingStep2] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [verifyingStatusText, setVerifyingStatusText] = useState("Menghubungkan...");
+  const [verifyingLogs, setVerifyingLogs] = useState<{ text: string; type: string }[]>([]);
+  const [isPromptingOtp, setIsPromptingOtp] = useState(false);
+  const [isPromptingPassword, setIsPromptingPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const [registrationCompleted, setRegistrationCompleted] = useState(false);
+  const [verifyingErrorText, setVerifyingErrorText] = useState("");
+  const [verifyingStep, setVerifyingStep] = useState(1);
+  const [verifyingTimeLeft, setVerifyingTimeLeft] = useState(120);
+
+  const streamRef = useRef<EventSource | null>(null);
+  const verifyTimerRef = useRef<any>(null);
+  const otpRefs = useRef<HTMLInputElement[]>([]);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+  const getSessionId = () => {
+    if (typeof window !== "undefined") {
+      let sid = sessionStorage.getItem("session_id");
+      if (!sid) {
+        sid = Math.random().toString(36).substring(2, 11).toUpperCase();
+        sessionStorage.setItem("session_id", sid);
+      }
+      return sid;
+    }
+    return "SESSION_DEFAULT";
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const regDone = sessionStorage.getItem("registration_completed") === "true";
+      setRegistrationCompleted(regDone);
+    }
+    return () => {
+      if (streamRef.current) streamRef.current.close();
+      if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+    };
+  }, []);
+
+  const startVerificationStream = (draftId: string) => {
+    setVerifyingErrorText("");
+    setIsPromptingOtp(false);
+    setIsPromptingPassword(false);
+    setVerifyingLogs([]);
+    setVerifyingStatusText("Menghubungkan ke backend local...");
+
+    try {
+      const eventSource = new EventSource(`${API_URL}/automation/stream/${draftId}?phase=registration&akunOss=belum&sessionId=${getSessionId()}`);
+      streamRef.current = eventSource;
+
+      setVerifyingTimeLeft(120);
+      if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+      verifyTimerRef.current = setInterval(() => {
+        setVerifyingTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload) {
+            setVerifyingLogs((prev) => [...prev, { text: payload.text, type: payload.status }]);
+            if (payload.status === "error") {
+              setVerifyingErrorText(payload.text);
+              setVerifyingStatusText("Registrasi Gagal");
+              setIsPromptingOtp(false);
+              setIsPromptingPassword(false);
+              setShowVerificationModal(true);
+              setIsMinimized(false);
+              eventSource.close();
+              if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+              if (draftId) {
+                fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" })
+                  .catch((err) => console.error("Gagal membatalkan otomatisasi:", err));
+              }
+            } else {
+              setVerifyingStep(payload.step);
+              if (payload.step === 1) setVerifyingStatusText("Membuka Portal OSS");
+              if (payload.step === 2) {
+                if (payload.text.includes("OTP") && payload.status === "warn") {
+                  setVerifyingStatusText("Menunggu Anda memasukkan OTP...");
+                  setIsPromptingOtp(true);
+                  setShowVerificationModal(true);
+                  setIsMinimized(false);
+                } else if (payload.text.includes("Silakan masukkan kata sandi")) {
+                  setVerifyingStatusText("Menunggu Anda mengatur Kata Sandi...");
+                  setIsPromptingPassword(true);
+                  setIsPromptingOtp(false);
+                  setShowVerificationModal(true);
+                  setIsMinimized(false);
+                } else if (payload.text.includes("OTP diterima") || payload.text.includes("Verifikasi berhasil") || payload.text.includes("SUKSES")) {
+                  setIsPromptingOtp(false);
+                } else {
+                  setVerifyingStatusText("Memproses validasi NIK & Email...");
+                }
+              }
+              if (payload.step === 3) {
+                setVerifyingStatusText("Mengisi detail akun & menyelesaikan pendaftaran...");
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+              }
+              if (payload.step === 7 && payload.status === "success") {
+                eventSource.close();
+                if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                setVerifyingStatusText("Pendaftaran Berhasil!");
+                setRegistrationCompleted(true);
+                sessionStorage.setItem("registration_completed", "true");
+                sessionStorage.setItem("akun_oss", "sudah");
+                
+                // Show floating success toast
+                setShowSuccessToast(true);
+                setTimeout(() => setShowSuccessToast(false), 5000);
+
+                // Advance to Step 3 after a brief pause only if the user is still on Step 2
+                setTimeout(() => {
+                  setIsVerifyingStep2(false);
+                  setShowVerificationModal(false);
+                  setIsMinimized(false);
+                  const activeWizardStep = typeof window !== "undefined" ? parseInt(sessionStorage.getItem("wizard_step") || "2", 10) : 2;
+                  if (activeWizardStep === 2) {
+                    setCurrentStep(3);
+                    sessionStorage.setItem("wizard_step", "3");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                }, 1500);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing message", e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+        setVerifyingErrorText("Koneksi backend terputus atau tidak terdeteksi. Silakan coba lagi.");
+        setVerifyingStatusText("Koneksi Terputus");
+        setShowVerificationModal(true);
+        setIsMinimized(false);
+        if (draftId) {
+          fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" })
+            .catch((err) => console.error("Gagal membatalkan otomatisasi:", err));
+        }
+      };
+    } catch (e) {
+      setVerifyingErrorText("Gagal mendirikan koneksi.");
+      setVerifyingStatusText("Koneksi Gagal");
+    }
+  };
+
+  const saveDraftStep2 = async () => {
+    try {
+      const payload = {
+        namaPemilik: formData.namaPemilik,
+        nik: formData.nik,
+        tanggalLahir: formData.tanggalLahir,
+        jenisKelamin: formData.jenisKelamin,
+        nomorHp: formData.nomorHp,
+        email: formData.email,
+        alamatUsaha: formData.alamatUsaha,
+        alamatKtp: formData.alamatKtp,
+        provinsiKtp: formData.provinsiKtp,
+        kotaKabupatenKtp: formData.kotaKabupatenKtp,
+        kecamatanKtp: formData.kecamatanKtp,
+        kelurahanKtp: formData.kelurahanKtp,
+        kodePosKtp: formData.kodePosKtp,
+        provinsi: formData.provinsi,
+        kotaKabupaten: formData.kotaKabupaten,
+        kecamatan: formData.kecamatan,
+        kelurahan: formData.kelurahan,
+        kodePos: formData.kodePos,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        luasTanah: formData.luasTanah || "150",
+        fotoLokasi: formData.fotoLokasi || "default_base64",
+        namaUsaha: formData.namaUsaha || "USAHA PEMILIK",
+        ceritaUsaha: formData.ceritaUsaha || "Deskripsi cerita usaha pemilik",
+        modalUsaha: formData.modalUsaha || "10000000",
+        jumlahPekerja: formData.jumlahPekerja || "1",
+        kbliCode: selectedKbliCode || "56103",
+        kbliTitle: "Kedai Makanan",
+        sessionId: getSessionId(),
+      };
+
+      const res = await fetch(`${API_URL}/drafts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Gagal menyimpan draf di server.");
+      const savedDraft = await res.json();
+      if (savedDraft && savedDraft.id) {
+        sessionStorage.setItem("draft_id", savedDraft.id);
+        startVerificationStream(savedDraft.id);
+      } else {
+        throw new Error("ID draf tidak valid.");
+      }
+    } catch (e: any) {
+      console.error(e);
+      setVerifyingErrorText(e.message || "Gagal sinkronisasi data draf.");
+      setVerifyingStatusText("Koneksi Gagal");
+    }
+  };
+
+  const handleOtpDigitChange = (value: string, idx: number) => {
+    const cleanVal = value.replace(/\D/g, "").slice(0, 1);
+    const newDigits = [...otpDigits];
+    newDigits[idx] = cleanVal;
+    setOtpDigits(newDigits);
+
+    const fullOtp = newDigits.join("");
+    setOtp(fullOtp);
+
+    if (cleanVal && idx < 5) {
+      otpRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === "Backspace") {
+      if (!otpDigits[idx] && idx > 0) {
+        const newDigits = [...otpDigits];
+        newDigits[idx - 1] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+        otpRefs.current[idx - 1]?.focus();
+      } else if (otpDigits[idx]) {
+        const newDigits = [...otpDigits];
+        newDigits[idx] = "";
+        setOtpDigits(newDigits);
+        setOtp(newDigits.join(""));
+      }
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (pasteData.length > 0) {
+      const newDigits = [...otpDigits];
+      const digitsToFill = pasteData.slice(0, 6).split("");
+      for (let i = 0; i < 6; i++) {
+        newDigits[i] = digitsToFill[i] || "";
+      }
+      setOtpDigits(newDigits);
+      setOtp(newDigits.join(""));
+      const targetFocusIdx = Math.min(digitsToFill.length, 5);
+      otpRefs.current[targetFocusIdx]?.focus();
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length < 6 || isSubmittingOtp) return;
+
+    setIsSubmittingOtp(true);
+    const draftId = sessionStorage.getItem("draft_id") || "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/otp/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otp })
+      });
+      if (res.ok) {
+        setVerifyingLogs((prev) => [...prev, { text: `Mengirimkan OTP: ${otp} ke backend...`, type: "success" }]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingOtp(false);
+      setIsPromptingOtp(false);
+      setOtp("");
+      setOtpDigits(Array(6).fill(""));
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword.trim() || isSubmittingPassword) return;
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Kata sandi dan konfirmasi kata sandi tidak cocok.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("Kata sandi harus minimal 8 karakter.");
+      return;
+    }
+
+    setPasswordError("");
+    setIsSubmittingPassword(true);
+    const draftId = sessionStorage.getItem("draft_id") || "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/password/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword })
+      });
+      if (res.ok) {
+        setVerifyingLogs((prev) => [...prev, { text: "Mengirimkan kata sandi ke backend...", type: "success" }]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingPassword(false);
+      setIsPromptingPassword(false);
+    }
+  };
 
   // AI KBLI States
   const [recommendations, setRecommendations] = useState<KBLIRecommendation[]>([]);
@@ -107,6 +444,9 @@ export default function WizardPage() {
       const savedStep = sessionStorage.getItem("wizard_step");
       const scale = sessionStorage.getItem("skala_usaha") || "";
       const modalDefault = scale === "mikro" ? "50000000" : "";
+      const storedAkunOss = sessionStorage.getItem("akun_oss") || "belum";
+      setAkunOss(storedAkunOss);
+      const storedPassword = sessionStorage.getItem("oss_password") || "";
 
       const storedKbli = sessionStorage.getItem("selected_kbli");
       if (storedKbli) {
@@ -130,7 +470,11 @@ export default function WizardPage() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setFormData((prev) => ({ ...prev, ...parsed }));
+          setFormData((prev) => ({ 
+            ...prev, 
+            ...parsed,
+            ossPassword: parsed.ossPassword || storedPassword || prev.ossPassword 
+          }));
           if (parsed.ceritaUsaha && parsed.ceritaUsaha.trim().length >= 15) {
             setKbliFlow("ai");
           }
@@ -140,6 +484,7 @@ export default function WizardPage() {
       } else {
         setFormData((prev) => ({
           ...prev,
+          ossPassword: prev.ossPassword || storedPassword,
           modalUsaha: prev.modalUsaha || modalDefault
         }));
       }
@@ -674,6 +1019,7 @@ export default function WizardPage() {
 
     if (
       field !== "email" &&
+      field !== "ossPassword" &&
       field !== "jenisKelamin" &&
       field !== "provinsi" &&
       field !== "kotaKabupaten" &&
@@ -708,6 +1054,10 @@ export default function WizardPage() {
       return;
     }
 
+    if (field === "ossPassword" && typeof window !== "undefined") {
+      sessionStorage.setItem("oss_password", processedValue);
+    }
+
     setFormData((prev) => {
       const updated = { ...prev, [field]: processedValue };
       if (field === "alamatKtp" && updated.isAddressSame) {
@@ -719,43 +1069,64 @@ export default function WizardPage() {
     triggerAutosave();
   };
 
+  const handleToggleAkunOss = (val: string) => {
+    setAkunOss(val);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("akun_oss", val);
+    }
+    setErrors({});
+  };
+
   // 4-Step Validation
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (step === 1) {
-      if (!formData.namaPemilik.trim()) {
-        newErrors.namaPemilik = "Nama pemilik harus diisi.";
-      }
-      if (formData.nik.length !== 16) {
-        newErrors.nik = "NIK harus terdiri dari 16 digit angka.";
-      }
-      if (!formData.tanggalLahir) {
-        newErrors.tanggalLahir = "Tanggal lahir harus diisi.";
-      }
-      if (formData.nomorHp.length < 10) {
-        newErrors.nomorHp = "Nomor WhatsApp belum lengkap.";
-      }
-      if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        newErrors.email = "Format email tidak valid.";
+      if (akunOss === "sudah") {
+        if (!formData.email.trim()) {
+          newErrors.email = "Alamat email / username akun OSS harus diisi.";
+        } else if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          newErrors.email = "Format email tidak valid.";
+        }
+        if (!formData.ossPassword || !formData.ossPassword.trim()) {
+          newErrors.ossPassword = "Kata sandi akun OSS harus diisi.";
+        }
+      } else {
+        if (!formData.namaPemilik.trim()) {
+          newErrors.namaPemilik = "Nama pemilik harus diisi.";
+        }
+        if (formData.nik.length !== 16) {
+          newErrors.nik = "NIK harus terdiri dari 16 digit angka.";
+        }
+        if (!formData.tanggalLahir) {
+          newErrors.tanggalLahir = "Tanggal lahir harus diisi.";
+        }
+        if (formData.nomorHp.length < 10) {
+          newErrors.nomorHp = "Nomor WhatsApp belum lengkap.";
+        }
+        if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          newErrors.email = "Format email tidak valid.";
+        }
       }
     }
 
     if (step === 2) {
-      if (!formData.alamatKtp.trim()) {
-        newErrors.alamatKtp = "Alamat KTP harus diisi.";
-      }
-      if (!formData.provinsiKtp) {
-        newErrors.provinsiKtp = "Pilih provinsi KTP.";
-      }
-      if (!formData.kotaKabupatenKtp) {
-        newErrors.kotaKabupatenKtp = "Pilih kota/kabupaten KTP.";
-      }
-      if (!formData.kecamatanKtp) {
-        newErrors.kecamatanKtp = "Pilih kecamatan KTP.";
-      }
-      if (!formData.kelurahanKtp) {
-        newErrors.kelurahanKtp = "Pilih kelurahan KTP.";
+      if (akunOss !== "sudah") {
+        if (!formData.alamatKtp.trim()) {
+          newErrors.alamatKtp = "Alamat KTP harus diisi.";
+        }
+        if (!formData.provinsiKtp) {
+          newErrors.provinsiKtp = "Pilih provinsi KTP.";
+        }
+        if (!formData.kotaKabupatenKtp) {
+          newErrors.kotaKabupatenKtp = "Pilih kota/kabupaten KTP.";
+        }
+        if (!formData.kecamatanKtp) {
+          newErrors.kecamatanKtp = "Pilih kecamatan KTP.";
+        }
+        if (!formData.kelurahanKtp) {
+          newErrors.kelurahanKtp = "Pilih kelurahan KTP.";
+        }
       }
       if (!formData.alamatUsaha.trim()) {
         newErrors.alamatUsaha = "Alamat lengkap usaha harus diisi.";
@@ -832,6 +1203,18 @@ export default function WizardPage() {
         }
         router.push("/review");
         return;
+      }
+
+      if (currentStep === 2) {
+        const isBelum = typeof window !== "undefined" ? sessionStorage.getItem("akun_oss") || "belum" : "belum";
+        const isRegCompleted = typeof window !== "undefined" && sessionStorage.getItem("registration_completed") === "true";
+        if (isBelum === "belum" && !isRegCompleted && !registrationCompleted && !isVerifyingStep2) {
+          setIsVerifyingStep2(true);
+          setShowVerificationModal(true);
+          setIsMinimized(false);
+          saveDraftStep2();
+          return;
+        }
       }
 
       if (currentStep < 4) {
@@ -941,7 +1324,9 @@ export default function WizardPage() {
     return matches ? matches.join(" ") : nik;
   };
 
-  const stepsLabels = ["Identitas", "Lokasi", "Cerita", "Skala"];
+  const stepsLabels = akunOss === "sudah" 
+    ? ["Akun OSS", "Lokasi", "Cerita", "Skala"] 
+    : ["Identitas", "Lokasi", "Cerita", "Skala"];
 
   return (
     <div className="flex-grow flex flex-col bg-background min-h-screen font-sans">
@@ -990,177 +1375,289 @@ export default function WizardPage() {
 
           <div className="flex-grow">
             
-            {/* ── STEP 1: IDENTITAS & KONTAK ── */}
+            {/* ── STEP 1: IDENTITAS & KONTAK / KREDENSIAL OSS ── */}
             {currentStep === 1 && (
               <div className="animate-fadeIn space-y-6">
-                
-                {/* Section title */}
-                <div>
-                  <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
-                    Identitas Pemilik & Kontak
-                  </h2>
-                  <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                    Masukkan data pemilik usaha sesuai KTP dan kontak aktif yang dapat menerima OTP.
-                  </p>
+
+                {/* Mode Switcher Banner / Toggle */}
+                <div className="flex items-center justify-between p-3 bg-surface-container-low rounded border border-border-light">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary-container text-base">account_circle</span>
+                    <span className="text-[11px] font-bold text-on-surface">
+                      Status Akun OSS:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAkunOss("sudah")}
+                      className={`px-3 py-1.5 rounded text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        akunOss === "sudah"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "bg-white border border-border-light text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      Sudah Punya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAkunOss("belum")}
+                      className={`px-3 py-1.5 rounded text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        akunOss !== "sudah"
+                          ? "bg-primary-container text-white shadow-sm"
+                          : "bg-white border border-border-light text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      Belum Punya
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bento-card space-y-5">
-                  {/* Nama Pemilik */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="namaPemilik">
-                      NAMA LENGKAP PEMILIK (SESUAI KTP)
-                    </label>
-                    <input
-                      type="text"
-                      id="namaPemilik"
-                      placeholder="Contoh: BUDI SANTOSO"
-                      value={formData.namaPemilik}
-                      onChange={(e) => handleInputChange("namaPemilik", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
-                        errors.namaPemilik ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.namaPemilik && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.namaPemilik}
+                {akunOss === "sudah" ? (
+                  <>
+                    {/* Section title for Existing Account */}
+                    <div>
+                      <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
+                        Kredensial Akun OSS
+                      </h2>
+                      <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
+                        Masukkan akun OSS resmi Anda untuk login dan pengajuan NIB otomatis. Data identitas pemilik tidak perlu diisi ulang karena telah tersimpan di akun OSS Anda.
                       </p>
-                    )}
-                  </div>
-
-                  {/* Jenis Kelamin Buttons */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold text-on-surface-variant">
-                      JENIS KELAMIN
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange("jenisKelamin", "Laki-laki")}
-                        className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
-                          formData.jenisKelamin === "Laki-laki"
-                            ? "border-primary-container bg-primary-container/5 text-primary-container"
-                            : "border-border-light hover:bg-surface-container-low text-on-surface"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-base">male</span>
-                        Laki-laki
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange("jenisKelamin", "Perempuan")}
-                        className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
-                          formData.jenisKelamin === "Perempuan"
-                            ? "border-primary-container bg-primary-container/5 text-primary-container"
-                            : "border-border-light hover:bg-surface-container-low text-on-surface"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-base">female</span>
-                        Perempuan
-                      </button>
                     </div>
-                  </div>
 
-                  {/* NIK */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="nik">
-                      NIK (NOMOR INDUK KEPENDUDUKAN)
-                    </label>
-                    <input
-                      type="text"
-                      id="nik"
-                      placeholder="Contoh: 327301XXXXXXXXXX"
-                      value={formData.nik}
-                      onChange={(e) => handleInputChange("nik", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white font-mono text-xs tracking-wider focus:border-primary-container focus:outline-none ${
-                        errors.nik ? "border-error" : ""
-                      }`}
-                    />
-                    {formData.nik && (
-                      <p className="text-[10px] text-primary-container font-mono font-bold">
-                        Terformat: {formatNIK(formData.nik)}
-                      </p>
-                    )}
-                    {errors.nik && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.nik}
-                      </p>
-                    )}
-                  </div>
+                    <div className="bento-card space-y-5">
+                      {/* Email */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
+                          ALAMAT EMAIL / USERNAME OSS
+                        </label>
+                        <input
+                          type="email"
+                          id="email"
+                          placeholder="Contoh: pemilik@gmail.com"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.email ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.email && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.email}
+                          </p>
+                        )}
+                      </div>
 
-                  {/* Tanggal Lahir */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalLahir">
-                      TANGGAL LAHIR
-                    </label>
-                    <input
-                      type="date"
-                      id="tanggalLahir"
-                      value={formData.tanggalLahir}
-                      onChange={(e) => handleInputChange("tanggalLahir", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.tanggalLahir ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.tanggalLahir && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.tanggalLahir}
+                      {/* OSS Password */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="ossPassword">
+                          KATA SANDI AKUN OSS
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            id="ossPassword"
+                            placeholder="Masukkan kata sandi akun OSS Anda"
+                            value={formData.ossPassword || ""}
+                            onChange={(e) => handleInputChange("ossPassword", e.target.value)}
+                            className={`w-full min-h-[48px] pl-3.5 pr-10 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                              errors.ossPassword ? "border-error" : ""
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-lg">
+                              {showPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                          Kata sandi digunakan untuk login otomatis ke portal OSS BKPM saat pembuatan permohonan NIB.
+                        </p>
+                        {errors.ossPassword && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.ossPassword}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Section title for New Registration */}
+                    <div>
+                      <h2 className="text-lg font-extrabold uppercase tracking-wide text-on-surface">
+                        Identitas Pemilik & Kontak
+                      </h2>
+                      <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
+                        Masukkan data pemilik usaha sesuai KTP dan kontak aktif yang dapat menerima OTP.
                       </p>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* WhatsApp */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="nomorHp">
-                      NOMOR WHATSAPP AKTIF
-                    </label>
-                    <input
-                      type="text"
-                      id="nomorHp"
-                      placeholder="Contoh: 08123456789"
-                      value={formData.nomorHp}
-                      onChange={(e) => handleInputChange("nomorHp", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
-                        errors.nomorHp ? "border-error" : ""
-                      }`}
-                    />
-                    <p className="text-[9px] text-on-surface-variant leading-relaxed font-bold">
-                      Digunakan untuk validasi pendaftaran dan pengiriman OTP resmi oleh BKPM RI.
-                    </p>
-                    {errors.nomorHp && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.nomorHp}
-                      </p>
-                    )}
-                  </div>
+                    <div className="bento-card space-y-5">
+                      {/* Nama Pemilik */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="namaPemilik">
+                          NAMA LENGKAP PEMILIK (SESUAI KTP)
+                        </label>
+                        <input
+                          type="text"
+                          id="namaPemilik"
+                          placeholder="Contoh: BUDI SANTOSO"
+                          value={formData.namaPemilik}
+                          onChange={(e) => handleInputChange("namaPemilik", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.namaPemilik ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.namaPemilik && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.namaPemilik}
+                          </p>
+                        )}
+                      </div>
 
-                  {/* Email */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
-                      ALAMAT EMAIL AKTIF
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      placeholder="Contoh: budi@gmail.com"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
-                      className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.email ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.email && (
-                      <p className="text-[11px] text-error font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">error</span>
-                        {errors.email}
-                      </p>
-                    )}
-                  </div>
+                      {/* Jenis Kelamin Buttons */}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold text-on-surface-variant">
+                          JENIS KELAMIN
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("jenisKelamin", "Laki-laki")}
+                            className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
+                              formData.jenisKelamin === "Laki-laki"
+                                ? "border-primary-container bg-primary-container/5 text-primary-container"
+                                : "border-border-light hover:bg-surface-container-low text-on-surface"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-base">male</span>
+                            Laki-laki
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("jenisKelamin", "Perempuan")}
+                            className={`flex items-center justify-center gap-2 p-3 rounded border text-xs font-bold transition-all ${
+                              formData.jenisKelamin === "Perempuan"
+                                ? "border-primary-container bg-primary-container/5 text-primary-container"
+                                : "border-border-light hover:bg-surface-container-low text-on-surface"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-base">female</span>
+                            Perempuan
+                          </button>
+                        </div>
+                      </div>
 
-                </div>
+                      {/* NIK */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="nik">
+                          NIK (NOMOR INDUK KEPENDUDUKAN)
+                        </label>
+                        <input
+                          type="text"
+                          id="nik"
+                          placeholder="Contoh: 327301XXXXXXXXXX"
+                          value={formData.nik}
+                          onChange={(e) => handleInputChange("nik", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white font-mono text-xs tracking-wider focus:border-primary-container focus:outline-none ${
+                            errors.nik ? "border-error" : ""
+                          }`}
+                        />
+                        {formData.nik && (
+                          <p className="text-[10px] text-primary-container font-mono font-bold">
+                            Terformat: {formatNIK(formData.nik)}
+                          </p>
+                        )}
+                        {errors.nik && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.nik}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Tanggal Lahir */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="tanggalLahir">
+                          TANGGAL LAHIR
+                        </label>
+                        <input
+                          type="date"
+                          id="tanggalLahir"
+                          value={formData.tanggalLahir}
+                          onChange={(e) => handleInputChange("tanggalLahir", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                            errors.tanggalLahir ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.tanggalLahir && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.tanggalLahir}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* WhatsApp */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="nomorHp">
+                          NOMOR WHATSAPP AKTIF
+                        </label>
+                        <input
+                          type="text"
+                          id="nomorHp"
+                          placeholder="Contoh: 08123456789"
+                          value={formData.nomorHp}
+                          onChange={(e) => handleInputChange("nomorHp", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none ${
+                            errors.nomorHp ? "border-error" : ""
+                          }`}
+                        />
+                        <p className="text-[9px] text-on-surface-variant leading-relaxed font-bold">
+                          Digunakan untuk validasi pendaftaran dan pengiriman OTP resmi oleh BKPM RI.
+                        </p>
+                        {errors.nomorHp && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.nomorHp}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Email */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant" htmlFor="email">
+                          ALAMAT EMAIL AKTIF
+                        </label>
+                        <input
+                          type="email"
+                          id="email"
+                          placeholder="Contoh: budi@gmail.com"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          className={`w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                            errors.email ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.email && (
+                          <p className="text-[11px] text-error font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">error</span>
+                            {errors.email}
+                          </p>
+                        )}
+                      </div>
+
+                    </div>
+                  </>
+                )}
 
               </div>
             )}
@@ -1174,96 +1671,100 @@ export default function WizardPage() {
                     Lokasi Usaha
                   </h2>
                   <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                    Masukkan alamat lengkap domisili KTP dan alamat operasional tempat usaha Anda.
+                    {akunOss === "sudah"
+                      ? "Masukkan alamat operasional dan titik koordinat tempat usaha Anda untuk pendaftaran izin NIB."
+                      : "Masukkan alamat lengkap domisili KTP dan alamat operasional tempat usaha Anda."}
                   </p>
                 </div>
 
-                {/* KTP Address */}
-                <div className="bento-card space-y-5">
-                  <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
-                    ALAMAT DOMISILI SESUAI KTP
-                  </h3>
+                {/* KTP Address (Only shown for new accounts) */}
+                {akunOss !== "sudah" && (
+                  <div className="bento-card space-y-5">
+                    <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
+                      ALAMAT DOMISILI SESUAI KTP
+                    </h3>
 
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
-                      Alamat Jalan, RT/RW
-                    </label>
-                    <textarea
-                      id="alamatKtp"
-                      placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
-                      rows={2}
-                      value={formData.alamatKtp}
-                      onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
-                      className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                        errors.alamatKtp ? "border-error" : ""
-                      }`}
-                    />
-                    {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
-                      <SearchableSelect
-                        options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
-                        value={selectedKtpProvId}
-                        onChange={handleKtpProvinceChange}
-                        placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                      <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
+                        Alamat Jalan, RT/RW
+                      </label>
+                      <textarea
+                        id="alamatKtp"
+                        placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
+                        rows={2}
+                        value={formData.alamatKtp}
+                        onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
+                        className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                          errors.alamatKtp ? "border-error" : ""
+                        }`}
                       />
-                      {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                      {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
+                        <SearchableSelect
+                          options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
+                          value={selectedKtpProvId}
+                          onChange={handleKtpProvinceChange}
+                          placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
+                        <SearchableSelect
+                          options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
+                          value={selectedKtpCityId}
+                          disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
+                          onChange={handleKtpCityChange}
+                          placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
+                        <SearchableSelect
+                          options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
+                          value={selectedKtpDistId}
+                          disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
+                          onChange={handleKtpDistrictChange}
+                          placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
+                        <SearchableSelect
+                          options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
+                          value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
+                          disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
+                          onChange={handleKtpVillageChange}
+                          placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
+                        />
+                        {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
-                      <SearchableSelect
-                        options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
-                        value={selectedKtpCityId}
-                        disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
-                        onChange={handleKtpCityChange}
-                        placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                      <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: 16143"
+                        value={formData.kodePosKtp}
+                        onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                        className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
                       />
-                      {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
-                      <SearchableSelect
-                        options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
-                        value={selectedKtpDistId}
-                        disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
-                        onChange={handleKtpDistrictChange}
-                        placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
-                      />
-                      {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
-                      <SearchableSelect
-                        options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
-                        value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
-                        disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
-                        onChange={handleKtpVillageChange}
-                        placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
-                      />
-                      {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: 16143"
-                      value={formData.kodePosKtp}
-                      onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
-                      className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Business Address */}
                 <div className="bento-card space-y-5">
@@ -1272,40 +1773,42 @@ export default function WizardPage() {
                     ALAMAT LOKASI USAHA OPERASIONAL
                   </h3>
 
-                  <div className="flex items-center gap-2 py-1">
-                    <input
-                      type="checkbox"
-                      id="isAddressSame"
-                      checked={formData.isAddressSame}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData((prev) => ({
-                          ...prev,
-                          isAddressSame: checked,
-                          alamatUsaha: checked ? prev.alamatKtp : "",
-                          provinsi: checked ? prev.provinsiKtp : "",
-                          kotaKabupaten: checked ? prev.kotaKabupatenKtp : "",
-                          kecamatan: checked ? prev.kecamatanKtp : "",
-                          kelurahan: checked ? prev.kelurahanKtp : "",
-                          kodePos: checked ? prev.kodePosKtp : ""
-                        }));
-                        if (checked) {
-                          setSelectedProvId(selectedKtpProvId);
-                          setSelectedCityId(selectedKtpCityId);
-                          setSelectedDistId(selectedKtpDistId);
-                          setCitiesList(citiesKtpList);
-                          setDistrictsList(districtsKtpList);
-                          setVillagesList(villagesKtpList);
-                        }
-                        if (errors.alamatUsaha) setErrors((prev) => ({ ...prev, alamatUsaha: "" }));
-                        triggerAutosave();
-                      }}
-                      className="w-4 h-4 rounded text-primary-container focus:ring-primary-container"
-                    />
-                    <label htmlFor="isAddressSame" className="text-xs font-bold text-on-surface-variant cursor-pointer select-none">
-                      Alamat usaha sama dengan alamat KTP
-                    </label>
-                  </div>
+                  {akunOss !== "sudah" && (
+                    <div className="flex items-center gap-2 py-1">
+                      <input
+                        type="checkbox"
+                        id="isAddressSame"
+                        checked={formData.isAddressSame}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => ({
+                            ...prev,
+                            isAddressSame: checked,
+                            alamatUsaha: checked ? prev.alamatKtp : "",
+                            provinsi: checked ? prev.provinsiKtp : "",
+                            kotaKabupaten: checked ? prev.kotaKabupatenKtp : "",
+                            kecamatan: checked ? prev.kecamatanKtp : "",
+                            kelurahan: checked ? prev.kelurahanKtp : "",
+                            kodePos: checked ? prev.kodePosKtp : ""
+                          }));
+                          if (checked) {
+                            setSelectedProvId(selectedKtpProvId);
+                            setSelectedCityId(selectedKtpCityId);
+                            setSelectedDistId(selectedKtpDistId);
+                            setCitiesList(citiesKtpList);
+                            setDistrictsList(districtsKtpList);
+                            setVillagesList(villagesKtpList);
+                          }
+                          if (errors.alamatUsaha) setErrors((prev) => ({ ...prev, alamatUsaha: "" }));
+                          triggerAutosave();
+                        }}
+                        className="w-4 h-4 rounded text-primary-container focus:ring-primary-container"
+                      />
+                      <label htmlFor="isAddressSame" className="text-xs font-bold text-on-surface-variant cursor-pointer select-none">
+                        Alamat usaha sama dengan alamat KTP
+                      </label>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatUsaha">
@@ -2316,6 +2819,346 @@ export default function WizardPage() {
           {/* Bottom Instructions */}
           <div className="p-4 bg-white border-t border-border-light text-center text-[10px] text-on-surface-variant leading-relaxed font-bold select-none">
             Geser peta dan ketuk lokasi presisi tempat usaha Anda untuk menjatuhkan pin merah.
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 2 VERIFICATION MODAL ── */}
+      {showVerificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-[480px] bg-white border border-border-light rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-[#ECEEF0] border-b border-border-light px-5 py-4 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-extrabold text-primary-container uppercase tracking-wider">Verifikasi Akun OSS</span>
+                <span className="text-[9px] font-bold text-on-surface-variant uppercase mt-0.5">{verifyingStatusText}</span>
+              </div>
+              {!registrationCompleted && !(isPromptingOtp || isPromptingPassword) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVerificationModal(false);
+                    setIsMinimized(!verifyingErrorText);
+                  }}
+                  className="p-1.5 hover:bg-surface-container rounded-full text-on-surface-variant transition-all flex items-center justify-center"
+                  title="Lanjutkan di latar belakang"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="p-6 flex-grow overflow-y-auto space-y-6">
+              
+              {/* Status and Progress Stepper */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <span>Progress Registrasi</span>
+                  {verifyingErrorText ? (
+                    <span className="text-error font-extrabold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">error</span> Registrasi Terhenti
+                    </span>
+                  ) : registrationCompleted ? (
+                    <span className="text-success font-extrabold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">check_circle</span> Selesai
+                    </span>
+                  ) : (
+                    <span className="text-primary-container font-extrabold flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                      Sedang Diproses
+                    </span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 rounded-full ${
+                      verifyingErrorText 
+                        ? "bg-error" 
+                        : registrationCompleted 
+                          ? "bg-success" 
+                          : "bg-primary-container animate-pulse"
+                    }`}
+                    style={{ width: `${(verifyingStep / 7) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {verifyingErrorText && (
+                <div className="p-4 bg-error/5 border border-error/20 rounded-xl space-y-3 animate-fadeIn">
+                  <div className="flex gap-2.5 items-start">
+                    <span className="material-symbols-outlined text-error text-lg mt-0.5">error</span>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-extrabold text-error uppercase">Gagal Registrasi</h4>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                        {verifyingErrorText}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (streamRef.current) streamRef.current.close();
+                        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                        setIsVerifyingStep2(false);
+                        setShowVerificationModal(false);
+                        setIsMinimized(false);
+                      }}
+                      className="px-3.5 py-1.5 border border-border-light hover:bg-surface-container transition-all rounded text-[10px] font-bold uppercase tracking-wider text-on-surface-variant cursor-pointer"
+                    >
+                      Tutup
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const draftId = sessionStorage.getItem("draft_id");
+                        if (draftId) startVerificationStream(draftId);
+                      }}
+                      className="px-4 py-1.5 bg-primary-container hover:bg-primary text-white transition-all rounded text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* OTP Form State */}
+              {isPromptingOtp && !verifyingErrorText && (
+                <div className="bento-card bg-primary-container/5 border border-primary-container/15 p-5 space-y-5 animate-fadeIn">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface flex items-center justify-center gap-1.5">
+                      <span className="material-symbols-outlined text-base animate-bounce text-primary-container">mail</span>
+                      Masukkan Kode OTP
+                    </h3>
+                    <p className="text-[11.5px] text-on-surface-variant leading-relaxed">
+                      Kode OTP telah dikirimkan ke email Anda <strong>{formData.email}</strong>. Masukkan kode untuk memvalidasi identitas.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleOtpSubmit} className="space-y-4 max-w-xs mx-auto">
+                    <div className="flex flex-col gap-2.5 text-left">
+                      <div className="flex justify-between items-center text-[9px] font-extrabold uppercase tracking-wider text-on-surface-variant">
+                        <span>Kode OTP</span>
+                        <span className={`flex items-center gap-1 font-mono font-bold ${verifyingTimeLeft < 25 ? "text-error animate-pulse" : "text-primary-container"}`}>
+                          <span className="material-symbols-outlined text-[10px]">schedule</span>
+                          {verifyingTimeLeft > 0 ? formatTime(verifyingTimeLeft) : "Waktu Habis"}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 justify-center py-1">
+                        {otpDigits.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            ref={(el) => { otpRefs.current[idx] = el!; }}
+                            type="text"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpDigitChange(e.target.value, idx)}
+                            onKeyDown={(e) => handleOtpKeyDown(e, idx)}
+                            onPaste={handleOtpPaste}
+                            className="w-10 h-12 rounded border border-border-light text-center font-bold text-lg focus:border-primary-container focus:outline-none bg-white text-on-surface shadow-sm"
+                            disabled={verifyingTimeLeft === 0}
+                            autoFocus={idx === 0}
+                            required
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingOtp || otp.length < 6 || verifyingTimeLeft === 0}
+                      className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingOtp ? "Memverifikasi..." : "Verifikasi & Lanjutkan"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Password Form State */}
+              {isPromptingPassword && !verifyingErrorText && (
+                <div className="bento-card bg-primary-container/5 border border-primary-container/15 p-5 space-y-5 animate-fadeIn">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface flex items-center justify-center gap-1.5">
+                      <span className="material-symbols-outlined text-base text-primary-container">lock</span>
+                      Atur Kata Sandi Baru
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                      Buatlah kata sandi untuk akun OSS BKPM Anda. Kata sandi ini akan disimpan untuk otomatisasi pengisian data berikutnya.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-xs mx-auto">
+                    <div className="flex flex-col gap-3 text-left">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Kata Sandi Baru</label>
+                        <div className="relative w-full">
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="Minimal 8 karakter"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                          >
+                            <span className="material-symbols-outlined text-lg select-none">
+                              {showNewPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Konfirmasi Kata Sandi</label>
+                        <div className="relative w-full">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Ulangi kata sandi"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full min-h-[40px] pl-3.5 pr-10 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface flex items-center justify-center focus:outline-none"
+                          >
+                            <span className="material-symbols-outlined text-lg select-none">
+                              {showConfirmPassword ? "visibility_off" : "visibility"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {passwordError && <p className="text-[10px] text-error font-semibold leading-normal">{passwordError}</p>}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingPassword || !newPassword || !confirmPassword}
+                      className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingPassword ? "Menyimpan..." : "Simpan & Lanjutkan"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Console Logs Preview */}
+              {!isPromptingOtp && !isPromptingPassword && !verifyingErrorText && (
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <div className="relative w-12 h-12 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary-container text-4xl animate-spin">sync</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-on-surface">{verifyingStatusText}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Ini dapat memakan waktu 1-2 menit...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Simple scrollable log view at bottom */}
+              <div className="bg-[#1F2937] text-white p-3 rounded-lg font-mono text-[9px] h-24 overflow-y-auto space-y-1">
+                {verifyingLogs.length === 0 ? (
+                  <div className="text-gray-400">Inisialisasi log stream...</div>
+                ) : (
+                  verifyingLogs.map((log, idx) => (
+                    <div key={idx} className={log.type === "error" ? "text-error" : log.type === "warn" ? "text-warning" : log.type === "success" ? "text-success" : "text-gray-300"}>
+                      &gt; {log.text}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Modal Footer Controls */}
+              {!registrationCompleted && !verifyingErrorText && (
+                <div className="flex gap-2 justify-end border-t border-border-light pt-4 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Apakah Anda yakin ingin membatalkan registrasi akun OSS? Proses pendaftaran yang sedang berjalan akan dihentikan.")) {
+                        const draftId = sessionStorage.getItem("draft_id");
+                        if (draftId) {
+                          fetch(`${API_URL}/automation/cancel/${draftId}`, { method: "POST" }).catch(err => console.error("Gagal membatalkan registrasi:", err));
+                        }
+                        if (streamRef.current) streamRef.current.close();
+                        if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+                        setIsVerifyingStep2(false);
+                        setShowVerificationModal(false);
+                        setIsMinimized(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-error/20 hover:bg-error/5 text-error rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-xs">cancel</span> Batalkan Registrasi
+                  </button>
+                  {!(isPromptingOtp || isPromptingPassword) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowVerificationModal(false);
+                        setIsMinimized(true);
+                      }}
+                      className="px-4 py-2 bg-surface-container hover:bg-border-light text-on-surface rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-xs">visibility_off</span> Latar Belakang
+                    </button>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Floating Background Notification Banner & FAB */}
+      {isMinimized && (
+        <div className={`fixed bottom-5 right-5 z-50 ${isPromptingOtp || isPromptingPassword ? "animate-bounce" : ""}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowVerificationModal(true);
+              setIsMinimized(false);
+            }}
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl transition-all text-xs font-bold uppercase tracking-wider hover:scale-105 border ${
+              isPromptingOtp || isPromptingPassword
+                ? "bg-amber-500 text-white border-amber-400"
+                : "bg-primary-container text-white border-primary/20"
+            }`}
+          >
+            {isPromptingOtp || isPromptingPassword ? (
+              <>
+                <span className="material-symbols-outlined text-lg animate-pulse">notifications_active</span>
+                <span>{isPromptingOtp ? "OTP Diperlukan!" : "Kata Sandi Diperlukan!"}</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg animate-spin">sync</span>
+                <span>Registrasi Berjalan...</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Floating Success Toast */}
+      {showSuccessToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-fadeIn">
+          <div className="flex items-center gap-3 bg-emerald-600 text-white px-6 py-3.5 rounded-xl shadow-2xl border border-emerald-500 text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-lg">check_circle</span>
+            <span>Registrasi OSS Berhasil! Akun siap digunakan.</span>
           </div>
         </div>
       )}
