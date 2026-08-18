@@ -1057,10 +1057,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       await new Promise((r) => setTimeout(r, 300));
       const fs = require('fs');
       const path = require('path');
-      const timestamp = Date.now();
       const targetPath = path.join(
         './recordings',
-        `draft_${draftId}_${timestamp}.webm`,
+        `draft_${draftId}.webm`,
       );
       try {
         if (!fs.existsSync('./recordings')) {

@@ -462,8 +462,8 @@ export default function AdminDashboardPage() {
   };
 
   const handlePlayVideo = () => {
-    if (!drawerDraftId || !adminToken) return;
-    setPlayingVideoUrl(`${API_URL}/automation/recordings/${drawerDraftId}?token=${adminToken}`);
+    if (!drawerDraftId) return;
+    setPlayingVideoUrl(`/recordings/draft_${drawerDraftId}.webm`);
   };
 
   // Helper formats

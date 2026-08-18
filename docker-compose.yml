@@ -71,6 +71,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - backend_recordings:/recordings:ro
     depends_on:
       - frontend
       - backend
