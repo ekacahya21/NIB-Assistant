@@ -41,6 +41,7 @@ jobs:
             set -e
             cd /opt/nib-assistant
             docker compose up -d --build
+            docker compose restart nginx
             docker compose exec -T backend npx prisma db push
             docker compose ps
             sleep 5
