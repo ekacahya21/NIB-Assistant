@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - revamp2
   workflow_dispatch:
 
 jobs:
@@ -27,14 +26,14 @@ jobs:
             echo "=== 1. Navigating to Application Directory ==="
             cd /opt/nib-assistant
 
-            echo "=== 2. Pulling Latest Code (${{ github.ref_name }}) ==="
+            echo "=== 2. Pulling Latest Code from main branch ==="
             if [ ! -d .git ]; then
               git init
               git remote add origin https://github.com/ekacahya21/NIB-Assistant.git
             fi
-            git fetch origin ${{ github.ref_name }}
-            git checkout -f ${{ github.ref_name }} || git checkout -b ${{ github.ref_name }} origin/${{ github.ref_name }}
-            git reset --hard origin/${{ github.ref_name }}
+            git fetch origin main
+            git checkout -f main || git checkout -b main origin/main
+            git reset --hard origin/main
 
             echo "=== 3. Rebuilding & Restarting Docker Containers ==="
             docker compose up -d --build
