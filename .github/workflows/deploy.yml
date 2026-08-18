@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS via SSH & Rsync
         env:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
           SSH_HOST: ${{ secrets.VPS_HOST }}
@@ -24,31 +24,27 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
+          echo "=== 1. Syncing Codebase to VPS ==="
+          rsync -avz \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude 'dist' \
+            --exclude '.git' \
+            --exclude 'coverage' \
+            --exclude 'recordings' \
+            --exclude '.DS_Store' \
+            ./ "$SSH_USER@$SSH_HOST:/opt/nib-assistant/"
+
+          echo "=== 2. Rebuilding & Restarting Docker Containers on VPS ==="
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" << 'EOF'
             set -e
-            echo "=== 1. Navigating to Application Directory ==="
             cd /opt/nib-assistant
-
-            echo "=== 2. Pulling Latest Code from main branch ==="
-            if [ ! -d .git ]; then
-              git init
-              git remote add origin https://github.com/ekacahya21/NIB-Assistant.git
-            fi
-            git fetch origin main
-            git checkout -f main || git checkout -b main origin/main
-            git reset --hard origin/main
-
-            echo "=== 3. Rebuilding & Restarting Docker Containers ==="
             docker compose up -d --build
-
-            echo "=== 4. Running Database Migrations ==="
             docker compose exec -T backend npx prisma db push
-
-            echo "=== 5. Verifying Services Health ==="
             docker compose ps
             sleep 5
             curl -f -s -I http://127.0.0.1/ > /dev/null
             curl -f -s -I http://127.0.0.1/api/ > /dev/null
-
             echo "=== Deployment Successfully Completed! ==="
           EOF
