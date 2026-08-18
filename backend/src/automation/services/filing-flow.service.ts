@@ -157,9 +157,10 @@ export class FilingFlowService {
           break;
         }
 
-        // Check for "Perbarui Email Anda" screen
+        // Check for "Perbarui Email Anda" screen (by URL or text visibility)
+        const isRenewEmailUrl = currentUrl && currentUrl.includes('/renew-email');
         const headerPerbaruiEmail = page.getByText(/Perbarui Email Anda/i).first();
-        const isPerbaruiEmailVisible = await headerPerbaruiEmail.isVisible().catch(() => false);
+        const isPerbaruiEmailVisible = isRenewEmailUrl || await headerPerbaruiEmail.isVisible().catch(() => false);
         if (isPerbaruiEmailVisible) {
           const isUsername = !draft.email.includes('@');
           if (isUsername) {
@@ -177,10 +178,11 @@ export class FilingFlowService {
             if (newEmail) {
               context.logStep(4, 'info', `Mengisi alamat email baru: ${newEmail}...`);
               const emailInput = page.locator('input[type="email"], input[placeholder*="email"], input[name="email"]').first();
+              await emailInput.waitFor({ state: 'visible', timeout: 10000 });
               await emailInput.fill(newEmail);
               await page.waitForTimeout(1000);
               
-              const submitBtn = page.getByRole('button', { name: /Simpan & Lanjutkan/i }).first();
+              const submitBtn = page.locator('button:has-text("Simpan"), button:has-text("Lanjutkan"), button[type="submit"]').first();
               await submitBtn.click();
               
               await page.waitForTimeout(3000);
