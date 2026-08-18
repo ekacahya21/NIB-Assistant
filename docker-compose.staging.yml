@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nib_assistant_postgres_stg
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: nib_assistant_staging
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_stg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nib_assistant_backend_stg
+    restart: always
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/nib_assistant_staging?schema=public
+      - PLAYWRIGHT_HEADLESS=true
+      - PLAYWRIGHT_SLOW_MO=200
+      - OSS_PORTAL_URL=https://oss.go.id
+      - OSS_LOGIN_URL=https://ui-login-stg.oss.go.id
+      - OSS_BERANDA_URL=https://beranda-stg.oss.go.id
+      - PLAYWRIGHT_MAX_CONCURRENT_SESSIONS=3
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin
+      - ADMIN_TOKEN=secret_admin_token_123
+      - LOCAL_LLM_HOST=http://host.docker.internal:20128/v1
+      - LOCAL_LLM_KEY=sk-be6dc08e77bc7a4a-pk6lq6-69274223
+      - LOCAL_LLM_MODEL=combo-max
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3011:3001"
+    volumes:
+      - backend_recordings_stg:/app/recordings
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=/api
+    container_name: nib_assistant_frontend_stg
+    restart: always
+    ports:
+      - "3010:3000"
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: nib_assistant_nginx_stg
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - backend_recordings_stg:/recordings:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata_stg:
+  backend_recordings_stg:
