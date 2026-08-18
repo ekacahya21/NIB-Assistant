@@ -9,6 +9,7 @@ import {
   MessageEvent,
   UseGuards,
   Res,
+  Req,
 } from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { Observable, map } from 'rxjs';
@@ -109,7 +110,11 @@ export class AutomationController {
 
   @Get('recordings/:draftId')
   @UseGuards(AdminGuard)
-  getRecording(@Param('draftId') draftId: string, @Res() res: any) {
+  getRecording(
+    @Param('draftId') draftId: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
     const fs = require('fs');
     const path = require('path');
     const recordingsDir = path.resolve('./recordings');
@@ -134,6 +139,32 @@ export class AutomationController {
     const latestFile = files[files.length - 1];
     const recordingPath = path.join(recordingsDir, latestFile);
 
-    res.sendFile(recordingPath);
+    const stat = fs.statSync(recordingPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+      const file = fs.createReadStream(recordingPath, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/webm',
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/webm',
+        'Accept-Ranges': 'bytes',
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(recordingPath).pipe(res);
+    }
   }
 }

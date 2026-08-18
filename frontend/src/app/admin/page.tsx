@@ -1003,12 +1003,18 @@ export default function AdminDashboardPage() {
                 src={playingVideoUrl} 
                 controls 
                 autoPlay 
+                playsInline
+                preload="auto"
                 className="w-full h-full object-contain"
                 onError={(e) => {
-                  alert("Gagal memuat rekaman video. Pastikan otomatisasi telah menghasilkan rekaman dan backend aktif.");
+                  console.error("Gagal memuat video:", e);
+                  alert("Gagal memuat rekaman video. Pastikan sesi otomatisasi telah menghasilkan rekaman dan backend aktif.");
                   setPlayingVideoUrl(null);
                 }}
-              />
+              >
+                <source src={playingVideoUrl} type="video/webm" />
+                Browser Anda tidak mendukung pemutar video WebM.
+              </video>
             </div>
           </div>
         </div>

@@ -1033,7 +1033,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       let tempVideoPath: string | undefined;
       if (page) {
         try {
-          tempVideoPath = await page.video()?.path();
+          tempVideoPath = await page.video()?.path().catch(() => undefined);
         } catch (videoErr) {
           this.logger.error('Gagal mengambil path video rekaman', videoErr);
         }
@@ -1053,36 +1053,52 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       if (browser) {
         await browser.close().catch(() => {});
       }
-      if (tempVideoPath) {
-        const fs = require('fs');
-        const path = require('path');
-        const timestamp = Date.now();
-        const targetPath = path.join(
-          './recordings',
-          `draft_${draftId}_${timestamp}.webm`,
-        );
-        try {
-          if (!fs.existsSync('./recordings')) {
-            fs.mkdirSync('./recordings', { recursive: true });
-          }
-          if (fs.existsSync(tempVideoPath)) {
-            fs.renameSync(tempVideoPath, targetPath);
-            this.logger.log(
-              `Otomatisasi selesai. Rekaman disimpan di: ${targetPath}`,
-            );
-            this.logStep(
-              subject,
-              5,
-              'info',
-              `Rekaman otomatisasi disimpan di: ${targetPath}`,
-            );
-          }
-        } catch (renameErr) {
-          this.logger.error(
-            `Gagal memindahkan file video rekaman dari ${tempVideoPath} ke ${targetPath}`,
-            renameErr,
-          );
+      // Give Playwright a short moment to flush the video buffer
+      await new Promise((r) => setTimeout(r, 300));
+      const fs = require('fs');
+      const path = require('path');
+      const timestamp = Date.now();
+      const targetPath = path.join(
+        './recordings',
+        `draft_${draftId}_${timestamp}.webm`,
+      );
+      try {
+        if (!fs.existsSync('./recordings')) {
+          fs.mkdirSync('./recordings', { recursive: true });
         }
+        if (tempVideoPath && fs.existsSync(tempVideoPath)) {
+          fs.renameSync(tempVideoPath, targetPath);
+          this.logger.log(
+            `Otomatisasi selesai. Rekaman disimpan di: ${targetPath}`,
+          );
+          this.logStep(
+            subject,
+            5,
+            'info',
+            `Rekaman otomatisasi disimpan di: ${targetPath}`,
+          );
+        } else {
+          // Check if any fresh unrenamed webm exists in recordings
+          const files = fs.readdirSync('./recordings');
+          const unrenamed = files.filter(
+            (f: string) => !f.startsWith('draft_') && f.endsWith('.webm'),
+          );
+          if (unrenamed.length > 0) {
+            unrenamed.sort((a: string, b: string) => {
+              const statA = fs.statSync(path.join('./recordings', a));
+              const statB = fs.statSync(path.join('./recordings', b));
+              return statB.mtimeMs - statA.mtimeMs;
+            });
+            const freshest = path.join('./recordings', unrenamed[0]);
+            fs.renameSync(freshest, targetPath);
+            this.logger.log(`Rekaman otomatisasi berhasil dipulihkan: ${targetPath}`);
+          }
+        }
+      } catch (renameErr) {
+        this.logger.error(
+          `Gagal memindahkan file video rekaman ke ${targetPath}`,
+          renameErr,
+        );
       }
       subject.complete();
     }
