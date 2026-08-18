@@ -1085,7 +1085,7 @@ export default function WizardPage() {
       if (akunOss === "sudah") {
         if (!formData.email.trim()) {
           newErrors.email = "Alamat email / username akun OSS harus diisi.";
-        } else if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        } else if (formData.email.includes("@") && !formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
           newErrors.email = "Format email tidak valid.";
         }
         if (!formData.ossPassword || !formData.ossPassword.trim()) {
