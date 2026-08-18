@@ -157,6 +157,44 @@ export class FilingFlowService {
           break;
         }
 
+        // Check for "Perbarui Email Anda" screen
+        const headerPerbaruiEmail = page.getByText(/Perbarui Email Anda/i).first();
+        const isPerbaruiEmailVisible = await headerPerbaruiEmail.isVisible().catch(() => false);
+        if (isPerbaruiEmailVisible) {
+          const isUsername = !draft.email.includes('@');
+          if (isUsername) {
+            context.logStep(
+              4,
+              'warn',
+              'Sistem OSS meminta untuk memperbarui email. Silakan isi alamat email baru di halaman aplikasi.',
+            );
+            
+            const newEmail = await context.waitForEmail().catch((err) => {
+              this.logger.error(`waitForEmail rejected with error:`, err);
+              return '';
+            });
+            
+            if (newEmail) {
+              context.logStep(4, 'info', `Mengisi alamat email baru: ${newEmail}...`);
+              const emailInput = page.locator('input[type="email"], input[placeholder*="email"], input[name="email"]').first();
+              await emailInput.fill(newEmail);
+              await page.waitForTimeout(1000);
+              
+              const submitBtn = page.getByRole('button', { name: /Simpan & Lanjutkan/i }).first();
+              await submitBtn.click();
+              
+              await page.waitForTimeout(3000);
+              
+              draft.email = newEmail;
+              await draft.save().catch((e: any) => this.logger.error('Gagal menyimpan email baru ke database', e));
+              
+              continue;
+            } else {
+              throw new Error('Timeout pengisian email baru.');
+            }
+          }
+        }
+
         // Quick check for visible validation errors to abort immediately
         const errorLocator = page
           .getByText(/tidak sesuai|salah|tidak valid|expired|tidak terdaftar/i)

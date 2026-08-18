@@ -19,4 +19,5 @@ export interface AutomationSessionContext {
   waitForPassword: () => Promise<string>;
   waitForProductInput: () => Promise<any>;
   waitForParameterInput: () => Promise<string>;
+  waitForEmail: () => Promise<string>;
 }

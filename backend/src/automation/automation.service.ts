@@ -52,6 +52,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     }
   >();
   private readonly activeParameterInputs = new Map<string, string>();
+  private readonly activeEmails = new Map<string, string>();
   private readonly activeTokens = new Map<string, string>();
   private readonly subjectToDraftId = new Map<
     Subject<AutomationEvent>,
@@ -211,6 +212,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
   submitParameterInput(draftId: string, parameter: string) {
     this.activeParameterInputs.set(draftId, parameter);
+    this.userConfirmations.next(draftId);
+  }
+
+  submitEmail(draftId: string, email: string) {
+    this.activeEmails.set(draftId, email);
     this.userConfirmations.next(draftId);
   }
 
@@ -675,6 +681,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.waitForUserInput<any>(draftId, this.activeProductInputs),
         waitForParameterInput: () =>
           this.waitForUserInput<string>(draftId, this.activeParameterInputs),
+        waitForEmail: () =>
+          this.waitForUserInput<string>(draftId, this.activeEmails),
       };
 
       // Step 1: Initialize Browser
@@ -1042,6 +1050,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.activePasswords.delete(draftId);
       this.activeProductInputs.delete(draftId);
       this.activeParameterInputs.delete(draftId);
+      this.activeEmails.delete(draftId);
       this.filingFlowService.clearDraftData(draftId);
       this.activeTokens.delete(draftId);
       this.executionTimers.delete(draftId);

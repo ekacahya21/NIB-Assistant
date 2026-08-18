@@ -96,6 +96,15 @@ export class AutomationController {
     return { success: true };
   }
 
+  @Post('email/:draftId')
+  submitEmail(
+    @Param('draftId') draftId: string,
+    @Body() body: { email: string },
+  ) {
+    this.automationService.submitEmail(draftId, body.email);
+    return { success: true };
+  }
+
   @Get('redirection-url/:draftId')
   getRedirectionUrl(@Param('draftId') draftId: string) {
     const url = this.automationService.getRedirectionUrl(draftId);

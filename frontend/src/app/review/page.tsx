@@ -211,6 +211,10 @@ export default function ReviewPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const [isPromptingEmail, setIsPromptingEmail] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false);
+  const [emailPromptError, setEmailPromptError] = useState("");
   const [registrationCompleted, setRegistrationCompleted] = useState(false);
   const [isWaitingForRegistration, setIsWaitingForRegistration] = useState(false);
   const [verifyingErrorText, setVerifyingErrorText] = useState("");
@@ -251,6 +255,9 @@ export default function ReviewPage() {
     setVerifyingErrorText("");
     setIsPromptingOtp(false);
     setIsPromptingPassword(false);
+    setIsPromptingEmail(false);
+    setNewEmailInput("");
+    setEmailPromptError("");
     setVerifyingLogs([]);
     setVerifyingStatusText("Menghubungkan ke backend local...");
 
@@ -290,6 +297,7 @@ export default function ReviewPage() {
                 if (payload.text.includes("OTP") && payload.status === "warn") {
                   setVerifyingStatusText("Menunggu Anda memasukkan OTP...");
                   setIsPromptingOtp(true);
+                  setIsPromptingEmail(false);
                   setShowVerificationModal(true);
                   setIsMinimized(false);
                   setIsWaitingForRegistration(false);
@@ -297,6 +305,7 @@ export default function ReviewPage() {
                   setVerifyingStatusText("Menunggu Anda mengatur Kata Sandi...");
                   setIsPromptingPassword(true);
                   setIsPromptingOtp(false);
+                  setIsPromptingEmail(false);
                   setShowVerificationModal(true);
                   setIsMinimized(false);
                   setIsWaitingForRegistration(false);
@@ -306,12 +315,28 @@ export default function ReviewPage() {
                   setVerifyingStatusText("Memproses validasi NIK & Email...");
                 }
               }
+              if (payload.text.includes("memperbarui email")) {
+                setVerifyingStatusText("Perbarui Email Akun OSS");
+                setIsPromptingEmail(true);
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+                setShowVerificationModal(true);
+                setIsMinimized(false);
+                setIsWaitingForRegistration(false);
+              }
               if (payload.step === 3) {
                 setVerifyingStatusText("Mengisi detail akun & menyelesaikan pendaftaran...");
                 setIsPromptingOtp(false);
                 setIsPromptingPassword(false);
+                setIsPromptingEmail(false);
               }
               if (payload.step === 7 && payload.status === "success") {
+                setIsPromptingOtp(false);
+                setIsPromptingPassword(false);
+                setIsPromptingEmail(false);
+                setIsWaitingForRegistration(false);
+                setShowVerificationModal(true);
+                setIsMinimized(false);
                 eventSource.close();
                 if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
                 setVerifyingStatusText("Pendaftaran Berhasil!");
@@ -460,6 +485,42 @@ export default function ReviewPage() {
     } finally {
       setIsSubmittingPassword(false);
       setIsPromptingPassword(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmailInput.trim()) {
+      setEmailPromptError("Alamat email baru harus diisi.");
+      return;
+    }
+    if (!newEmailInput.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      setEmailPromptError("Format email tidak valid.");
+      return;
+    }
+
+    setEmailPromptError("");
+    setIsSubmittingEmail(true);
+    const draftId = sessionStorage.getItem("draft_id") || "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/email/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmailInput })
+      });
+      if (res.ok) {
+        setVerifyingLogs((prev) => [...prev, { text: `Mengirimkan email baru: ${newEmailInput} ke backend...`, type: "success" }]);
+        setIsPromptingEmail(false);
+        setNewEmailInput("");
+      } else {
+        setEmailPromptError("Gagal mengirim email baru. Silakan coba lagi.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEmailPromptError("Koneksi gagal atau terputus.");
+    } finally {
+      setIsSubmittingEmail(false);
     }
   };
 
@@ -1007,7 +1068,7 @@ export default function ReviewPage() {
                 <span className="text-xs font-extrabold text-primary-container uppercase tracking-wider">Verifikasi Akun OSS</span>
                 <span className="text-[9px] font-bold text-on-surface-variant uppercase mt-0.5">{verifyingStatusText}</span>
               </div>
-              {!registrationCompleted && !(isPromptingOtp || isPromptingPassword) && (
+              {!registrationCompleted && !(isPromptingOtp || isPromptingPassword || isPromptingEmail) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1098,6 +1159,46 @@ export default function ReviewPage() {
                       <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Email Form State */}
+              {isPromptingEmail && !verifyingErrorText && (
+                <div className="bento-card bg-primary-container/5 border border-primary-container/15 p-5 space-y-5 animate-fadeIn">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-on-surface flex items-center justify-center gap-1.5">
+                      <span className="material-symbols-outlined text-base text-primary-container">mail</span>
+                      Perbarui Email Akun OSS
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                      Email Anda saat ini sudah digunakan oleh akun lain. Silakan masukkan alamat email baru yang aktif untuk melanjutkan verifikasi.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleEmailSubmit} className="space-y-4 max-w-xs mx-auto">
+                    <div className="flex flex-col gap-3 text-left">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-on-surface-variant uppercase">Alamat Email Baru</label>
+                        <input
+                          type="email"
+                          placeholder="Contoh: nama@email.com"
+                          value={newEmailInput}
+                          onChange={(e) => setNewEmailInput(e.target.value)}
+                          className="w-full min-h-[40px] px-3.5 py-2 rounded border border-border-light bg-white text-xs font-bold focus:border-primary-container focus:outline-none"
+                          required
+                        />
+                      </div>
+                      {emailPromptError && <p className="text-[10px] text-error font-semibold leading-normal">{emailPromptError}</p>}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingEmail || !newEmailInput}
+                      className="w-full bg-primary-container hover:bg-primary text-white font-bold py-2.5 px-6 rounded text-xs uppercase tracking-wider min-h-[40px] flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSubmittingEmail ? "Mengirim..." : "Simpan & Lanjutkan"}
+                    </button>
+                  </form>
                 </div>
               )}
 
@@ -1300,7 +1401,7 @@ export default function ReviewPage() {
 
       {/* Floating Background Notification Banner & FAB */}
       {isMinimized && (
-        <div className={`fixed bottom-5 right-5 z-50 ${isPromptingOtp || isPromptingPassword ? "animate-bounce" : ""}`}>
+        <div className={`fixed bottom-5 right-5 z-50 ${isPromptingOtp || isPromptingPassword || isPromptingEmail ? "animate-bounce" : ""}`}>
           <button
             type="button"
             onClick={() => {
@@ -1308,15 +1409,15 @@ export default function ReviewPage() {
               setIsMinimized(false);
             }}
             className={`flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl transition-all text-xs font-bold uppercase tracking-wider hover:scale-105 border ${
-              isPromptingOtp || isPromptingPassword
+              isPromptingOtp || isPromptingPassword || isPromptingEmail
                 ? "bg-amber-500 text-white border-amber-400"
                 : "bg-primary-container text-white border-primary/20"
             }`}
           >
-            {isPromptingOtp || isPromptingPassword ? (
+            {isPromptingOtp || isPromptingPassword || isPromptingEmail ? (
               <>
                 <span className="material-symbols-outlined text-lg animate-pulse">notifications_active</span>
-                <span>{isPromptingOtp ? "OTP Diperlukan!" : "Kata Sandi Diperlukan!"}</span>
+                <span>{isPromptingOtp ? "OTP Diperlukan!" : isPromptingPassword ? "Kata Sandi Diperlukan!" : "Email Diperlukan!"}</span>
               </>
             ) : (
               <>
