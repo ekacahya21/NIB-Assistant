@@ -186,7 +186,7 @@ export class FilingFlowService {
               await page.waitForTimeout(3000);
               
               draft.email = newEmail;
-              await draft.save().catch((e: any) => this.logger.error('Gagal menyimpan email baru ke database', e));
+              await this.draftsService.update(txId, { email: newEmail }).catch((e: any) => this.logger.error('Gagal menyimpan email baru ke database', e));
               
               continue;
             } else {
