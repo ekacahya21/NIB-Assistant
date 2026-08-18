@@ -185,6 +185,21 @@ export class FilingFlowService {
               const submitBtn = page.locator('button:has-text("Simpan"), button:has-text("Lanjutkan"), button[type="submit"]').first();
               await submitBtn.click();
               
+              context.logStep(4, 'info', 'Menunggu konfirmasi email berhasil disimpan...');
+              const successHeader = page.getByText(/Email Berhasil Disimpan/i).first();
+              await successHeader.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
+                this.logger.warn('Header konfirmasi email berhasil disimpan tidak terdeteksi dalam 15s.');
+              });
+              
+              const dashboardBtn = page.locator('button:has-text("Menuju Dashboard"), a:has-text("Menuju Dashboard")').first();
+              const isDashboardBtnVisible = await dashboardBtn.isVisible().catch(() => false);
+              if (isDashboardBtnVisible) {
+                context.logStep(4, 'info', 'Mengklik tombol "Menuju Dashboard"...');
+                await dashboardBtn.click();
+              } else {
+                context.logStep(4, 'warn', 'Tombol "Menuju Dashboard" tidak ditemukan. Menunggu pengalihan otomatis...');
+              }
+              
               await page.waitForTimeout(3000);
               
               draft.email = newEmail;
