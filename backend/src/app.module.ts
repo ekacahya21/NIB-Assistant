@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DraftsController } from './drafts/drafts.controller';
@@ -14,9 +15,16 @@ import { FilingFlowService } from './automation/services/filing-flow.service';
 import { DocumentsModule } from './documents/documents.module';
 import { PrismaService } from './prisma.service';
 import { AuthController } from './auth/auth.controller';
+import { TelegramModule } from './telegram/telegram.module';
+import { TelegramExceptionFilter } from './telegram/telegram-exception.filter';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DocumentsModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    DocumentsModule,
+    TelegramModule,
+  ],
+
   controllers: [
     AppController,
     DraftsController,
@@ -33,6 +41,10 @@ import { AuthController } from './auth/auth.controller';
     RegistrationFlowService,
     FilingFlowService,
     PrismaService,
+    {
+      provide: APP_FILTER,
+      useClass: TelegramExceptionFilter,
+    },
   ],
 })
 export class AppModule {}

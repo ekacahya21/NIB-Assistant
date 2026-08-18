@@ -15,6 +15,8 @@ import { PortalInteractionHelper } from './services/portal-interaction.helper';
 import { RegistrationFlowService } from './services/registration-flow.service';
 import { FilingFlowService } from './services/filing-flow.service';
 import { AutomationSessionContext } from './context/automation-session.context';
+import { TelegramService } from '../telegram/telegram.service';
+
 import {
   AutomationSubStep,
   STEP_REGISTRY,
@@ -96,6 +98,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     private readonly interactionHelper: PortalInteractionHelper,
     private readonly registrationFlowService: RegistrationFlowService,
     private readonly filingFlowService: FilingFlowService,
+    private readonly telegramService: TelegramService,
   ) {}
 
   async onModuleInit() {
@@ -990,6 +993,36 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         'error',
         `Terjadi kesalahan kritis: ${errMsg}`,
       );
+
+      // Send Telegram alert for automation job failures
+      try {
+        const escapedDraftId = this.telegramService.escapeHtml(draftId);
+        const escapedNamaUsaha = this.telegramService.escapeHtml(draft.namaUsaha || 'Draf Usaha Baru');
+        const escapedNamaPemilik = this.telegramService.escapeHtml(draft.namaPemilik || 'Tanpa Nama');
+        const escapedPhase = this.telegramService.escapeHtml(phase || 'unknown');
+        const escapedMsg = this.telegramService.escapeHtml(errMsg);
+        
+        let stackTrace = error.stack || '';
+        if (stackTrace.length > 1500) {
+          stackTrace = stackTrace.substring(0, 1500) + '\n... (truncated)';
+        }
+        const escapedStack = this.telegramService.escapeHtml(stackTrace);
+
+        const telegramMsg = `<b>🚨 Automation Job Failure</b>
+<b>Draft ID:</b> <code>${escapedDraftId}</code>
+<b>Business Name:</b> ${escapedNamaUsaha}
+<b>Owner Name:</b> ${escapedNamaPemilik}
+<b>Phase:</b> <code>${escapedPhase}</code>
+<b>Active Step:</b> <code>${activeStep}</code>
+<b>Message:</b> ${escapedMsg}
+
+<b>Stack Trace:</b>
+<pre>${escapedStack}</pre>`;
+
+        this.telegramService.sendMessage(telegramMsg).catch(() => {});
+      } catch (tgErr) {
+        this.logger.error('Failed to prepare or send Telegram automation alert', tgErr);
+      }
     } finally {
       const timers = this.executionTimers.get(draftId);
       const duration = timers

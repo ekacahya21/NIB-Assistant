@@ -40,6 +40,8 @@ services:
       - LOCAL_LLM_HOST=http://host.docker.internal:20128/v1
       - LOCAL_LLM_KEY=sk-be6dc08e77bc7a4a-pk6lq6-69274223
       - LOCAL_LLM_MODEL=combo-max
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
