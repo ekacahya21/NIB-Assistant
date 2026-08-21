@@ -110,7 +110,8 @@ export function isStepCompleted(
 export function buildStepDeeplink(
   step: AutomationSubStep,
   checkpointData: Record<string, string> | null | undefined,
-  baseUrl: string = process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id',
+  baseUrl: string = process.env.OSS_BERANDA_URL ||
+    'https://beranda-stg.oss.go.id',
 ): string | null {
   if (!checkpointData) return null;
 
@@ -160,5 +161,3 @@ export function hasRequiredDataForNextStep(
     nextStep,
   };
 }
-
-

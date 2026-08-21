@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { TelegramService } from './telegram.service';
 
 @Catch()
@@ -13,10 +14,10 @@ import { TelegramService } from './telegram.service';
 export class TelegramExceptionFilter implements ExceptionFilter {
   constructor(private readonly telegramService: TelegramService) {}
 
-  catch(exception: any, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse();
-    const request = ctx.getRequest();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
     const status =
       exception instanceof HttpException
@@ -31,15 +32,24 @@ export class TelegramExceptionFilter implements ExceptionFilter {
 
     // Format exception response to match standard NestJS format
     const exceptionResponse =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : null;
+      exception instanceof HttpException ? exception.getResponse() : null;
 
-    const message = exceptionResponse
-      ? (typeof exceptionResponse === 'object' && (exceptionResponse as any).message
-          ? (exceptionResponse as any).message
-          : exceptionResponse)
-      : exception.message || 'Internal server error';
+    let message: string | object = 'Internal server error';
+    if (exceptionResponse) {
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const obj = exceptionResponse as Record<string, unknown>;
+        if ('message' in obj) {
+          const msg = obj.message;
+          message = typeof msg === 'string' ? msg : String(msg);
+        } else {
+          message = JSON.stringify(exceptionResponse);
+        }
+      } else {
+        message = String(exceptionResponse);
+      }
+    } else if (exception instanceof Error) {
+      message = exception.message;
+    }
 
     response.status(status).json({
       statusCode: status,
@@ -49,13 +59,31 @@ export class TelegramExceptionFilter implements ExceptionFilter {
     });
   }
 
-  private sendTelegramAlert(request: any, exception: any, status: number) {
+  private sendTelegramAlert(
+    request: Request,
+    exception: unknown,
+    status: number,
+  ) {
     const method = request.method;
     const url = request.url;
-    const errorMessage = exception.message || String(exception);
-    
+
+    let errorMessage = 'Unknown error';
+    let stackTrace = '';
+
+    if (exception instanceof Error) {
+      errorMessage = exception.message;
+      stackTrace = exception.stack || '';
+    } else if (typeof exception === 'string') {
+      errorMessage = exception;
+    } else if (exception && typeof exception === 'object') {
+      const obj = exception as Record<string, unknown>;
+      errorMessage =
+        typeof obj.message === 'string'
+          ? obj.message
+          : JSON.stringify(exception);
+    }
+
     // Extract and clean stack trace (limit size to keep within Telegram's 4096 char limits)
-    let stackTrace = exception.stack || '';
     if (stackTrace.length > 2000) {
       stackTrace = stackTrace.substring(0, 2000) + '\n... (truncated)';
     }
@@ -66,8 +94,7 @@ export class TelegramExceptionFilter implements ExceptionFilter {
     const escapedMsg = this.telegramService.escapeHtml(errorMessage);
     const escapedStack = this.telegramService.escapeHtml(stackTrace);
 
-    const telegramMessage = 
-`<b>🚨 Uncaught API Exception</b>
+    const telegramMessage = `<b>🚨 Uncaught API Exception</b>
 <b>Endpoint:</b> <code>${escapedMethod} ${escapedUrl}</code>
 <b>Status Code:</b> <code>${status}</code>
 <b>Message:</b> ${escapedMsg}

@@ -84,7 +84,7 @@ export class FilingFlowService {
 
     while (!loginSuccess && attempts < maxAttempts) {
       attempts++;
-      
+
       // If passwordCode is empty (e.g. direct login without registration), wait for it from frontend
       let finalPassword = passwordCode;
       if (!finalPassword) {
@@ -158,9 +158,14 @@ export class FilingFlowService {
         }
 
         // Check for "Perbarui Email Anda" screen (by URL or text visibility)
-        const isRenewEmailUrl = currentUrl && currentUrl.includes('/renew-email');
-        const headerPerbaruiEmail = page.getByText(/Perbarui Email Anda/i).first();
-        const isPerbaruiEmailVisible = isRenewEmailUrl || await headerPerbaruiEmail.isVisible().catch(() => false);
+        const isRenewEmailUrl =
+          currentUrl && currentUrl.includes('/renew-email');
+        const headerPerbaruiEmail = page
+          .getByText(/Perbarui Email Anda/i)
+          .first();
+        const isPerbaruiEmailVisible =
+          isRenewEmailUrl ||
+          (await headerPerbaruiEmail.isVisible().catch(() => false));
         if (isPerbaruiEmailVisible) {
           const isUsername = !draft.email.includes('@');
           if (isUsername) {
@@ -169,42 +174,85 @@ export class FilingFlowService {
               'warn',
               'Sistem OSS meminta untuk memperbarui email. Silakan isi alamat email baru di halaman aplikasi.',
             );
-            
+
             const newEmail = await context.waitForEmail().catch((err) => {
               this.logger.error(`waitForEmail rejected with error:`, err);
               return '';
             });
-            
+
             if (newEmail) {
-              context.logStep(4, 'info', `Mengisi alamat email baru: ${newEmail}...`);
-              const emailInput = page.locator('input[type="email"], input[placeholder*="email"], input[name="email"]').first();
+              context.logStep(
+                4,
+                'info',
+                `Mengisi alamat email baru: ${newEmail}...`,
+              );
+              const emailInput = page
+                .locator(
+                  'input[type="email"], input[placeholder*="email"], input[name="email"]',
+                )
+                .first();
               await emailInput.waitFor({ state: 'visible', timeout: 10000 });
               await emailInput.fill(newEmail);
               await page.waitForTimeout(1000);
-              
-              const submitBtn = page.locator('button:has-text("Simpan"), button:has-text("Lanjutkan"), button[type="submit"]').first();
+
+              const submitBtn = page
+                .locator(
+                  'button:has-text("Simpan"), button:has-text("Lanjutkan"), button[type="submit"]',
+                )
+                .first();
               await submitBtn.click();
-              
-              context.logStep(4, 'info', 'Menunggu konfirmasi email berhasil disimpan...');
-              const successHeader = page.getByText(/Email Berhasil Disimpan/i).first();
-              await successHeader.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
-                this.logger.warn('Header konfirmasi email berhasil disimpan tidak terdeteksi dalam 15s.');
-              });
-              
-              const dashboardBtn = page.locator('button:has-text("Menuju Dashboard"), a:has-text("Menuju Dashboard")').first();
-              const isDashboardBtnVisible = await dashboardBtn.isVisible().catch(() => false);
+
+              context.logStep(
+                4,
+                'info',
+                'Menunggu konfirmasi email berhasil disimpan...',
+              );
+              const successHeader = page
+                .getByText(/Email Berhasil Disimpan/i)
+                .first();
+              await successHeader
+                .waitFor({ state: 'visible', timeout: 15000 })
+                .catch(() => {
+                  this.logger.warn(
+                    'Header konfirmasi email berhasil disimpan tidak terdeteksi dalam 15s.',
+                  );
+                });
+
+              const dashboardBtn = page
+                .locator(
+                  'button:has-text("Menuju Dashboard"), a:has-text("Menuju Dashboard")',
+                )
+                .first();
+              const isDashboardBtnVisible = await dashboardBtn
+                .isVisible()
+                .catch(() => false);
               if (isDashboardBtnVisible) {
-                context.logStep(4, 'info', 'Mengklik tombol "Menuju Dashboard"...');
+                context.logStep(
+                  4,
+                  'info',
+                  'Mengklik tombol "Menuju Dashboard"...',
+                );
                 await dashboardBtn.click();
               } else {
-                context.logStep(4, 'warn', 'Tombol "Menuju Dashboard" tidak ditemukan. Menunggu pengalihan otomatis...');
+                context.logStep(
+                  4,
+                  'warn',
+                  'Tombol "Menuju Dashboard" tidak ditemukan. Menunggu pengalihan otomatis...',
+                );
               }
-              
+
               await page.waitForTimeout(3000);
-              
+
               draft.email = newEmail;
-              await this.draftsService.update(txId, { email: newEmail }).catch((e: any) => this.logger.error('Gagal menyimpan email baru ke database', e));
-              
+              await this.draftsService
+                .update(txId, { email: newEmail })
+                .catch((e: any) =>
+                  this.logger.error(
+                    'Gagal menyimpan email baru ke database',
+                    e,
+                  ),
+                );
+
               continue;
             } else {
               throw new Error('Timeout pengisian email baru.');
@@ -392,8 +440,8 @@ export class FilingFlowService {
         await loader.waitFor({ state: 'detached', timeout: 15000 });
       }
     } catch (err) {
-    context.logStep(
-      5,
+      context.logStep(
+        5,
         'warn',
         'Halaman dashboard terhambat loading spinner. Mencoba memuat ulang (reload)...',
       );
@@ -457,7 +505,7 @@ export class FilingFlowService {
     await page
       .waitForURL(/.*\/(lokasi-usaha|kelola-usaha)\/tambah-lokasi.*/, {
         waitUntil: 'load',
-      timeout: 15000,
+        timeout: 15000,
       })
       .catch(() => null);
 
@@ -803,7 +851,8 @@ export class FilingFlowService {
     if (prosesLokasiRes) {
       try {
         const json = await prosesLokasiRes.json();
-        id_proyek_lokasi = json?.data?.id_proyek_lokasi || json?.id_proyek_lokasi;
+        id_proyek_lokasi =
+          json?.data?.id_proyek_lokasi || json?.id_proyek_lokasi;
       } catch (e) {}
     }
 
@@ -842,37 +891,43 @@ export class FilingFlowService {
   ): Promise<{ id_proyek?: string; id_proyek_lokasi?: string }> {
     const { page, draft } = context;
     const draftId = draft.id;
-    context.logStep(6, "info", "Memulai pengisian KBLI & Bidang Usaha...");
+    context.logStep(6, 'info', 'Memulai pengisian KBLI & Bidang Usaha...');
 
     // Prevent the "Informasi Angka Pengenal Impor (API)" popup from showing up by patching the Pinia store state in the browser
     await this.patchPiniaStoreState(page);
 
     // check lokasi usaha questions, if exists, select "Tidak"
-    const obvitnasQuestion = page.getByRole("radiogroup", {
-      name: "Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?",
+    const obvitnasQuestion = page.getByRole('radiogroup', {
+      name: 'Apakah lokasi usaha berada di wilayah Objek Vital Nasional (Obvitnas)?',
     });
     if (await obvitnasQuestion.isVisible().catch(() => false)) {
-      await obvitnasQuestion.getByLabel("Tidak").check().catch(() => null);
+      await obvitnasQuestion
+        .getByLabel('Tidak')
+        .check()
+        .catch(() => null);
       await page.waitForTimeout(500);
     }
-    const psnQuestion = page.getByRole("radiogroup", {
-      name: "Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?",
+    const psnQuestion = page.getByRole('radiogroup', {
+      name: 'Apakah lokasi usaha berada di wilayah Proyek Strategis Nasional (PSN)?',
     });
     if (await psnQuestion.isVisible().catch(() => false)) {
-      await psnQuestion.getByLabel("Tidak").check().catch(() => null);
+      await psnQuestion
+        .getByLabel('Tidak')
+        .check()
+        .catch(() => null);
       await page.waitForTimeout(500);
     }
 
     const getListKbliPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes("/getListKBLI") && response.status() === 200,
+          response.url().includes('/getListKBLI') && response.status() === 200,
         { timeout: 25000 },
       )
       .catch(() => null);
 
-    context.logStep(6, "info", "Memilih KBLI...");
-    const btnSelanjutnya = page.getByRole("button", { name: "Selanjutnya" });
+    context.logStep(6, 'info', 'Memilih KBLI...');
+    const btnSelanjutnya = page.getByRole('button', { name: 'Selanjutnya' });
     if (await btnSelanjutnya.isVisible().catch(() => false)) {
       await btnSelanjutnya.click();
       await getListKbliPromise;
@@ -884,11 +939,11 @@ export class FilingFlowService {
     try {
       const loader = page.locator(spinnerSelector).first();
       await loader
-        .waitFor({ state: "visible", timeout: 3000 })
+        .waitFor({ state: 'visible', timeout: 3000 })
         .catch(() => null);
       if (await loader.isVisible()) {
         await loader
-          .waitFor({ state: "detached", timeout: 15000 })
+          .waitFor({ state: 'detached', timeout: 15000 })
           .catch(() => null);
       }
     } catch (e) {}
@@ -897,23 +952,25 @@ export class FilingFlowService {
     await this.patchPiniaStoreState(page);
 
     const jenisKegiatanSelect = page
-      .getByTestId("jenis-kegiatan-select")
-      .locator("input");
+      .getByTestId('jenis-kegiatan-select')
+      .locator('input');
     await jenisKegiatanSelect
-      .waitFor({ state: "visible", timeout: 15000 })
+      .waitFor({ state: 'visible', timeout: 15000 })
       .catch(() => null);
 
     if (await jenisKegiatanSelect.isVisible().catch(() => false)) {
       await jenisKegiatanSelect.click();
 
-      const option = page.getByText("Kegiatan Usaha Utama");
-      await option.waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+      const option = page.getByText('Kegiatan Usaha Utama');
+      await option
+        .waitFor({ state: 'visible', timeout: 5000 })
+        .catch(() => null);
       if (!(await option.isVisible().catch(() => false))) {
-        await page.keyboard.press("Escape");
+        await page.keyboard.press('Escape');
         await page.waitForTimeout(1000);
         await jenisKegiatanSelect.click();
         await option
-          .waitFor({ state: "visible", timeout: 5000 })
+          .waitFor({ state: 'visible', timeout: 5000 })
           .catch(() => null);
       }
       await option.click().catch(() => null);
@@ -925,15 +982,15 @@ export class FilingFlowService {
     await page.waitForTimeout(1000);
 
     let modalProcessed = false;
-    const modalAdjustKbli = page.getByTestId("button-modal-kembali-kbli-2025");
+    const modalAdjustKbli = page.getByTestId('button-modal-kembali-kbli-2025');
     if (await modalAdjustKbli.isVisible().catch(() => false)) {
       context.logStep(
         6,
-        "info",
-        "Penyesuaian KBLI 2025 modal terdeteksi. Menyelesaikan penyesuaian...",
+        'info',
+        'Penyesuaian KBLI 2025 modal terdeteksi. Menyelesaikan penyesuaian...',
       );
 
-      const selectKbli = page.getByTestId("kbli-select").first();
+      const selectKbli = page.getByTestId('kbli-select').first();
       if (
         (await selectKbli.isVisible().catch(() => false)) &&
         (await selectKbli.isEnabled().catch(() => false))
@@ -942,13 +999,13 @@ export class FilingFlowService {
         const searchKbliQuery = this.interactionHelper.getOptimalSearchQuery(
           draft.kbliCode,
         );
-        await selectKbli.locator("input").fill(searchKbliQuery);
+        await selectKbli.locator('input').fill(searchKbliQuery);
         const option = page
           .locator(".v-list-item, [role='option']")
           .filter({ hasText: searchKbliQuery })
           .first();
         await option
-          .waitFor({ state: "visible", timeout: 5000 })
+          .waitFor({ state: 'visible', timeout: 5000 })
           .catch(() => null);
         if (await option.isVisible()) {
           await option.click();
@@ -957,16 +1014,18 @@ export class FilingFlowService {
       }
 
       const selectRuangLingkup = page.getByPlaceholder(
-        "Pilih ruang lingkup kegiatan",
+        'Pilih ruang lingkup kegiatan',
       );
       if (
         (await selectRuangLingkup.isVisible().catch(() => false)) &&
         (await selectRuangLingkup.isEnabled().catch(() => false))
       ) {
         await selectRuangLingkup.click();
-        const option = page.locator(".v-list-item:visible, [role='option']:visible").first();
+        const option = page
+          .locator(".v-list-item:visible, [role='option']:visible")
+          .first();
         await option
-          .waitFor({ state: "visible", timeout: 5000 })
+          .waitFor({ state: 'visible', timeout: 5000 })
           .catch(() => null);
         if (await option.isVisible()) {
           await option.click();
@@ -975,14 +1034,14 @@ export class FilingFlowService {
       }
 
       const modalCheckbox = page
-        .locator(".v-overlay-container")
-        .getByRole("checkbox")
+        .locator('.v-overlay-container')
+        .getByRole('checkbox')
         .first();
       if (await modalCheckbox.isVisible().catch(() => false)) {
         await modalCheckbox.click();
       } else {
         const declText = page
-          .getByText("Dengan ini saya menyatakan bahwa data")
+          .getByText('Dengan ini saya menyatakan bahwa data')
           .first();
         if (await declText.isVisible().catch(() => false)) {
           await declText.click().catch(() => null);
@@ -990,7 +1049,7 @@ export class FilingFlowService {
       }
       await page.waitForTimeout(1000);
 
-      await page.getByRole("button", { name: "Simpan", exact: true }).click();
+      await page.getByRole('button', { name: 'Simpan', exact: true }).click();
       await page.waitForTimeout(3000);
       modalProcessed = true;
     }
@@ -1001,7 +1060,7 @@ export class FilingFlowService {
       );
       context.logStep(
         6,
-        "info",
+        'info',
         `Mencari kegiatan usaha: ${draft.kbliCode}...`,
       );
       await this.patchPiniaStoreState(page);
@@ -1010,21 +1069,21 @@ export class FilingFlowService {
         .waitForResponse(
           (response: any) => {
             const matches =
-              response.url().includes("/getListKBLI") &&
+              response.url().includes('/getListKBLI') &&
               response.status() === 200;
             if (!matches) return false;
             const postData = response.request().postData();
-            return !!(postData && postData.includes("kbli_2020"));
+            return !!(postData && postData.includes('kbli_2020'));
           },
           { timeout: 20000 },
         )
         .catch(() => null);
 
-      const kbliSearch = page.getByTestId("kbli-select").first();
+      const kbliSearch = page.getByTestId('kbli-select').first();
       if (await kbliSearch.isVisible().catch(() => false)) {
         await kbliSearch.click();
         await page.waitForTimeout(1500);
-        const kbliSearchInput = kbliSearch.locator("input");
+        const kbliSearchInput = kbliSearch.locator('input');
         await kbliSearchInput.pressSequentially(searchKbli, { delay: 100 });
         await page.waitForTimeout(500);
 
@@ -1033,7 +1092,7 @@ export class FilingFlowService {
           .filter({ hasText: searchKbli })
           .first();
         await optionLocator
-          .waitFor({ state: "visible", timeout: 5000 })
+          .waitFor({ state: 'visible', timeout: 5000 })
           .catch(() => null);
         if (await optionLocator.isVisible()) {
           await optionLocator.click();
@@ -1042,7 +1101,7 @@ export class FilingFlowService {
             .locator(".v-list-item, [role='option']")
             .first();
           await fallbackOption
-            .waitFor({ state: "visible", timeout: 5000 })
+            .waitFor({ state: 'visible', timeout: 5000 })
             .catch(() => null);
           if (await fallbackOption.isVisible()) {
             await fallbackOption.click();
@@ -1052,10 +1111,10 @@ export class FilingFlowService {
 
       await this.interactionHelper.dismissPopupIfVisible(page, context, 6);
 
-      const kbli2025Select = page.getByTestId("kbli-select").nth(1);
+      const kbli2025Select = page.getByTestId('kbli-select').nth(1);
       let isKbli2025Visible = false;
       try {
-        await kbli2025Select.waitFor({ state: "visible", timeout: 1500 });
+        await kbli2025Select.waitFor({ state: 'visible', timeout: 1500 });
         isKbli2025Visible = true;
       } catch (e) {}
 
@@ -1063,8 +1122,8 @@ export class FilingFlowService {
         const listKbliResponse = await getListKbli2025Promise;
         context.logStep(
           6,
-          "info",
-          "Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...",
+          'info',
+          'Konversi KBLI 2025 terdeteksi. Mengambil opsi konversi...',
         );
 
         let kbliOptions: any[] = [];
@@ -1078,34 +1137,34 @@ export class FilingFlowService {
               }));
             }
           } catch (err) {
-            this.logger.error("Failed to parse getListKBLI response", err);
+            this.logger.error('Failed to parse getListKBLI response', err);
           }
         }
 
         if (kbliOptions.length > 0) {
-          context.logStep(6, "warn", "PILIH_KBLI_2025", {
+          context.logStep(6, 'warn', 'PILIH_KBLI_2025', {
             options: kbliOptions,
           });
 
           const chosenKbli = await context
             .waitForParameterInput()
-            .catch(() => "");
+            .catch(() => '');
 
           if (!chosenKbli) {
             context.logStep(
               6,
-              "error",
-              "Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.",
+              'error',
+              'Pendaftaran GAGAL: Batas waktu pemilihan KBLI 2025 habis.',
             );
-            throw new Error("Batas waktu pemilihan KBLI 2025 habis.");
+            throw new Error('Batas waktu pemilihan KBLI 2025 habis.');
           }
 
           const option = kbliOptions.find((o) => o.code === chosenKbli);
-          const chosenKbliTitle = option ? option.title : "KBLI 2025 Terpilih";
+          const chosenKbliTitle = option ? option.title : 'KBLI 2025 Terpilih';
 
           context.logStep(
             6,
-            "info",
+            'info',
             `Memperbarui database ke KBLI 2025: ${chosenKbli}...`,
           );
           await this.draftsService.update(draftId, {
@@ -1114,7 +1173,7 @@ export class FilingFlowService {
           });
 
           await kbli2025Select.click();
-          const selectContainer = kbli2025Select.locator("input");
+          const selectContainer = kbli2025Select.locator('input');
           await selectContainer.fill(chosenKbli);
 
           const optionLocator = page
@@ -1122,7 +1181,7 @@ export class FilingFlowService {
             .filter({ hasText: chosenKbli })
             .first();
           await optionLocator
-            .waitFor({ state: "visible", timeout: 5000 })
+            .waitFor({ state: 'visible', timeout: 5000 })
             .catch(() => null);
           if (await optionLocator.isVisible()) {
             await optionLocator.click();
@@ -1138,15 +1197,15 @@ export class FilingFlowService {
 
     await this.patchPiniaStoreState(page);
 
-    context.logStep(6, "info", "Memilih ruang lingkup kegiatan...");
+    context.logStep(6, 'info', 'Memilih ruang lingkup kegiatan...');
     const ruangLingkupCombobox = page
-      .getByTestId("ruang-lingkup-select")
-      .locator("input");
+      .getByTestId('ruang-lingkup-select')
+      .locator('input');
     if (await ruangLingkupCombobox.isVisible().catch(() => false)) {
-      await ruangLingkupCombobox.waitFor({ state: "visible", timeout: 10000 });
+      await ruangLingkupCombobox.waitFor({ state: 'visible', timeout: 10000 });
       await ruangLingkupCombobox.click();
 
-      const seluruhRuangLingkup = page.getByText("Seluruh");
+      const seluruhRuangLingkup = page.getByText('Seluruh');
       if (await seluruhRuangLingkup.isVisible().catch(() => false)) {
         await seluruhRuangLingkup.click();
         await page.waitForTimeout(1000);
@@ -1155,7 +1214,7 @@ export class FilingFlowService {
           .locator(".v-list-item:visible, [role='option']:visible")
           .first();
         await firstOption
-          .waitFor({ state: "visible", timeout: 5000 })
+          .waitFor({ state: 'visible', timeout: 5000 })
           .catch(() => null);
         if (await firstOption.isVisible()) {
           await firstOption.click();
@@ -1165,8 +1224,8 @@ export class FilingFlowService {
     }
 
     const firstRadio = page
-      .getByTestId("radio-bidang-usaha")
-      .getByRole("radio")
+      .getByTestId('radio-bidang-usaha')
+      .getByRole('radio')
       .first();
     if (await firstRadio.isVisible().catch(() => false)) {
       await firstRadio.click();
@@ -1178,13 +1237,15 @@ export class FilingFlowService {
     const prosesBidangUsahaPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes("/prosesBidangUsaha") &&
+          response.url().includes('/prosesBidangUsaha') &&
           [200, 201].includes(response.status()),
         { timeout: 35000 },
       )
       .catch(() => null);
 
-    const btnTambahBidang = page.getByRole("button", { name: "Tambah Bidang Usaha" });
+    const btnTambahBidang = page.getByRole('button', {
+      name: 'Tambah Bidang Usaha',
+    });
     if (await btnTambahBidang.isVisible().catch(() => false)) {
       await btnTambahBidang.click();
     }
@@ -1198,13 +1259,15 @@ export class FilingFlowService {
       } catch (e) {}
     }
 
-    const inputRestoran = page.getByRole("textbox", {
-      name: "Contoh : Restoran",
+    const inputRestoran = page.getByRole('textbox', {
+      name: 'Contoh : Restoran',
     });
-    await inputRestoran.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    await inputRestoran
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => null);
     if (await inputRestoran.isVisible().catch(() => false)) {
       await inputRestoran.fill(draft.namaUsaha);
-      await page.getByRole("button", { name: "Selanjutnya" }).click();
+      await page.getByRole('button', { name: 'Selanjutnya' }).click();
     }
 
     return { id_proyek };
@@ -1214,27 +1277,29 @@ export class FilingFlowService {
     context: AutomationSessionContext,
   ): Promise<void> {
     const { page } = context;
-    context.logStep(6, "info", "Memproses Pernyataan Tata Ruang...");
+    context.logStep(6, 'info', 'Memproses Pernyataan Tata Ruang...');
 
-    const pernyataanMandiriCheckbox = page.locator("#agreement-checkbox");
-    await pernyataanMandiriCheckbox.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    const pernyataanMandiriCheckbox = page.locator('#agreement-checkbox');
+    await pernyataanMandiriCheckbox
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => null);
     if (await pernyataanMandiriCheckbox.isVisible().catch(() => false)) {
-      context.logStep(6, "info", "Menyetujui pernyataan mandiri...");
+      context.logStep(6, 'info', 'Menyetujui pernyataan mandiri...');
       await pernyataanMandiriCheckbox.click();
 
-      await page.getByRole("button", { name: "Proses" }).click();
+      await page.getByRole('button', { name: 'Proses' }).click();
 
-      context.logStep(6, "info", "Memproses...");
+      context.logStep(6, 'info', 'Memproses...');
       await page
-        .getByTestId("modal-proses")
-        .getByRole("button", { name: "Proses" })
+        .getByTestId('modal-proses')
+        .getByRole('button', { name: 'Proses' })
         .click();
 
-      context.logStep(6, "info", "Menunggu submitPernyataanMandiri...");
+      context.logStep(6, 'info', 'Menunggu submitPernyataanMandiri...');
       const submitPernyataanMandiriPromise = page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("/submitPernyataanMandiri") &&
+            response.url().includes('/submitPernyataanMandiri') &&
             response.status() === 200,
           { timeout: 25000 },
         )
@@ -1244,18 +1309,22 @@ export class FilingFlowService {
       const detailPerizinanPromise = page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("/detailPerizinan") &&
+            response.url().includes('/detailPerizinan') &&
             response.status() === 200,
           { timeout: 25000 },
         )
         .catch(() => null);
       await detailPerizinanPromise;
 
-      const perizinanTab = page.getByRole("tab", { name: "Perizinan Berusaha" });
-      await perizinanTab.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+      const perizinanTab = page.getByRole('tab', {
+        name: 'Perizinan Berusaha',
+      });
+      await perizinanTab
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .catch(() => null);
       if (await perizinanTab.isVisible().catch(() => false)) {
         await perizinanTab.click();
-        await page.getByRole("button", { name: "Lanjut" }).click();
+        await page.getByRole('button', { name: 'Lanjut' }).click();
       }
     }
   }
@@ -1265,23 +1334,29 @@ export class FilingFlowService {
   ): Promise<void> {
     const { page, draft } = context;
     const draftId = draft.id;
-    context.logStep(6, "info", "Memulai pengisian Data Investasi & Produk...");
+    context.logStep(6, 'info', 'Memulai pengisian Data Investasi & Produk...');
 
-    const isRunning = draft.sudahBerjalan === "sudah";
-    const runningOptionText = isRunning ? "Sudah Berjalan" : "Belum Berjalan";
-    context.logStep(6, "info", `Mengisi status berjalan: ${runningOptionText}`);
+    const isRunning = draft.sudahBerjalan === 'sudah';
+    const runningOptionText = isRunning ? 'Sudah Berjalan' : 'Belum Berjalan';
+    context.logStep(6, 'info', `Mengisi status berjalan: ${runningOptionText}`);
 
-    const pageLoader = page.locator(".page-loader");
-    await pageLoader.waitFor({ state: "detached", timeout: 30000 }).catch(() => null);
+    const pageLoader = page.locator('.page-loader');
+    await pageLoader
+      .waitFor({ state: 'detached', timeout: 30000 })
+      .catch(() => null);
 
-    const runningCombobox = page.getByTestId("select-box-flag-berjalan").first();
-    await runningCombobox.waitFor({ state: "visible", timeout: 60000 }).catch(() => null);
+    const runningCombobox = page
+      .getByTestId('select-box-flag-berjalan')
+      .first();
+    await runningCombobox
+      .waitFor({ state: 'visible', timeout: 60000 })
+      .catch(() => null);
 
     if (await runningCombobox.isVisible().catch(() => false)) {
       await runningCombobox.click();
-      await runningCombobox.locator("input").fill(runningOptionText);
+      await runningCombobox.locator('input').fill(runningOptionText);
       await page
-        .locator(".v-list-item-title, .v-list-item")
+        .locator('.v-list-item-title, .v-list-item')
         .getByText(runningOptionText, { exact: true })
         .first()
         .click();
@@ -1293,37 +1368,50 @@ export class FilingFlowService {
         const dateObj = new Date(draft.tanggalMulaiUsaha);
         const targetYear = dateObj.getFullYear();
         const monthNames = [
-          "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
         ];
         const targetMonth = monthNames[dateObj.getMonth()];
         const targetDay = dateObj.getDate().toString();
 
         context.logStep(
           6,
-          "info",
+          'info',
           `Mengisi tanggal mulai usaha: ${targetDay} ${targetMonth} ${targetYear}`,
         );
 
-        const container = page.getByTestId("date-time-picker-tgl-berjalan").nth(1);
+        const container = page
+          .getByTestId('date-time-picker-tgl-berjalan')
+          .nth(1);
         if (await container.isVisible().catch(() => false)) {
           await container.scrollIntoViewIfNeeded().catch(() => {});
           await container.click();
 
-          const pickerContainer = page.locator(".v-picker");
+          const pickerContainer = page.locator('.v-picker');
           const yearSelect = pickerContainer
-            .locator("button, div, span")
+            .locator('button, div, span')
             .filter({ hasText: /^\d{4}$/ })
             .first();
-          const currentYearText = await yearSelect.innerText().catch(() => "");
-          let currentYear = parseInt(currentYearText) || new Date().getFullYear();
+          const currentYearText = await yearSelect.innerText().catch(() => '');
+          const currentYear =
+            parseInt(currentYearText) || new Date().getFullYear();
 
           if (currentYear !== targetYear) {
             await yearSelect.click().catch(() => {});
             await page.waitForTimeout(1000);
 
-            let targetYearOption = pickerContainer
-              .locator("div, li, button, span")
+            const targetYearOption = pickerContainer
+              .locator('div, li, button, span')
               .filter({ hasText: new RegExp(`^${targetYear}$`) })
               .first();
 
@@ -1334,7 +1422,7 @@ export class FilingFlowService {
           }
 
           const monthSelect = pickerContainer
-            .locator("button, div, span")
+            .locator('button, div, span')
             .filter({
               hasText: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/,
             })
@@ -1344,8 +1432,8 @@ export class FilingFlowService {
             await page.waitForTimeout(500);
 
             const targetMonthOption = pickerContainer
-              .locator("button, div, span")
-              .filter({ hasText: new RegExp(`^${targetMonth}$`, "i") })
+              .locator('button, div, span')
+              .filter({ hasText: new RegExp(`^${targetMonth}$`, 'i') })
               .first();
             if (await targetMonthOption.isVisible().catch(() => false)) {
               await targetMonthOption.click();
@@ -1353,7 +1441,7 @@ export class FilingFlowService {
           }
 
           const dayButton = pickerContainer
-            .locator("button, div, span")
+            .locator('button, div, span')
             .filter({ hasText: new RegExp(`^\\s*${targetDay}\\s*$`) })
             .first();
           if (await dayButton.isVisible().catch(() => false)) {
@@ -1365,59 +1453,60 @@ export class FilingFlowService {
     }
 
     // Input investasi
-    const investasiLainVal = draft.modalUsaha || "0";
+    const investasiLainVal = draft.modalUsaha || '0';
     context.logStep(
       6,
-      "info",
-      `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString("id-ID")}`,
+      'info',
+      `Mengisi investasi lain: Rp ${parseInt(investasiLainVal).toLocaleString('id-ID')}`,
     );
     const investasiLainInput = page
-      .getByTestId("input-investasi-lain")
-      .locator("input");
+      .getByTestId('input-investasi-lain')
+      .locator('input');
     if (await investasiLainInput.isVisible().catch(() => false)) {
       await investasiLainInput.fill(investasiLainVal);
       await page.waitForTimeout(500);
     }
 
-    const modalKerjaVal = draft.modalKerja || "0";
+    const modalKerjaVal = draft.modalKerja || '0';
     const workingCapitalInput = page
-      .getByTestId("input-modal-kerja")
-      .locator("input");
+      .getByTestId('input-modal-kerja')
+      .locator('input');
     if (await workingCapitalInput.isVisible().catch(() => false)) {
       await workingCapitalInput.fill(modalKerjaVal);
       await page.waitForTimeout(500);
     }
 
-    const fundingSource = draft.sumberPembiayaan || "modal_sendiri";
-    if (fundingSource === "pinjaman") {
+    const fundingSource = draft.sumberPembiayaan || 'modal_sendiri';
+    if (fundingSource === 'pinjaman') {
       await page
-        .getByText("Pinjaman", { exact: true })
+        .getByText('Pinjaman', { exact: true })
         .click()
         .catch(() => {});
     } else {
       await page
-        .getByText("Modal Sendiri", { exact: true })
+        .getByText('Modal Sendiri', { exact: true })
         .click()
         .catch(() => {});
     }
     await page.waitForTimeout(500);
 
-    const omzetVal = draft.omzetTahunan || "0";
+    const omzetVal = draft.omzetTahunan || '0';
     const salesInput = page
-      .getByTestId("pendapatan_tahunan")
-      .locator("input")
+      .getByTestId('pendapatan_tahunan')
+      .locator('input')
       .first();
     if (await salesInput.isVisible().catch(() => false)) {
       await salesInput.fill(omzetVal);
       await page.waitForTimeout(500);
     }
 
-    let maleLaborVal = draft.jumlahPekerjaLakiLaki || draft.jumlahPekerja || "0";
-    let femaleLaborVal = draft.jumlahPekerjaPerempuan || "0";
+    const maleLaborVal =
+      draft.jumlahPekerjaLakiLaki || draft.jumlahPekerja || '0';
+    const femaleLaborVal = draft.jumlahPekerjaPerempuan || '0';
 
     const maleLaborInput = page
-      .getByTestId("laborcard-labor-male")
-      .locator("input")
+      .getByTestId('laborcard-labor-male')
+      .locator('input')
       .first();
     if (await maleLaborInput.isVisible().catch(() => false)) {
       await maleLaborInput.fill(maleLaborVal);
@@ -1425,21 +1514,23 @@ export class FilingFlowService {
     }
 
     const femaleLaborInput = page
-      .getByTestId("laborcard-labor-female")
-      .locator("input")
+      .getByTestId('laborcard-labor-female')
+      .locator('input')
       .first();
     if (await femaleLaborInput.isVisible().catch(() => false)) {
       await femaleLaborInput.fill(femaleLaborVal);
       await page.waitForTimeout(500);
     }
 
-    const btnTambahProduk = page.getByRole("button", { name: "Tambah Produk/Jasa" });
+    const btnTambahProduk = page.getByRole('button', {
+      name: 'Tambah Produk/Jasa',
+    });
     if (await btnTambahProduk.isVisible().catch(() => false)) {
-      context.logStep(6, "info", "Membuka modal Tambah Produk/Jasa...");
+      context.logStep(6, 'info', 'Membuka modal Tambah Produk/Jasa...');
       const getSatuanPromise = page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("/getSatuanProduk/") &&
+            response.url().includes('/getSatuanProduk/') &&
             response.status() === 200,
           { timeout: 15000 },
         )
@@ -1453,71 +1544,82 @@ export class FilingFlowService {
         try {
           const json = await getSatuanResponse.json();
           if (json && Array.isArray(json.data)) {
-            allowedUnits = json.data.map((u: any) => u.satuan_ukur).filter(Boolean);
+            allowedUnits = json.data
+              .map((u: any) => u.satuan_ukur)
+              .filter(Boolean);
           }
         } catch (e) {}
       }
 
       let productInfo = {
         jenisProdukJasa: draft.jenisProdukJasa,
-        cangkupanProduk: draft.cangkupanProduk || "Tidak Mengajukan Fasilitas",
+        cangkupanProduk: draft.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
         kapasitas: draft.kapasitas,
         satuan: draft.satuan,
       };
 
-      if (!productInfo.jenisProdukJasa || !productInfo.kapasitas || !productInfo.satuan) {
-        context.logStep(6, "warn", "MENGISI_RINCIAN_PRODUK", { allowedUnits });
+      if (
+        !productInfo.jenisProdukJasa ||
+        !productInfo.kapasitas ||
+        !productInfo.satuan
+      ) {
+        context.logStep(6, 'warn', 'MENGISI_RINCIAN_PRODUK', { allowedUnits });
         const userInput = await context.waitForProductInput();
         if (!userInput) {
-          throw new Error("Batas waktu pengisian rincian produk habis.");
+          throw new Error('Batas waktu pengisian rincian produk habis.');
         }
         productInfo = {
           jenisProdukJasa: userInput.jenisProdukJasa,
-          cangkupanProduk: userInput.cangkupanProduk || "Tidak Mengajukan Fasilitas",
+          cangkupanProduk:
+            userInput.cangkupanProduk || 'Tidak Mengajukan Fasilitas',
           kapasitas: userInput.kapasitas,
           satuan: userInput.satuan,
         };
-        await this.draftsService.update(draftId, { ...productInfo }).catch(() => null);
+        await this.draftsService
+          .update(draftId, { ...productInfo })
+          .catch(() => null);
       }
 
       const productTypeCombobox = page
-        .getByTestId("product-service-card-product-type")
-        .locator("input")
+        .getByTestId('product-service-card-product-type')
+        .locator('input')
         .first();
       await productTypeCombobox.click();
       await productTypeCombobox.fill(productInfo.jenisProdukJasa);
       await page.waitForTimeout(500);
-      await page.keyboard.press("Enter");
+      await page.keyboard.press('Enter');
       await page.waitForTimeout(1000);
 
       const capacityInput = page
-        .getByTestId("product-service-card-capacity")
-        .locator("input");
+        .getByTestId('product-service-card-capacity')
+        .locator('input');
       await capacityInput.fill(productInfo.kapasitas);
       await page.waitForTimeout(500);
 
       let unitToFill = productInfo.satuan;
       if (allowedUnits.length > 0) {
-        const matched = allowedUnits.find((u) => u.toLowerCase() === unitToFill.toLowerCase());
+        const matched = allowedUnits.find(
+          (u) => u.toLowerCase() === unitToFill.toLowerCase(),
+        );
         unitToFill = matched || allowedUnits[0];
       }
 
       const unitCombobox = page
-        .getByTestId("product-service-card-unit")
-        .locator("input");
+        .getByTestId('product-service-card-unit')
+        .locator('input');
       await unitCombobox.click();
       await unitCombobox.fill(unitToFill);
       await page.waitForTimeout(500);
-      await page.keyboard.press("Enter");
+      await page.keyboard.press('Enter');
       await page.waitForTimeout(1000);
 
-      await page.getByRole("button", { name: "Simpan", exact: true }).click();
+      await page.getByRole('button', { name: 'Simpan', exact: true }).click();
       await page.waitForTimeout(2000);
 
       await page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("getTableKBLIdanProduk") &&
+            response.url().includes('getTableKBLIdanProduk') &&
             response.status() === 200,
           { timeout: 15000 },
         )
@@ -1529,12 +1631,12 @@ export class FilingFlowService {
     context: AutomationSessionContext,
   ): Promise<void> {
     const { page } = context;
-    context.logStep(6, "info", "Memulai pengisian Parameter Risiko...");
+    context.logStep(6, 'info', 'Memulai pengisian Parameter Risiko...');
 
     const getResikoPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes("/getResikoNonPesorangan") &&
+          response.url().includes('/getResikoNonPesorangan') &&
           response.status() === 200,
         { timeout: 20000 },
       )
@@ -1543,15 +1645,24 @@ export class FilingFlowService {
     const getKriteriaPromise = page
       .waitForResponse(
         (response: any) =>
-          response.url().includes("/getKriteriaKegiatan") &&
+          response.url().includes('/getKriteriaKegiatan') &&
           response.status() === 200,
         { timeout: 20000 },
       )
       .catch(() => null);
 
-    context.logStep(6, "info", "Mengklik Selanjutnya untuk validasi Risiko Usaha...");
-    const btnSelanjutnya = page.getByRole("button", { name: "Selanjutnya", exact: true });
-    await btnSelanjutnya.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    context.logStep(
+      6,
+      'info',
+      'Mengklik Selanjutnya untuk validasi Risiko Usaha...',
+    );
+    const btnSelanjutnya = page.getByRole('button', {
+      name: 'Selanjutnya',
+      exact: true,
+    });
+    await btnSelanjutnya
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => null);
     if (await btnSelanjutnya.isVisible().catch(() => false)) {
       await btnSelanjutnya.click({ force: true });
       await page.waitForTimeout(1000);
@@ -1573,22 +1684,30 @@ export class FilingFlowService {
     }
 
     if (allowedParameters.length > 0) {
-      context.logStep(6, "warn", "MENGISI_PARAMETER_RISIKO", { parameterOptions: allowedParameters });
-      const selectedParam = await context.waitForParameterInput().catch(() => "");
+      context.logStep(6, 'warn', 'MENGISI_PARAMETER_RISIKO', {
+        parameterOptions: allowedParameters,
+      });
+      const selectedParam = await context
+        .waitForParameterInput()
+        .catch(() => '');
       if (!selectedParam) {
-        throw new Error("Batas waktu pemilihan parameter risiko habis.");
+        throw new Error('Batas waktu pemilihan parameter risiko habis.');
       }
 
-      const paramCombobox = page.getByRole("combobox").first();
+      const paramCombobox = page.getByRole('combobox').first();
       if (await paramCombobox.isVisible().catch(() => false)) {
         await paramCombobox.click();
         await page.waitForTimeout(500);
-        await page.getByText(selectedParam).first().click().catch(() => null);
+        await page
+          .getByText(selectedParam)
+          .first()
+          .click()
+          .catch(() => null);
         await page.waitForTimeout(1000);
       }
     }
 
-    context.logStep(6, "info", "Menyimpan analisis Risiko & Parameter...");
+    context.logStep(6, 'info', 'Menyimpan analisis Risiko & Parameter...');
     if (await btnSelanjutnya.isVisible().catch(() => false)) {
       await btnSelanjutnya.click({ force: true });
       await page.waitForTimeout(3000);
@@ -1599,26 +1718,28 @@ export class FilingFlowService {
     context: AutomationSessionContext,
   ): Promise<void> {
     const { page } = context;
-    context.logStep(6, "info", "Memulai pengisian Persetujuan Lingkungan...");
+    context.logStep(6, 'info', 'Memulai pengisian Persetujuan Lingkungan...');
 
-    const radioBelum = page.getByRole("radio", { name: "Belum" });
-    await radioBelum.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    const radioBelum = page.getByRole('radio', { name: 'Belum' });
+    await radioBelum
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => null);
     if (await radioBelum.isVisible().catch(() => false)) {
-      context.logStep(6, "info", "Memilih Belum memiliki amdal..");
+      context.logStep(6, 'info', 'Memilih Belum memiliki amdal..');
       await radioBelum.check();
 
-      context.logStep(6, "info", "Klik tombol Proses..");
-      await page.getByRole("button", { name: "Proses" }).click();
+      context.logStep(6, 'info', 'Klik tombol Proses..');
+      await page.getByRole('button', { name: 'Proses' }).click();
       await page.waitForTimeout(1500);
 
-      context.logStep(6, "info", "Klik tombol Ya, Lanjut..");
-      await page.getByRole("button", { name: "Ya, Lanjut" }).click();
+      context.logStep(6, 'info', 'Klik tombol Ya, Lanjut..');
+      await page.getByRole('button', { name: 'Ya, Lanjut' }).click();
       await page.waitForTimeout(1500);
 
       await page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("submitLingkungan") &&
+            response.url().includes('submitLingkungan') &&
             response.status() === 200,
           { timeout: 15000 },
         )
@@ -1627,14 +1748,18 @@ export class FilingFlowService {
       await page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("prosesProyek") &&
+            response.url().includes('prosesProyek') &&
             [200, 201].includes(response.status()),
           { timeout: 15000 },
         )
         .catch(() => null);
 
-      const tabPersyaratan = page.getByRole("tab", { name: "Persyaratan Dasar" });
-      await tabPersyaratan.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+      const tabPersyaratan = page.getByRole('tab', {
+        name: 'Persyaratan Dasar',
+      });
+      await tabPersyaratan
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .catch(() => null);
       if (await tabPersyaratan.isVisible().catch(() => false)) {
         await tabPersyaratan.click();
       }
@@ -1645,56 +1770,68 @@ export class FilingFlowService {
     context: AutomationSessionContext,
   ): Promise<{ kd_izin?: string; id_izin?: string }> {
     const { page, draft } = context;
-    context.logStep(6, "info", "Memulai proses penapisan AMDALnet...");
+    context.logStep(6, 'info', 'Memulai proses penapisan AMDALnet...');
 
-    const btnProsesPenapisan = page.getByRole("button", { name: "Proses Penapisan" });
-    await btnProsesPenapisan.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+    const btnProsesPenapisan = page.getByRole('button', {
+      name: 'Proses Penapisan',
+    });
+    await btnProsesPenapisan
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => null);
 
     let kd_izin: string | undefined;
     let id_izin: string | undefined;
 
     if (await btnProsesPenapisan.isVisible().catch(() => false)) {
-      context.logStep(6, "info", "Klik tombol Proses Penapisan (memaksa di tab yang sama)....");
-      await page.evaluate(() => {
-        window.open = function (url) {
-          window.location.href = url ? url.toString() : "";
-          return window;
-        };
-      }).catch(() => null);
+      context.logStep(
+        6,
+        'info',
+        'Klik tombol Proses Penapisan (memaksa di tab yang sama)....',
+      );
+      await page
+        .evaluate(() => {
+          window.open = function (url) {
+            window.location.href = url ? url.toString() : '';
+            return window;
+          };
+        })
+        .catch(() => null);
 
-      let interceptedIdIzin = "";
-      let interceptedKdIzin = "";
+      let interceptedIdIzin = '';
+      let interceptedKdIzin = '';
       const requestListener = (request: any) => {
         const url = request.url();
-        if (url.includes("id_izin=")) {
+        if (url.includes('id_izin=')) {
           const matchId = url.match(/[?&]id_izin=([^&]+)/);
           if (matchId && !interceptedIdIzin) interceptedIdIzin = matchId[1];
         }
-        if (url.includes("kd_izin=")) {
+        if (url.includes('kd_izin=')) {
           const matchKd = url.match(/[?&]kd_izin=([^&]+)/);
           if (matchKd && !interceptedKdIzin) interceptedKdIzin = matchKd[1];
         }
       };
 
-      page.on("request", requestListener);
+      page.on('request', requestListener);
       await btnProsesPenapisan.click();
       await page.waitForTimeout(3000);
-      page.off("request", requestListener);
+      page.off('request', requestListener);
 
-      kd_izin = interceptedKdIzin || "029000000100";
+      kd_izin = interceptedKdIzin || '029000000100';
       id_izin = interceptedIdIzin || draft.idIzin;
 
       if (id_izin) {
         const proyekScope = page.locator(`#sub-project-card-${id_izin}`);
-        await proyekScope.waitFor({ state: "visible", timeout: 15000 }).catch(() => null);
+        await proyekScope
+          .waitFor({ state: 'visible', timeout: 15000 })
+          .catch(() => null);
         if (await proyekScope.isVisible().catch(() => false)) {
-          const proyekCheck = proyekScope.locator(".el-checkbox").first();
+          const proyekCheck = proyekScope.locator('.el-checkbox').first();
           await proyekCheck.click().catch(() => null);
           await page.waitForTimeout(1000);
 
-          const elSwitch = proyekScope.locator(".el-switch").first();
+          const elSwitch = proyekScope.locator('.el-switch').first();
           const isAlreadyChecked = await elSwitch
-            .evaluate((el: Element) => el.classList.contains("is-checked"))
+            .evaluate((el: Element) => el.classList.contains('is-checked'))
             .catch(() => false);
 
           if (!isAlreadyChecked) {
@@ -1704,11 +1841,15 @@ export class FilingFlowService {
           const sectorSelect = page.locator(`#sector-select-${id_izin}`);
           if (await sectorSelect.isVisible().catch(() => false)) {
             await sectorSelect.click();
-            const multiSectorOpt = page.getByText("Multi Sektor");
+            const multiSectorOpt = page.getByText('Multi Sektor');
             if (await multiSectorOpt.isVisible().catch(() => false)) {
               await multiSectorOpt.click();
             } else {
-              await page.getByRole("listitem").first().click().catch(() => null);
+              await page
+                .getByRole('listitem')
+                .first()
+                .click()
+                .catch(() => null);
             }
           }
         }
@@ -1722,23 +1863,32 @@ export class FilingFlowService {
     context: AutomationSessionContext,
   ): Promise<void> {
     const { page } = context;
-    context.logStep(7, "info", "Memulai penerbitan & finalisasi draft NIB...");
+    context.logStep(7, 'info', 'Memulai penerbitan & finalisasi draft NIB...');
 
-    const cardLocator = page.locator(".lokasi-usaha-card").first();
+    const cardLocator = page.locator('.lokasi-usaha-card').first();
     if (await cardLocator.isVisible().catch(() => false)) {
-      await cardLocator.getByRole("checkbox").click().catch(() => null);
-      await page.getByRole("button", { name: "Lengkapi Detail Kegiatan" }).click().catch(() => null);
+      await cardLocator
+        .getByRole('checkbox')
+        .click()
+        .catch(() => null);
+      await page
+        .getByRole('button', { name: 'Lengkapi Detail Kegiatan' })
+        .click()
+        .catch(() => null);
       await page.waitForTimeout(2000);
     }
 
-    const yaRadio = page.locator(".el-radio").filter({ hasText: /^Ya$/i }).first();
+    const yaRadio = page
+      .locator('.el-radio')
+      .filter({ hasText: /^Ya$/i })
+      .first();
     if (await yaRadio.isVisible().catch(() => false)) {
       await yaRadio.click().catch(() => null);
       await page.waitForTimeout(500);
     }
 
     const tapakSatuKab = page
-      .locator(".el-radio")
+      .locator('.el-radio')
       .filter({ hasText: /tapak proyek berada di satu kabupaten\/kota/i })
       .first();
     if (await tapakSatuKab.isVisible().catch(() => false)) {
@@ -1746,7 +1896,7 @@ export class FilingFlowService {
       await page.waitForTimeout(500);
     }
 
-    const nextButtonFinal = page.getByRole("button", { name: "Selanjutnya" });
+    const nextButtonFinal = page.getByRole('button', { name: 'Selanjutnya' });
     if (await nextButtonFinal.isVisible().catch(() => false)) {
       await nextButtonFinal.click().catch(() => null);
       await page.waitForTimeout(1000);
@@ -1755,18 +1905,18 @@ export class FilingFlowService {
     await page
       .waitForResponse(
         (response: any) =>
-          response.url().includes("penapisan-kewenangan") &&
+          response.url().includes('penapisan-kewenangan') &&
           response.status() === 200,
         { timeout: 15000 },
       )
       .catch(() => null);
 
-    const saveButton = page.getByRole("button", { name: "Simpan" }).first();
+    const saveButton = page.getByRole('button', { name: 'Simpan' }).first();
     if (await saveButton.isVisible().catch(() => false)) {
       const updateDataPermohonanPromise = page
         .waitForResponse(
           (response: any) =>
-            response.url().includes("api/projects") &&
+            response.url().includes('api/projects') &&
             response.status() === 200,
           { timeout: 20000 },
         )
@@ -1775,10 +1925,12 @@ export class FilingFlowService {
       await saveButton.click();
       await page.waitForTimeout(1000);
 
-      const popupConfirm = page.locator(".el-message-box__wrapper, .el-message-box").first();
+      const popupConfirm = page
+        .locator('.el-message-box__wrapper, .el-message-box')
+        .first();
       if (await popupConfirm.isVisible().catch(() => false)) {
         const popupSimpanBtn = page
-          .locator(".el-message-box__btns button, .el-message-box button")
+          .locator('.el-message-box__btns button, .el-message-box button')
           .filter({ hasText: /^Simpan$/i })
           .first();
         if (await popupSimpanBtn.isVisible().catch(() => false)) {
@@ -1823,7 +1975,7 @@ export class FilingFlowService {
           }
           (window as any).__piniaPatchInterval = setInterval(() => {
             try {
-              const nuxtEl = document.querySelector("#__nuxt");
+              const nuxtEl = document.querySelector('#__nuxt');
               if (nuxtEl && (nuxtEl as any).__vue_app__) {
                 const pinia = (nuxtEl as any).__vue_app__.config
                   .globalProperties.$pinia;
@@ -1831,9 +1983,9 @@ export class FilingFlowService {
                   pinia &&
                   pinia.state &&
                   pinia.state.value &&
-                  pinia.state.value["nib-profile"]
+                  pinia.state.value['nib-profile']
                 ) {
-                  const storeState = pinia.state.value["nib-profile"];
+                  const storeState = pinia.state.value['nib-profile'];
                   if (
                     storeState &&
                     storeState.state &&
@@ -1842,7 +1994,7 @@ export class FilingFlowService {
                     if (!storeState.state.dataPermohonan.dataNib) {
                       storeState.state.dataPermohonan.dataNib = {};
                     }
-                    storeState.state.dataPermohonan.dataNib.jenis_api = "01";
+                    storeState.state.dataPermohonan.dataNib.jenis_api = '01';
                   }
                 }
               }

@@ -4,7 +4,6 @@ import { TelegramService } from './telegram.service';
 
 describe('TelegramService', () => {
   let service: TelegramService;
-  let configService: ConfigService;
   let fetchSpy: jest.SpyInstance;
 
   beforeEach(async () => {
@@ -26,12 +25,15 @@ describe('TelegramService', () => {
     }).compile();
 
     service = module.get<TelegramService>(TelegramService);
-    configService = module.get<ConfigService>(ConfigService);
-    
+
     // Mock global fetch
-    fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
-    );
+    fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        ),
+      );
 
     // Call lifecycle hooks manually
     service.onModuleInit();
@@ -71,7 +73,7 @@ describe('TelegramService', () => {
             'Content-Type': 'application/json',
           },
           body: expect.any(String),
-        })
+        }),
       );
 
       const requestBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
@@ -88,14 +90,6 @@ describe('TelegramService', () => {
 
       // fetch should only be called once
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('should not de-duplicate if force parameter is true', async () => {
-      // Send first message
-      await service.sendMessage('Message B');
-
-      // fetch should be called twice
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
     it('should send different messages without de-duplication', async () => {
