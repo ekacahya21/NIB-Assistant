@@ -17,12 +17,14 @@ import { PrismaService } from './prisma.service';
 import { AuthController } from './auth/auth.controller';
 import { TelegramModule } from './telegram/telegram.module';
 import { TelegramExceptionFilter } from './telegram/telegram-exception.filter';
+import { KtpModule } from './ktp/ktp.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DocumentsModule,
     TelegramModule,
+    KtpModule,
   ],
 
   controllers: [

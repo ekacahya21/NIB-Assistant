@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SearchableSelect from "@/components/molecules/SearchableSelect";
+import KtpUploader, { KtpExtractionResult } from "@/components/molecules/KtpUploader";
 import LeafletMap from "@/components/organisms/LeafletMap";
 
 interface KBLIRecommendation {
@@ -26,6 +27,37 @@ const getKBLIDetails = (code: string, fallbackDesc: string, fallbackSuitable?: s
     suitable: (fallbackSuitable && fallbackSuitable.length > 0) ? fallbackSuitable : ["Aktivitas perdagangan eceran", "Jasa perorangan mikro"],
     unsuitable: ["Usaha skala industri menengah/besar", "Ekspor-impor skala besar (Kargo kontainer)"]
   };
+};
+
+const normalizeRegionName = (str: string) => {
+  return (str || "")
+    .toUpperCase()
+    .replace(/\b(PROVINSI|PROV|KOTA|KABUPATEN|KAB|ADM|ADMINISTRASI|KELURAHAN|KEL|DESA|KECAMATAN|KEC)\b/gi, "")
+    .replace(/[^A-Z0-9]/g, "")
+    .trim();
+};
+
+const findMatchingRegion = (list: { id: string; name: string }[], targetName?: string) => {
+  if (!targetName || !list || list.length === 0) return null;
+  const cleanTarget = normalizeRegionName(targetName);
+  if (!cleanTarget) return null;
+
+  // 1. Exact normalized match
+  const exact = list.find((item) => normalizeRegionName(item.name) === cleanTarget);
+  if (exact) return exact;
+
+  // 2. Contains match
+  const contains = list.find((item) => {
+    const cleanItem = normalizeRegionName(item.name);
+    return cleanItem.includes(cleanTarget) || cleanTarget.includes(cleanItem);
+  });
+  if (contains) return contains;
+
+  // 3. Fallback raw comparison
+  const raw = list.find(
+    (item) => item.name.toUpperCase().trim() === targetName.toUpperCase().trim()
+  );
+  return raw || null;
 };
 
 export default function WizardPage() {
@@ -751,9 +783,7 @@ export default function WizardPage() {
       // 1. Resolve KTP address
       let ktpProvId = "";
       if (formData.provinsiKtp) {
-        const matchedProv = provincesList.find(
-          (p) => p.name.toUpperCase() === formData.provinsiKtp.toUpperCase()
-        );
+        const matchedProv = findMatchingRegion(provincesList, formData.provinsiKtp);
         if (matchedProv) {
           ktpProvId = matchedProv.id;
           setSelectedKtpProvId(matchedProv.id);
@@ -766,9 +796,7 @@ export default function WizardPage() {
           const res = await fetch(`/api/regions?type=regencies&id=${ktpProvId}`);
           const cities = await res.json();
           setCitiesKtpList(cities);
-          const matchedCity = cities.find(
-            (c: any) => c.name.toUpperCase() === formData.kotaKabupatenKtp.toUpperCase()
-          );
+          const matchedCity = findMatchingRegion(cities, formData.kotaKabupatenKtp);
           if (matchedCity) {
             ktpCityId = matchedCity.id;
             setSelectedKtpCityId(matchedCity.id);
@@ -784,9 +812,7 @@ export default function WizardPage() {
           const res = await fetch(`/api/regions?type=districts&id=${ktpCityId}`);
           const districts = await res.json();
           setDistrictsKtpList(districts);
-          const matchedDist = districts.find(
-            (d: any) => d.name.toUpperCase() === formData.kecamatanKtp.toUpperCase()
-          );
+          const matchedDist = findMatchingRegion(districts, formData.kecamatanKtp);
           if (matchedDist) {
             ktpDistId = matchedDist.id;
             setSelectedKtpDistId(matchedDist.id);
@@ -813,9 +839,7 @@ export default function WizardPage() {
 
       let usahaProvId = "";
       if (formData.provinsi) {
-        const matchedProv = provincesList.find(
-          (p) => p.name.toUpperCase() === formData.provinsi.toUpperCase()
-        );
+        const matchedProv = findMatchingRegion(provincesList, formData.provinsi);
         if (matchedProv) {
           usahaProvId = matchedProv.id;
           setSelectedProvId(matchedProv.id);
@@ -828,9 +852,7 @@ export default function WizardPage() {
           const res = await fetch(`/api/regions?type=regencies&id=${usahaProvId}`);
           const cities = await res.json();
           setCitiesList(cities);
-          const matchedCity = cities.find(
-            (c: any) => c.name.toUpperCase() === formData.kotaKabupaten.toUpperCase()
-          );
+          const matchedCity = findMatchingRegion(cities, formData.kotaKabupaten);
           if (matchedCity) {
             usahaCityId = matchedCity.id;
             setSelectedCityId(matchedCity.id);
@@ -846,9 +868,7 @@ export default function WizardPage() {
           const res = await fetch(`/api/regions?type=districts&id=${usahaCityId}`);
           const districts = await res.json();
           setDistrictsList(districts);
-          const matchedDist = districts.find(
-            (d: any) => d.name.toUpperCase() === formData.kecamatan.toUpperCase()
-          );
+          const matchedDist = findMatchingRegion(districts, formData.kecamatan);
           if (matchedDist) {
             usahaDistId = matchedDist.id;
             setSelectedDistId(matchedDist.id);
@@ -1120,6 +1140,119 @@ export default function WizardPage() {
       return updated;
     });
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
+    triggerAutosave();
+  };
+
+  const resolveAndSetKtpRegions = async (
+    provinsiName?: string,
+    kotaName?: string,
+    kecamatanName?: string,
+    kelurahanName?: string
+  ) => {
+    if (!provinsiName) return;
+
+    try {
+      // 1. Ensure provincesList is loaded
+      let curProvinces = provincesList;
+      if (curProvinces.length === 0) {
+        setLoadingKtpRegions((prev) => ({ ...prev, provinsi: true }));
+        const res = await fetch("/api/regions?type=provinces");
+        curProvinces = await res.json();
+        setProvincesList(curProvinces);
+        setLoadingKtpRegions((prev) => ({ ...prev, provinsi: false }));
+      }
+
+      // 2. Match Province
+      const matchedProv = findMatchingRegion(curProvinces, provinsiName);
+      if (!matchedProv) return;
+
+      setSelectedKtpProvId(matchedProv.id);
+      handleInputChange("provinsiKtp", matchedProv.name.toUpperCase());
+
+      // 3. Fetch and match City / Regency
+      if (!kotaName) return;
+      setLoadingKtpRegions((prev) => ({ ...prev, kotaKabupaten: true }));
+      const regRes = await fetch(`/api/regions?type=regencies&id=${matchedProv.id}`);
+      const cities: { id: string; name: string }[] = await regRes.json();
+      setCitiesKtpList(cities);
+      setLoadingKtpRegions((prev) => ({ ...prev, kotaKabupaten: false }));
+
+      const matchedCity = findMatchingRegion(cities, kotaName);
+      if (!matchedCity) return;
+
+      setSelectedKtpCityId(matchedCity.id);
+      handleInputChange("kotaKabupatenKtp", matchedCity.name.toUpperCase());
+
+      // 4. Fetch and match District / Kecamatan
+      if (!kecamatanName) return;
+      setLoadingKtpRegions((prev) => ({ ...prev, kecamatan: true }));
+      const distRes = await fetch(`/api/regions?type=districts&id=${matchedCity.id}`);
+      const districts: { id: string; name: string }[] = await distRes.json();
+      setDistrictsKtpList(districts);
+      setLoadingKtpRegions((prev) => ({ ...prev, kecamatan: false }));
+
+      const matchedDist = findMatchingRegion(districts, kecamatanName);
+      if (!matchedDist) return;
+
+      setSelectedKtpDistId(matchedDist.id);
+      handleInputChange("kecamatanKtp", matchedDist.name.toUpperCase());
+
+      // 5. Fetch and match Village / Kelurahan
+      if (!kelurahanName) return;
+      setLoadingKtpRegions((prev) => ({ ...prev, kelurahan: true }));
+      const villRes = await fetch(`/api/regions?type=villages&id=${matchedDist.id}`);
+      const villages: { id: string; name: string }[] = await villRes.json();
+      setVillagesKtpList(villages);
+      setLoadingKtpRegions((prev) => ({ ...prev, kelurahan: false }));
+
+      const matchedVill = findMatchingRegion(villages, kelurahanName);
+      if (matchedVill) {
+        handleInputChange("kelurahanKtp", matchedVill.name.toUpperCase());
+      }
+    } catch (err) {
+      console.error("Gagal resolve wilayah KTP otomatis:", err);
+    }
+  };
+
+  const handleKtpExtracted = async (data: KtpExtractionResult) => {
+    setFormData((prev) => {
+      const updated = { ...prev };
+      if (data.namaPemilik) updated.namaPemilik = data.namaPemilik.toUpperCase();
+      if (data.nik) updated.nik = data.nik.replace(/\D/g, "").slice(0, 16);
+      if (data.tanggalLahir) updated.tanggalLahir = data.tanggalLahir;
+      if (data.jenisKelamin) updated.jenisKelamin = data.jenisKelamin;
+      if (data.alamatKtp) {
+        let alamatFull = data.alamatKtp.toUpperCase();
+        if (data.rtRw && !alamatFull.includes(data.rtRw.toUpperCase())) {
+          alamatFull = `${alamatFull}, RT/RW ${data.rtRw}`;
+        }
+        updated.alamatKtp = alamatFull;
+        if (updated.isAddressSame) {
+          updated.alamatUsaha = updated.alamatKtp;
+        }
+      }
+      return updated;
+    });
+
+    setErrors((prev) => {
+      const nextErrors = { ...prev };
+      if (data.namaPemilik) delete nextErrors.namaPemilik;
+      if (data.nik) delete nextErrors.nik;
+      if (data.tanggalLahir) delete nextErrors.tanggalLahir;
+      if (data.jenisKelamin) delete nextErrors.jenisKelamin;
+      if (data.alamatKtp) delete nextErrors.alamatKtp;
+      return nextErrors;
+    });
+
+    if (data.provinsiKtp) {
+      await resolveAndSetKtpRegions(
+        data.provinsiKtp,
+        data.kotaKabupatenKtp,
+        data.kecamatanKtp,
+        data.kelurahanKtp
+      );
+    }
+
     triggerAutosave();
   };
 
@@ -1552,6 +1685,9 @@ export default function WizardPage() {
                         Masukkan data pemilik usaha sesuai KTP dan kontak aktif yang dapat menerima OTP.
                       </p>
                     </div>
+
+                    {/* KTP AI Autofill Uploader */}
+                    <KtpUploader apiUrl={API_URL} onExtracted={handleKtpExtracted} />
 
                     <div className="bento-card space-y-5">
                       {/* Nama Pemilik */}
