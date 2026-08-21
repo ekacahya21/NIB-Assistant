@@ -1294,11 +1294,6 @@ export default function WizardPage() {
         if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
           newErrors.email = "Format email tidak valid.";
         }
-      }
-    }
-
-    if (step === 2) {
-      if (akunOss !== "sudah") {
         if (!formData.alamatKtp.trim()) {
           newErrors.alamatKtp = "Alamat KTP harus diisi.";
         }
@@ -1315,6 +1310,9 @@ export default function WizardPage() {
           newErrors.kelurahanKtp = "Pilih kelurahan KTP.";
         }
       }
+    }
+
+    if (step === 2) {
       if (!formData.alamatUsaha.trim()) {
         newErrors.alamatUsaha = "Alamat lengkap usaha harus diisi.";
       }
@@ -1846,6 +1844,93 @@ export default function WizardPage() {
                       </div>
 
                     </div>
+
+                    {/* Bento Card 2: Alamat Domisili Sesuai KTP */}
+                    <div className="bento-card space-y-5">
+                      <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
+                        ALAMAT DOMISILI SESUAI KTP
+                      </h3>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
+                          Alamat Jalan, RT/RW
+                        </label>
+                        <textarea
+                          id="alamatKtp"
+                          placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
+                          rows={2}
+                          value={formData.alamatKtp}
+                          onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
+                          className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
+                            errors.alamatKtp ? "border-error" : ""
+                          }`}
+                        />
+                        {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
+                          <SearchableSelect
+                            options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
+                            value={selectedKtpProvId}
+                            onChange={handleKtpProvinceChange}
+                            placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
+                          />
+                          {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
+                          <SearchableSelect
+                            options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
+                            value={selectedKtpCityId}
+                            disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
+                            onChange={handleKtpCityChange}
+                            placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
+                          />
+                          {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
+                          <SearchableSelect
+                            options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
+                            value={selectedKtpDistId}
+                            disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
+                            onChange={handleKtpDistrictChange}
+                            placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
+                          />
+                          {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
+                          <SearchableSelect
+                            options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
+                            value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
+                            disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
+                            onChange={handleKtpVillageChange}
+                            placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
+                          />
+                          {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: 16143"
+                          value={formData.kodePosKtp}
+                          onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                          className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   </>
                 )}
 
@@ -1861,100 +1946,9 @@ export default function WizardPage() {
                     Lokasi Usaha
                   </h2>
                   <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                    {akunOss === "sudah"
-                      ? "Masukkan alamat operasional dan titik koordinat tempat usaha Anda untuk pendaftaran izin NIB."
-                      : "Masukkan alamat lengkap domisili KTP dan alamat operasional tempat usaha Anda."}
+                    Masukkan alamat operasional dan titik koordinat tempat usaha Anda untuk pendaftaran izin NIB.
                   </p>
                 </div>
-
-                {/* KTP Address (Only shown for new accounts) */}
-                {akunOss !== "sudah" && (
-                  <div className="bento-card space-y-5">
-                    <h3 className="text-xs font-extrabold text-on-surface border-b border-border-light pb-2 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-sm text-primary-container">badge</span>
-                      ALAMAT DOMISILI SESUAI KTP
-                    </h3>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold text-on-surface-variant uppercase" htmlFor="alamatKtp">
-                        Alamat Jalan, RT/RW
-                      </label>
-                      <textarea
-                        id="alamatKtp"
-                        placeholder="Contoh: JL. DIPONEGORO NO. 42, RT 03/RW 04"
-                        rows={2}
-                        value={formData.alamatKtp}
-                        onChange={(e) => handleInputChange("alamatKtp", e.target.value)}
-                        className={`w-full p-3.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none ${
-                          errors.alamatKtp ? "border-error" : ""
-                        }`}
-                      />
-                      {errors.alamatKtp && <p className="text-[10px] text-error font-semibold">{errors.alamatKtp}</p>}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Provinsi</label>
-                        <SearchableSelect
-                          options={provincesList.map((p) => ({ value: p.id, label: p.name.toUpperCase() }))}
-                          value={selectedKtpProvId}
-                          onChange={handleKtpProvinceChange}
-                          placeholder={loadingKtpRegions.provinsi ? "Memuat..." : "-- Pilih --"}
-                        />
-                        {errors.provinsiKtp && <p className="text-[10px] text-error font-semibold">{errors.provinsiKtp}</p>}
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kota / Kabupaten</label>
-                        <SearchableSelect
-                          options={citiesKtpList.map((c) => ({ value: c.id, label: c.name.toUpperCase() }))}
-                          value={selectedKtpCityId}
-                          disabled={!selectedKtpProvId || loadingKtpRegions.kotaKabupaten}
-                          onChange={handleKtpCityChange}
-                          placeholder={loadingKtpRegions.kotaKabupaten ? "Memuat..." : "-- Pilih --"}
-                        />
-                        {errors.kotaKabupatenKtp && <p className="text-[10px] text-error font-semibold">{errors.kotaKabupatenKtp}</p>}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kecamatan</label>
-                        <SearchableSelect
-                          options={districtsKtpList.map((d) => ({ value: d.id, label: d.name.toUpperCase() }))}
-                          value={selectedKtpDistId}
-                          disabled={!selectedKtpCityId || loadingKtpRegions.kecamatan}
-                          onChange={handleKtpDistrictChange}
-                          placeholder={loadingKtpRegions.kecamatan ? "Memuat..." : "-- Pilih --"}
-                        />
-                        {errors.kecamatanKtp && <p className="text-[10px] text-error font-semibold">{errors.kecamatanKtp}</p>}
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-extrabold text-on-surface-variant uppercase">Kelurahan / Desa</label>
-                        <SearchableSelect
-                          options={villagesKtpList.map((s) => ({ value: s.id, label: s.name.toUpperCase() }))}
-                          value={villagesKtpList.find((v) => v.name.toUpperCase() === formData.kelurahanKtp)?.id || ""}
-                          disabled={!selectedKtpDistId || loadingKtpRegions.kelurahan}
-                          onChange={handleKtpVillageChange}
-                          placeholder={loadingKtpRegions.kelurahan ? "Memuat..." : "-- Pilih --"}
-                        />
-                        {errors.kelurahanKtp && <p className="text-[10px] text-error font-semibold">{errors.kelurahanKtp}</p>}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-on-surface-variant">KODE POS (KTP)</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: 16143"
-                        value={formData.kodePosKtp}
-                        onChange={(e) => handleInputChange("kodePosKtp", e.target.value.replace(/\D/g, "").slice(0, 5))}
-                        className="w-full min-h-[48px] px-3.5 py-2.5 rounded border border-border-light bg-white text-xs focus:border-primary-container focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                )}
 
                 {/* Business Address */}
                 <div className="bento-card space-y-5">
