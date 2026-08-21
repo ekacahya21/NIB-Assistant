@@ -269,7 +269,14 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.subjectToDraftId.set(subject, draftId);
       this.activeSubjects.set(draftId, subject);
 
-      this.enqueueRequest(draftId, akunOss, subject, sessionId, phase, resumeFromStep);
+      this.enqueueRequest(
+        draftId,
+        akunOss,
+        subject,
+        sessionId,
+        phase,
+        resumeFromStep,
+      );
 
       const subscription = subject.subscribe({
         next: (val) => subscriber.next(val),
@@ -369,7 +376,13 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         .update(draftId, { status: 'RUNNING', sessionId })
         .catch(() => {});
 
-      this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep)
+      this.runPlaywrightAutomation(
+        draftId,
+        akunOss,
+        subject,
+        phase,
+        resumeFromStep,
+      )
         .catch((err) => {
           this.logger.error(
             `Error running playwright automation for draft ${draftId}: ${err.message}`,
@@ -414,7 +427,13 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           await this.draftsService
             .update(draftId, { status: 'RUNNING', sessionId })
             .catch(() => {});
-          return this.runPlaywrightAutomation(draftId, akunOss, subject, phase, resumeFromStep);
+          return this.runPlaywrightAutomation(
+            draftId,
+            akunOss,
+            subject,
+            phase,
+            resumeFromStep,
+          );
         })
         .catch((err) => {
           this.logger.error(
@@ -762,7 +781,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
         // Determine target resume sub-step
         const targetSubStep: AutomationSubStep =
-          resumeFromStep && Object.values(AutomationSubStep).includes(resumeFromStep as AutomationSubStep)
+          resumeFromStep &&
+          Object.values(AutomationSubStep).includes(
+            resumeFromStep as AutomationSubStep,
+          )
             ? (resumeFromStep as AutomationSubStep)
             : getNextSubStep(draft.lastCompletedStep);
 
@@ -779,10 +801,15 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           }
 
           // Validate if required data for generating next step deeplink is present
-          const validation = hasRequiredDataForNextStep(completedSubStep, checkpointData);
+          const validation = hasRequiredDataForNextStep(
+            completedSubStep,
+            checkpointData,
+          );
           if (!validation.valid) {
             const errMessage = `Data pendukung ID (${validation.missingIds.join(', ')}) untuk sub-step berikutnya (${validation.nextStep}) tidak ditemukan. Otomatisasi dianggap gagal.`;
-            this.logger.error(`Checkpoint validation failed at sub-step ${completedSubStep}: ${errMessage}`);
+            this.logger.error(
+              `Checkpoint validation failed at sub-step ${completedSubStep}: ${errMessage}`,
+            );
             this.logStep(
               subject,
               activeStep,
@@ -801,7 +828,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
               checkpointData: { ...checkpointData },
             })
             .catch((err) => {
-              this.logger.error(`Failed to update draft checkpoint: ${err.message}`);
+              this.logger.error(
+                `Failed to update draft checkpoint: ${err.message}`,
+              );
             });
         };
 
@@ -809,10 +838,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         if (!isStepCompleted(AutomationSubStep.LOCATION, targetSubStep)) {
           activeStep = 5;
           this.activeSteps.set(draftId, activeStep);
-          const locationRes = await this.filingFlowService.executeManageLocationSteps(
-            sessionCtx,
-            jwtToken,
-          );
+          const locationRes =
+            await this.filingFlowService.executeManageLocationSteps(
+              sessionCtx,
+              jwtToken,
+            );
           if (locationRes?.id_proyek_lokasi) {
             checkpointData.id_proyek_lokasi = locationRes.id_proyek_lokasi;
           }
@@ -836,9 +866,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             );
           }
 
-          const kbliRes = await this.filingFlowService.executeKbliSteps(sessionCtx);
+          const kbliRes =
+            await this.filingFlowService.executeKbliSteps(sessionCtx);
           if (kbliRes?.id_proyek) checkpointData.id_proyek = kbliRes.id_proyek;
-          if (kbliRes?.id_proyek_lokasi) checkpointData.id_proyek_lokasi = kbliRes.id_proyek_lokasi;
+          if (kbliRes?.id_proyek_lokasi)
+            checkpointData.id_proyek_lokasi = kbliRes.id_proyek_lokasi;
           await saveCheckpoint(AutomationSubStep.KBLI, checkpointData);
         }
 
@@ -922,7 +954,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             );
           }
 
-          await this.filingFlowService.executePersetujuanLingkunganSteps(sessionCtx);
+          await this.filingFlowService.executePersetujuanLingkunganSteps(
+            sessionCtx,
+          );
           await saveCheckpoint(AutomationSubStep.LINGKUNGAN, checkpointData);
         }
 
@@ -943,7 +977,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             );
           }
 
-          const amdalRes = await this.filingFlowService.executeAmdalnetSteps(sessionCtx);
+          const amdalRes =
+            await this.filingFlowService.executeAmdalnetSteps(sessionCtx);
           if (amdalRes?.kd_izin) checkpointData.kd_izin = amdalRes.kd_izin;
           if (amdalRes?.id_izin) checkpointData.id_izin = amdalRes.id_izin;
           await saveCheckpoint(AutomationSubStep.AMDALNET, checkpointData);
@@ -997,11 +1032,17 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       // Send Telegram alert for automation job failures
       try {
         const escapedDraftId = this.telegramService.escapeHtml(draftId);
-        const escapedNamaUsaha = this.telegramService.escapeHtml(draft.namaUsaha || 'Draf Usaha Baru');
-        const escapedNamaPemilik = this.telegramService.escapeHtml(draft.namaPemilik || 'Tanpa Nama');
-        const escapedPhase = this.telegramService.escapeHtml(phase || 'unknown');
+        const escapedNamaUsaha = this.telegramService.escapeHtml(
+          draft.namaUsaha || 'Draf Usaha Baru',
+        );
+        const escapedNamaPemilik = this.telegramService.escapeHtml(
+          draft.namaPemilik || 'Tanpa Nama',
+        );
+        const escapedPhase = this.telegramService.escapeHtml(
+          phase || 'unknown',
+        );
         const escapedMsg = this.telegramService.escapeHtml(errMsg);
-        
+
         let stackTrace = error.stack || '';
         if (stackTrace.length > 1500) {
           stackTrace = stackTrace.substring(0, 1500) + '\n... (truncated)';
@@ -1021,7 +1062,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
         this.telegramService.sendMessage(telegramMsg).catch(() => {});
       } catch (tgErr) {
-        this.logger.error('Failed to prepare or send Telegram automation alert', tgErr);
+        this.logger.error(
+          'Failed to prepare or send Telegram automation alert',
+          tgErr,
+        );
       }
     } finally {
       const timers = this.executionTimers.get(draftId);
@@ -1074,7 +1118,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       let tempVideoPath: string | undefined;
       if (page) {
         try {
-          tempVideoPath = await page.video()?.path().catch(() => undefined);
+          tempVideoPath = await page
+            .video()
+            ?.path()
+            .catch(() => undefined);
         } catch (videoErr) {
           this.logger.error('Gagal mengambil path video rekaman', videoErr);
         }
@@ -1099,10 +1146,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       await new Promise((r) => setTimeout(r, 300));
       const fs = require('fs');
       const path = require('path');
-      const targetPath = path.join(
-        './recordings',
-        `draft_${draftId}.webm`,
-      );
+      const targetPath = path.join('./recordings', `draft_${draftId}.webm`);
       try {
         if (!fs.existsSync('./recordings')) {
           fs.mkdirSync('./recordings', { recursive: true });
@@ -1132,7 +1176,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
             });
             const freshest = path.join('./recordings', unrenamed[0]);
             fs.renameSync(freshest, targetPath);
-            this.logger.log(`Rekaman otomatisasi berhasil dipulihkan: ${targetPath}`);
+            this.logger.log(
+              `Rekaman otomatisasi berhasil dipulihkan: ${targetPath}`,
+            );
           }
         }
       } catch (renameErr) {
@@ -1177,7 +1223,8 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       })
       .catch(() => false);
 
-    const baseUrl = process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id';
+    const baseUrl =
+      process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id';
 
     if (!hasAuthCode && jwtToken) {
       // Retrieve refresh-code from context or page localStorage if available

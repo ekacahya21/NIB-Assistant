@@ -7,7 +7,7 @@ export class TelegramService implements OnModuleInit {
   private botToken: string | undefined;
   private chatId: string | undefined;
   private appEnv: string = 'development';
-  
+
   // In-memory cache to de-duplicate message alerts: Map<messageHashOrText, timestamp>
   private readonly sentErrors = new Map<string, number>();
   private readonly COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -45,7 +45,7 @@ export class TelegramService implements OnModuleInit {
    * Generates a simple hash string for de-duplication.
    */
   private generateHash(text: string): string {
-    // Truncate/clean the text and use it as a key. 
+    // Truncate/clean the text and use it as a key.
     // Truncating to 150 chars captures the unique part of the error message without growing memory infinitely.
     return text.substring(0, 150).trim().toLowerCase();
   }
@@ -75,6 +75,14 @@ export class TelegramService implements OnModuleInit {
     this.pruneCache();
 
     const messageKey = this.generateHash(rawMessage);
+    const lastSentTime = this.sentErrors.get(messageKey);
+
+    if (lastSentTime && now - lastSentTime < this.COOLDOWN_MS) {
+      this.logger.log(
+        `Duplicate alert suppressed for Telegram to prevent spamming. Message prefix: "${rawMessage.substring(0, 50)}..."`,
+      );
+      return;
+    }
 
     // Update timestamp before sending
     this.sentErrors.set(messageKey, now);
@@ -101,15 +109,18 @@ export class TelegramService implements OnModuleInit {
       );
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'unknown error response');
+        const errorText = await response
+          .text()
+          .catch(() => 'unknown error response');
         this.logger.error(
           `Failed to send Telegram message. Status: ${response.status}. Response: ${errorText}`,
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Silent Fallback - Log to console only so it doesn't interrupt primary app flows
+      const errMsg = err instanceof Error ? err.message : String(err);
       this.logger.error(
-        `Telegram notification service request failed: ${err?.message || err}`,
+        `Telegram notification service request failed: ${errMsg}`,
       );
     }
   }

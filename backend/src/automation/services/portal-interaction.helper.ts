@@ -174,7 +174,8 @@ export class PortalInteractionHelper {
           const hashQuery = urlObj.hash.substring(hashQueryIndex);
           const hashParams = new URLSearchParams(hashQuery);
           if (!jwtToken) jwtToken = hashParams.get('auth-code') || '';
-          if (!refreshToken) refreshToken = hashParams.get('refresh-code') || '';
+          if (!refreshToken)
+            refreshToken = hashParams.get('refresh-code') || '';
         }
       }
 
