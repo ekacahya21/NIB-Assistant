@@ -3396,7 +3396,7 @@ export default function WizardPage() {
 
       {/* Floating Background Notification Banner & FAB */}
       {isMinimized && (
-        <div className={`fixed bottom-5 right-5 z-50 ${isPromptingOtp || isPromptingPassword || isPromptingEmail ? "animate-bounce" : ""}`}>
+        <div className={`fixed bottom-20 right-5 z-50 ${isPromptingOtp || isPromptingPassword || isPromptingEmail ? "animate-bounce" : ""}`}>
           <button
             type="button"
             onClick={() => {
