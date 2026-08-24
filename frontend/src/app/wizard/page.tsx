@@ -277,15 +277,15 @@ export default function WizardPage() {
                 setShowSuccessToast(true);
                 setTimeout(() => setShowSuccessToast(false), 5000);
 
-                // Advance to Step 3 after a brief pause only if the user is still on Step 2
+                // Advance to Step 2 (lokasi usaha) after a brief pause only if the user triggered registration from Step 1 or Step 2
                 setTimeout(() => {
                   setIsVerifyingStep2(false);
                   setShowVerificationModal(false);
                   setIsMinimized(false);
-                  const activeWizardStep = typeof window !== "undefined" ? parseInt(sessionStorage.getItem("wizard_step") || "2", 10) : 2;
-                  if (activeWizardStep === 2) {
-                    setCurrentStep(3);
-                    sessionStorage.setItem("wizard_step", "3");
+                  const activeWizardStep = typeof window !== "undefined" ? parseInt(sessionStorage.getItem("wizard_step") || "1", 10) : 1;
+                  if (activeWizardStep === 1 || activeWizardStep === 2) {
+                    setCurrentStep(2);
+                    sessionStorage.setItem("wizard_step", "2");
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }
                 }, 1500);
@@ -315,7 +315,7 @@ export default function WizardPage() {
     }
   };
 
-  const saveDraftStep2 = async () => {
+  const saveDraftStep1 = async () => {
     try {
       const payload = {
         namaPemilik: formData.namaPemilik,
@@ -338,8 +338,6 @@ export default function WizardPage() {
         kodePos: formData.kodePos,
         latitude: formData.latitude,
         longitude: formData.longitude,
-        luasTanah: formData.luasTanah || "150",
-        fotoLokasi: formData.fotoLokasi || "default_base64",
         namaUsaha: formData.namaUsaha || "USAHA PEMILIK",
         ceritaUsaha: formData.ceritaUsaha || "Deskripsi cerita usaha pemilik",
         modalUsaha: formData.modalUsaha || "10000000",
@@ -363,6 +361,48 @@ export default function WizardPage() {
       } else {
         throw new Error("ID draf tidak valid.");
       }
+    } catch (e: any) {
+      console.error(e);
+      setVerifyingErrorText(e.message || "Gagal sinkronisasi data draf.");
+      setVerifyingStatusText("Koneksi Gagal");
+    }
+  };
+
+  const saveDraftStep2 = async () => {
+    try {
+      const payload = {
+        alamatUsaha: formData.alamatUsaha,
+        alamatKtp: formData.alamatKtp,
+        provinsiKtp: formData.provinsiKtp,
+        kotaKabupatenKtp: formData.kotaKabupatenKtp,
+        kecamatanKtp: formData.kecamatanKtp,
+        kelurahanKtp: formData.kelurahanKtp,
+        kodePosKtp: formData.kodePosKtp,
+        provinsi: formData.provinsi,
+        kotaKabupaten: formData.kotaKabupaten,
+        kecamatan: formData.kecamatan,
+        kelurahan: formData.kelurahan,
+        kodePos: formData.kodePos,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        luasTanah: formData.luasTanah || "150",
+        fotoLokasi: formData.fotoLokasi || "default_base64",
+        sessionId: getSessionId(),
+      };
+
+      const draftId = sessionStorage.getItem("draft_id");
+      if (!draftId) {
+        // Fallback: create new draft if one doesn't exist
+        return saveDraftStep1();
+      }
+
+      const res = await fetch(`${API_URL}/drafts/${draftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Gagal memperbarui draf di server.");
     } catch (e: any) {
       console.error(e);
       setVerifyingErrorText(e.message || "Gagal sinkronisasi data draf.");
@@ -1390,16 +1430,23 @@ export default function WizardPage() {
         return;
       }
 
-      if (currentStep === 2) {
+      if (currentStep === 1) {
         const isBelum = typeof window !== "undefined" ? sessionStorage.getItem("akun_oss") || "belum" : "belum";
         const isRegCompleted = typeof window !== "undefined" && sessionStorage.getItem("registration_completed") === "true";
         if (isBelum === "belum" && !isRegCompleted && !registrationCompleted && !isVerifyingStep2) {
           setIsVerifyingStep2(true);
           setShowVerificationModal(true);
           setIsMinimized(false);
-          saveDraftStep2();
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("wizard_step", "1");
+          }
+          saveDraftStep1();
           return;
         }
+      }
+
+      if (currentStep === 2) {
+        saveDraftStep2();
       }
 
       if (currentStep < 4) {
