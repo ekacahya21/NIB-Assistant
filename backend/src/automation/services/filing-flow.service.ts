@@ -474,7 +474,37 @@ export class FilingFlowService {
       .catch(() => null);
 
     // check if there's any popup message, close by clicking "Mengerti"
-    await this.interactionHelper.dismissPopupIfVisible(page, context, 5);
+    await this.interactionHelper.dismissPopupIfVisible(page, context, 5, 5000);
+
+    // Check if OSS redirected to Data Pelaku Usaha due to incomplete profile data
+    const currentUrl = page.url() || '';
+    const isDataPelakuUsahaUrl =
+      currentUrl.includes('data-pelaku-usaha') ||
+      currentUrl.includes('pelaku-usaha');
+    const isDataPelakuUsahaText = await page
+      .getByText(/Data Pelaku Usaha/i)
+      .first()
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
+    const isTambahLokasiAvailable = await page
+      .getByRole('button', { name: 'Tambah Lokasi' })
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
+
+    if (
+      (isDataPelakuUsahaUrl || isDataPelakuUsahaText) &&
+      !isTambahLokasiAvailable &&
+      !currentUrl.includes('lokasi-usaha')
+    ) {
+      context.logStep(
+        5,
+        'error',
+        'Data Pelaku Usaha pada akun OSS ini belum lengkap. Harap lengkapi Data Pelaku Usaha terlebih dahulu di portal OSS sebelum melanjutkan proses pengajuan.',
+      );
+      throw new Error(
+        'Data Pelaku Usaha pada akun OSS belum lengkap. Sistem dialihkan ke menu Data Pelaku Usaha.',
+      );
+    }
 
     const cardSelector = '.lokasi-usaha-card';
     const cardLocator = page.locator(cardSelector);

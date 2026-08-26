@@ -216,50 +216,67 @@ export class PortalInteractionHelper {
     context: AutomationSessionContext,
     step: number,
     timeoutMs = 3000,
-  ): Promise<void> {
-    let loopCount = 0;
-    while (loopCount < 5) {
+  ): Promise<boolean> {
+    const startTime = Date.now();
+    let anyDismissed = false;
+
+    while (Date.now() - startTime < timeoutMs) {
       try {
+        const buttonSelectors = [
+          'button:has-text("Mengerti")',
+          'button:has-text("Tutup")',
+          'button:has-text("Close")',
+          'button:has-text("OK")',
+          'button:has-text("Ya")',
+          'button:has-text("Lanjut")',
+          'button:has-text("Simpan")',
+          '.v-overlay-container button',
+          '.v-dialog button',
+          '.popup-modal button',
+          '.modal-dialog button',
+          '.swal2-confirm',
+        ].join(', ');
+
         const candidates = page
-          .locator(
-            '.v-overlay-container button, .v-overlay-container .v-btn, .v-overlay-container [role="button"], .popup-modal button',
-          )
+          .locator(buttonSelectors)
           .filter({
-            hasText: /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan/i,
+            hasText:
+              /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan|saya mengerti|setuju/i,
           });
 
-        // Wait briefly for elements to mount
-        await page.waitForTimeout(500);
+        const roleCandidates = page.getByRole('button', {
+          name: /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan|saya mengerti|setuju/i,
+        });
 
-        const count = await candidates.count().catch(() => 0);
-        let clicked = false;
-        for (let i = 0; i < count; i++) {
-          const btn = candidates.nth(i);
-          if (
-            (await btn.isVisible().catch(() => false)) &&
-            (await btn.isEnabled().catch(() => false))
-          ) {
-            const text = await btn.textContent().catch(() => '');
+        let targetBtn: any = null;
+        if (await candidates.first().isVisible().catch(() => false)) {
+          targetBtn = candidates.first();
+        } else if (
+          await roleCandidates.first().isVisible().catch(() => false)
+        ) {
+          targetBtn = roleCandidates.first();
+        }
+
+        if (targetBtn && (await targetBtn.isEnabled().catch(() => false))) {
+          const text =
+            (await targetBtn.textContent().catch(() => 'Mengerti')) ||
+            'Mengerti';
+          if (step > 0 && context) {
             context.logStep(
               step,
               'info',
-              `Mengklik tombol "${text.trim()}" untuk menutup popup (loop #${loopCount + 1})...`,
+              `Mengklik tombol "${text.trim()}" untuk menutup popup...`,
             );
-            await btn.click({ force: true });
-            await page.waitForTimeout(1000);
-            clicked = true;
-            break;
           }
-        }
-        if (clicked) {
-          loopCount++;
+          await targetBtn.click({ force: true }).catch(() => null);
+          anyDismissed = true;
+          await page.waitForTimeout(1000);
           continue;
         }
       } catch (err) {
-        // Click failed, exit loop to run DOM removal
-        break;
+        // Retry until timeout
       }
-      break;
+      await page.waitForTimeout(400);
     }
 
     // Forceful DOM cleanup: remove active dialog overlays to clear blocking popups without destroying dropdown menu roots
@@ -270,18 +287,21 @@ export class PortalInteractionHelper {
           '.v-dialog',
           '.popup-modal',
           '.modal-backdrop',
+          '.swal2-container',
         ];
         elementsToClear.forEach((sel) => {
           document.querySelectorAll(sel).forEach((el) => el.remove());
         });
       });
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300);
     } catch (e) {
       this.logger.error(
         'Failed during fallback DOM removal in dismissPopupIfVisible',
         e,
       );
     }
+
+    return anyDismissed;
   }
 
   public async logSessionState(
