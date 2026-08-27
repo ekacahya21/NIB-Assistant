@@ -1617,8 +1617,24 @@ export class FilingFlowService {
       await productTypeCombobox.click();
       await productTypeCombobox.fill(productInfo.jenisProdukJasa);
       await page.waitForTimeout(500);
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(1000);
+
+      const productTypeOption = page
+        .locator('.v-list-item, [role="option"], .v-overlay [role="option"]')
+        .filter({
+          hasText: new RegExp(`^\\s*${productInfo.jenisProdukJasa}\\s*$`, 'i'),
+        })
+        .first();
+
+      if (
+        await productTypeOption
+          .isVisible({ timeout: 1500 })
+          .catch(() => false)
+      ) {
+        await productTypeOption.click({ force: true });
+      } else {
+        await page.keyboard.press('Enter');
+      }
+      await page.waitForTimeout(500);
 
       const capacityInput = page
         .getByTestId('product-service-card-capacity')
@@ -1640,8 +1656,31 @@ export class FilingFlowService {
       await unitCombobox.click();
       await unitCombobox.fill(unitToFill);
       await page.waitForTimeout(500);
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(1000);
+
+      // Explicitly find and click the matching dropdown option
+      const unitOption = page
+        .locator('.v-list-item, [role="option"], .v-overlay [role="option"]')
+        .filter({ hasText: new RegExp(`^\\s*${unitToFill}\\s*$`, 'i') })
+        .first();
+
+      if (await unitOption.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await unitOption.click({ force: true });
+      } else {
+        // Fallback: click first visible option in the dropdown list or use ArrowDown + Enter
+        const firstOption = page
+          .locator('.v-list-item, [role="option"]')
+          .first();
+        if (
+          await firstOption.isVisible({ timeout: 1000 }).catch(() => false)
+        ) {
+          await firstOption.click({ force: true });
+        } else {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(200);
+          await page.keyboard.press('Enter');
+        }
+      }
+      await page.waitForTimeout(500);
 
       await page.getByRole('button', { name: 'Simpan', exact: true }).click();
       await page.waitForTimeout(2000);

@@ -317,47 +317,79 @@ export default function WizardPage() {
 
   const saveDraftStep1 = async () => {
     try {
+      const isSudah =
+        (typeof window !== "undefined"
+          ? sessionStorage.getItem("akun_oss")
+          : akunOss) === "sudah";
       const payload = {
-        namaPemilik: formData.namaPemilik,
-        nik: formData.nik,
-        tanggalLahir: formData.tanggalLahir,
-        jenisKelamin: formData.jenisKelamin,
-        nomorHp: formData.nomorHp,
+        namaPemilik:
+          formData.namaPemilik || (isSudah ? "PEMILIK AKUN OSS" : ""),
+        nik: formData.nik || "",
+        tanggalLahir: formData.tanggalLahir || "",
+        jenisKelamin: formData.jenisKelamin || "",
+        nomorHp: formData.nomorHp || "",
         email: formData.email,
-        alamatUsaha: formData.alamatUsaha,
-        alamatKtp: formData.alamatKtp,
-        provinsiKtp: formData.provinsiKtp,
-        kotaKabupatenKtp: formData.kotaKabupatenKtp,
-        kecamatanKtp: formData.kecamatanKtp,
-        kelurahanKtp: formData.kelurahanKtp,
-        kodePosKtp: formData.kodePosKtp,
-        provinsi: formData.provinsi,
-        kotaKabupaten: formData.kotaKabupaten,
-        kecamatan: formData.kecamatan,
-        kelurahan: formData.kelurahan,
-        kodePos: formData.kodePos,
-        latitude: formData.latitude,
-        longitude: formData.longitude,
+        alamatUsaha: formData.alamatUsaha || "",
+        alamatKtp: formData.alamatKtp || formData.alamatUsaha || "",
+        provinsiKtp: formData.provinsiKtp || formData.provinsi || "",
+        kotaKabupatenKtp:
+          formData.kotaKabupatenKtp || formData.kotaKabupaten || "",
+        kecamatanKtp: formData.kecamatanKtp || formData.kecamatan || "",
+        kelurahanKtp: formData.kelurahanKtp || formData.kelurahan || "",
+        kodePosKtp: formData.kodePosKtp || formData.kodePos || "",
+        provinsi: formData.provinsi || "",
+        kotaKabupaten: formData.kotaKabupaten || "",
+        kecamatan: formData.kecamatan || "",
+        kelurahan: formData.kelurahan || "",
+        kodePos: formData.kodePos || "",
+        latitude: formData.latitude || "",
+        longitude: formData.longitude || "",
         namaUsaha: formData.namaUsaha || "USAHA PEMILIK",
         ceritaUsaha: formData.ceritaUsaha || "Deskripsi cerita usaha pemilik",
         modalUsaha: formData.modalUsaha || "10000000",
         jumlahPekerja: formData.jumlahPekerja || "1",
         kbliCode: selectedKbliCode || "56103",
         kbliTitle: "Kedai Makanan",
+        ossPassword:
+          formData.ossPassword ||
+          (typeof window !== "undefined"
+            ? sessionStorage.getItem("oss_password") || ""
+            : ""),
+        registrationCompleted: isSudah || registrationCompleted,
         sessionId: getSessionId(),
       };
+
+      const existingDraftId =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("draft_id")
+          : null;
+      if (existingDraftId) {
+        await fetch(`${API_URL}/drafts/${existingDraftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!isSudah && !registrationCompleted) {
+          startVerificationStream(existingDraftId);
+        }
+        return;
+      }
 
       const res = await fetch(`${API_URL}/drafts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Gagal menyimpan draf di server.");
       const savedDraft = await res.json();
       if (savedDraft && savedDraft.id) {
-        sessionStorage.setItem("draft_id", savedDraft.id);
-        startVerificationStream(savedDraft.id);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("draft_id", savedDraft.id);
+        }
+        if (!isSudah && !registrationCompleted) {
+          startVerificationStream(savedDraft.id);
+        }
       } else {
         throw new Error("ID draf tidak valid.");
       }
@@ -370,14 +402,19 @@ export default function WizardPage() {
 
   const saveDraftStep2 = async () => {
     try {
+      const isSudah =
+        (typeof window !== "undefined"
+          ? sessionStorage.getItem("akun_oss")
+          : akunOss) === "sudah";
       const payload = {
         alamatUsaha: formData.alamatUsaha,
-        alamatKtp: formData.alamatKtp,
-        provinsiKtp: formData.provinsiKtp,
-        kotaKabupatenKtp: formData.kotaKabupatenKtp,
-        kecamatanKtp: formData.kecamatanKtp,
-        kelurahanKtp: formData.kelurahanKtp,
-        kodePosKtp: formData.kodePosKtp,
+        alamatKtp: formData.alamatKtp || formData.alamatUsaha,
+        provinsiKtp: formData.provinsiKtp || formData.provinsi,
+        kotaKabupatenKtp:
+          formData.kotaKabupatenKtp || formData.kotaKabupaten,
+        kecamatanKtp: formData.kecamatanKtp || formData.kecamatan,
+        kelurahanKtp: formData.kelurahanKtp || formData.kelurahan,
+        kodePosKtp: formData.kodePosKtp || formData.kodePos,
         provinsi: formData.provinsi,
         kotaKabupaten: formData.kotaKabupaten,
         kecamatan: formData.kecamatan,
@@ -387,10 +424,19 @@ export default function WizardPage() {
         longitude: formData.longitude,
         luasTanah: formData.luasTanah || "150",
         fotoLokasi: formData.fotoLokasi || "default_base64",
+        ossPassword:
+          formData.ossPassword ||
+          (typeof window !== "undefined"
+            ? sessionStorage.getItem("oss_password") || ""
+            : ""),
+        registrationCompleted: isSudah || registrationCompleted,
         sessionId: getSessionId(),
       };
 
-      const draftId = sessionStorage.getItem("draft_id");
+      const draftId =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("draft_id")
+          : null;
       if (!draftId) {
         // Fallback: create new draft if one doesn't exist
         return saveDraftStep1();
@@ -399,7 +445,7 @@ export default function WizardPage() {
       const res = await fetch(`${API_URL}/drafts/${draftId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Gagal memperbarui draf di server.");
@@ -1431,9 +1477,24 @@ export default function WizardPage() {
       }
 
       if (currentStep === 1) {
-        const isBelum = typeof window !== "undefined" ? sessionStorage.getItem("akun_oss") || "belum" : "belum";
-        const isRegCompleted = typeof window !== "undefined" && sessionStorage.getItem("registration_completed") === "true";
-        if (isBelum === "belum" && !isRegCompleted && !registrationCompleted && !isVerifyingStep2) {
+        const isBelum =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem("akun_oss") || "belum"
+            : "belum";
+        const isRegCompleted =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("registration_completed") === "true";
+
+        if (formData.ossPassword && typeof window !== "undefined") {
+          sessionStorage.setItem("oss_password", formData.ossPassword);
+        }
+
+        if (
+          isBelum === "belum" &&
+          !isRegCompleted &&
+          !registrationCompleted &&
+          !isVerifyingStep2
+        ) {
           setIsVerifyingStep2(true);
           setShowVerificationModal(true);
           setIsMinimized(false);
@@ -1442,6 +1503,12 @@ export default function WizardPage() {
           }
           saveDraftStep1();
           return;
+        } else if (isBelum === "sudah") {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("registration_completed", "true");
+          }
+          setRegistrationCompleted(true);
+          saveDraftStep1();
         }
       }
 
