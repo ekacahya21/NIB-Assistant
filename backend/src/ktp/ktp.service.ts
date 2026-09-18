@@ -23,7 +23,14 @@ export class KtpService {
 
     const localHost = process.env.LOCAL_LLM_HOST;
     const localKey = process.env.LOCAL_LLM_KEY;
-    const localModel = process.env.LOCAL_LLM_MODEL || 'combo-max';
+    const configuredModel =
+      process.env.LOCAL_VISION_MODEL || process.env.LOCAL_LLM_MODEL;
+    // 'combo-max' in 9router/local proxy routes to text-only Claude which drops image attachments.
+    // Use vision-capable model 'ag/gemini-3.7-flash-high' (with 'ag/gemini-3-flash' fallback).
+    const localModel =
+      configuredModel && configuredModel !== 'combo-max'
+        ? configuredModel
+        : 'ag/gemini-3.7-flash-high';
 
     const geminiKey =
       process.env.GEMINI_API_KEY ||
@@ -69,21 +76,38 @@ Kembalikan HANYA format JSON yang valid.`;
       let rawResponse = '';
 
       if (localHost) {
-        try {
-          this.logger.log(
-            `Calling Local Vision LLM at ${localHost} using model ${localModel}...`,
-          );
-          rawResponse = await this.callLocalVisionLlm(
-            localHost,
-            localKey,
-            localModel,
-            base64Image,
-            mimeType,
-            prompt,
-          );
-        } catch (localErr: any) {
+        const candidateModels = [localModel];
+        if (localModel !== 'ag/gemini-3-flash') {
+          candidateModels.push('ag/gemini-3-flash');
+        }
+
+        let localSuccess = false;
+        let lastLocalErr: any = null;
+
+        for (const m of candidateModels) {
+          try {
+            this.logger.log(
+              `Calling Local Vision LLM at ${localHost} using model ${m}...`,
+            );
+            rawResponse = await this.callLocalVisionLlm(
+              localHost,
+              localKey,
+              m,
+              base64Image,
+              mimeType,
+              prompt,
+            );
+            localSuccess = true;
+            break;
+          } catch (err: any) {
+            lastLocalErr = err;
+            this.logger.warn(`Local Vision LLM with ${m} failed: ${err.message}`);
+          }
+        }
+
+        if (!localSuccess) {
           this.logger.warn(
-            `Local Vision LLM failed: ${localErr.message}. Fallback to Gemini if available.`,
+            `All local vision models failed: ${lastLocalErr?.message}. Fallback to Gemini if available.`,
           );
           if (geminiKey) {
             rawResponse = await this.callGeminiVision(
@@ -93,7 +117,7 @@ Kembalikan HANYA format JSON yang valid.`;
               prompt,
             );
           } else {
-            throw localErr;
+            throw lastLocalErr;
           }
         }
       } else if (geminiKey) {
