@@ -62,7 +62,8 @@ PENTING:
    - "pekerjaan": Pekerjaan jika tertera.
    - "isKtp": true
 
-Kembalikan HANYA JSON murni tanpa markdown backticks (no \`\`\`json).`;
+DILARANG KERAS menyertakan salam, teks pembuka/pengantar (seperti "Saya siap...", "Berikut adalah...", dll), atau teks penutup.
+Kembalikan HANYA format JSON yang valid.`;
 
     try {
       let rawResponse = '';
@@ -104,8 +105,7 @@ Kembalikan HANYA JSON murni tanpa markdown backticks (no \`\`\`json).`;
         );
       }
 
-      const cleanedText = rawResponse.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      const parsed = JSON.parse(cleanedText);
+      const parsed = this.parseJsonResponse(rawResponse);
 
       if (parsed.isKtp === false || parsed.error) {
         throw new BadRequestException(
@@ -234,7 +234,13 @@ Kembalikan HANYA JSON murni tanpa markdown backticks (no \`\`\`json).`;
     const payload = {
       model,
       stream: false,
+      temperature: 0.1,
       messages: [
+        {
+          role: 'system',
+          content:
+            'Anda adalah OCR engine khusus analisis KTP Indonesia. Anda HANYA mengeluarkan JSON yang valid tanpa kata pengantar, salam, atau teks tambahan.',
+        },
         {
           role: 'user',
           content: [
@@ -304,5 +310,47 @@ Kembalikan HANYA JSON murni tanpa markdown backticks (no \`\`\`json).`;
     }
 
     return cleaned;
+  }
+
+  /**
+   * Safely extract and parse JSON object from LLM response text,
+   * handling conversational preambles (e.g. "Saya siap..."), markdown blocks,
+   * and non-JSON responses.
+   */
+  private parseJsonResponse(raw: string): any {
+    if (!raw || typeof raw !== 'string') {
+      throw new BadRequestException('Respon dari AI kosong atau tidak valid.');
+    }
+
+    let candidate = raw.trim();
+
+    // 1. If wrapped in markdown code blocks ```json ... ``` or ``` ... ```
+    const codeBlockMatch = candidate.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      candidate = codeBlockMatch[1].trim();
+    }
+
+    // 2. Extract substring between first '{' and last '}'
+    const firstBrace = candidate.indexOf('{');
+    const lastBrace = candidate.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      candidate = candidate.substring(firstBrace, lastBrace + 1).trim();
+    } else {
+      this.logger.warn(`No JSON braces found in LLM response: ${raw.substring(0, 300)}`);
+      throw new BadRequestException(
+        'AI tidak dapat mendeteksi atau mengekstrak format KTP yang valid dari gambar yang diberikan.',
+      );
+    }
+
+    try {
+      return JSON.parse(candidate);
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to parse JSON from LLM: ${err.message}. Raw text: ${raw.substring(0, 500)}`,
+      );
+      throw new BadRequestException(
+        'Gagal memproses data KTP dari respon AI. Silakan coba unggah foto yang lebih jelas.',
+      );
+    }
   }
 }
