@@ -1,9 +1,233 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationSessionContext } from '../context/automation-session.context';
+import { SelfHealingAgentService } from './self-healing-agent.service';
 
 @Injectable()
 export class PortalInteractionHelper {
   private readonly logger = new Logger(PortalInteractionHelper.name);
+
+  constructor(
+    @Optional() private readonly selfHealingAgent?: SelfHealingAgentService,
+  ) {}
+
+  /**
+   * Clicks an element with automatic self-healing fallback using Vision AI
+   */
+  public async clickOrHeal(
+    page: any,
+    defaultSelector: string,
+    description: string,
+    context: AutomationSessionContext,
+    options?: { timeout?: number; step?: number },
+  ): Promise<boolean> {
+    const currentUrl = page.url ? page.url() : '';
+    const step = options?.step || 1;
+    const timeout = options?.timeout || 3000;
+
+    // 1. Try cached selector if available
+    if (this.selfHealingAgent) {
+      const cachedSelector = this.selfHealingAgent.getCachedSelector(currentUrl, description);
+      if (cachedSelector && cachedSelector !== defaultSelector) {
+        try {
+          this.logger.log(`[PortalHelper] Trying cached selector for "${description}": ${cachedSelector}`);
+          await page.click(cachedSelector, { timeout: 2000 });
+          return true;
+        } catch (cachedErr) {
+          this.logger.warn(`[PortalHelper] Cached selector failed for "${description}", falling back to default.`);
+        }
+      }
+    }
+
+    // 2. Try default selector
+    try {
+      await page.click(defaultSelector, { timeout });
+      return true;
+    } catch (defaultErr: any) {
+      this.logger.warn(`[PortalHelper] Default click failed for "${description}" (${defaultSelector}): ${defaultErr.message}`);
+    }
+
+    // 3. Fallback to Self-Healing Vision Agent
+    if (this.selfHealingAgent) {
+      const healResult = await this.selfHealingAgent.healAndAct({
+        page,
+        targetDescription: description,
+        actionType: 'click',
+        currentStep: step,
+        context,
+      });
+      return healResult.success;
+    }
+
+    return false;
+  }
+
+  /**
+   * Fills an input field with automatic self-healing fallback using Vision AI
+   */
+  public async fillOrHeal(
+    page: any,
+    defaultSelector: string,
+    value: string,
+    description: string,
+    context: AutomationSessionContext,
+    options?: { timeout?: number; step?: number },
+  ): Promise<boolean> {
+    const currentUrl = page.url ? page.url() : '';
+    const step = options?.step || 1;
+    const timeout = options?.timeout || 3000;
+
+    // 1. Try cached selector if available
+    if (this.selfHealingAgent) {
+      const cachedSelector = this.selfHealingAgent.getCachedSelector(currentUrl, description);
+      if (cachedSelector && cachedSelector !== defaultSelector) {
+        try {
+          this.logger.log(`[PortalHelper] Trying cached selector for input "${description}": ${cachedSelector}`);
+          await page.fill(cachedSelector, value, { timeout: 2000 });
+          return true;
+        } catch (cachedErr) {
+          this.logger.warn(`[PortalHelper] Cached selector failed for input "${description}", falling back to default.`);
+        }
+      }
+    }
+
+    // 2. Try default selector
+    try {
+      await page.fill(defaultSelector, value, { timeout });
+      return true;
+    } catch (defaultErr: any) {
+      this.logger.warn(`[PortalHelper] Default fill failed for "${description}" (${defaultSelector}): ${defaultErr.message}`);
+    }
+
+    // 3. Fallback to Self-Healing Vision Agent
+    if (this.selfHealingAgent) {
+      const healResult = await this.selfHealingAgent.healAndAct({
+        page,
+        targetDescription: description,
+        actionType: 'fill',
+        expectedValue: value,
+        currentStep: step,
+        context,
+      });
+      return healResult.success;
+    }
+
+    return false;
+  }
+
+  /**
+   * Global Helper: Clicks a submit/next button and automatically verifies if form validation errors appear.
+   * If validation errors ("Wajib diisi", "harus diisi", etc.) block progress, triggers Self-Healing AI automatically!
+   */
+  public async clickAndHealValidation(
+    page: any,
+    target: any,
+    description: string,
+    context: AutomationSessionContext,
+    options?: {
+      step?: number;
+      maxRetries?: number;
+      postClickDelay?: number;
+    },
+  ): Promise<boolean> {
+    const step = options?.step || 1;
+    const maxRetries = options?.maxRetries || 2;
+    const delay = options?.postClickDelay || 1000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // 1. Perform click
+      try {
+        if (typeof target === 'string') {
+          await page.click(target, { timeout: 4000 });
+        } else if (target && typeof target.click === 'function') {
+          await target.click({ timeout: 4000 });
+        }
+      } catch (clickErr: any) {
+        this.logger.warn(
+          `[PortalHelper] Click failed on ${description}: ${clickErr.message}`,
+        );
+        if (this.selfHealingAgent) {
+          await this.selfHealingAgent.healAndAct({
+            page,
+            targetDescription: description,
+            actionType: 'click',
+            currentStep: step,
+            context,
+          });
+        }
+      }
+
+      await page.waitForTimeout(delay);
+
+      // 2. Check for form validation error messages
+      const validationErrorLocator = page.locator(
+        'text="Wajib diisi", text="harus diisi", .v-messages__message:has-text("Wajib"), .v-input--error',
+      );
+      const hasErrors = await validationErrorLocator
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      if (!hasErrors) {
+        // Form submitted successfully without validation errors!
+        return true;
+      }
+
+      this.logger.warn(
+        `[PortalHelper] Form validation error detected after clicking "${description}" (Attempt ${attempt}/${maxRetries}).`,
+      );
+
+      // 3. Fast auto-resolve: Check if there are unselected radiogroups near the error
+      try {
+        const unselectedRadios = page.locator(
+          '.v-input--radio-group:has-text("Wajib diisi"), .v-input--radio-group:not(:has(input:checked))',
+        );
+        const count = await unselectedRadios.count().catch(() => 0);
+        if (count > 0) {
+          for (let i = 0; i < count; i++) {
+            const group = unselectedRadios.nth(i);
+            const tidakOption = group.getByLabel(/tidak/i).first();
+            if (await tidakOption.isVisible().catch(() => false)) {
+              await tidakOption.check().catch(() => null);
+              await page.waitForTimeout(300);
+            }
+          }
+        }
+      } catch (fastResolveErr) {}
+
+      // 4. If errors still persist, invoke Vision LLM Self-Healing Agent
+      const stillHasErrors = await validationErrorLocator
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (stillHasErrors && this.selfHealingAgent) {
+        context.logStep(
+          step,
+          'warn',
+          `[Self-Healing] Mendeteksi error validasi formulir ("Wajib diisi") setelah klik ${description}. Memanggil AI Vision untuk memperbaiki...`,
+        );
+
+        await this.selfHealingAgent.healAndAct({
+          page,
+          targetDescription:
+            'Elemen formulir yang memunculkan peringatan "Wajib diisi" atau bertanda merah',
+          actionType: 'click',
+          currentStep: step,
+          context,
+        });
+      }
+    }
+
+    // Final click attempt after healing
+    try {
+      if (typeof target === 'string') {
+        await page.click(target, { timeout: 3000 }).catch(() => null);
+      } else if (target && typeof target.click === 'function') {
+        await target.click({ timeout: 3000 }).catch(() => null);
+      }
+    } catch {}
+
+    return true;
+  }
 
   public async selectOptionRobust(
     page: any,
@@ -223,33 +447,38 @@ export class PortalInteractionHelper {
     while (Date.now() - startTime < timeoutMs) {
       try {
         const buttonSelectors = [
-          'button:has-text("Mengerti")',
-          'button:has-text("Tutup")',
-          'button:has-text("Close")',
-          'button:has-text("OK")',
-          'button:has-text("Ya")',
-          'button:has-text("Lanjut")',
-          'button:has-text("Simpan")',
           '.v-overlay-container button',
           '.v-dialog button',
           '.popup-modal button',
           '.modal-dialog button',
           '.swal2-confirm',
+          '[role="dialog"] button',
+          'button:has-text("Mengerti")',
+          'button:has-text("Saya Mengerti")',
+          'button:has-text("Tutup")',
+          'button:has-text("Close")',
         ].join(', ');
 
         const candidates = page
           .locator(buttonSelectors)
           .filter({
             hasText:
-              /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan|saya mengerti|setuju/i,
+              /^(mengerti|tutup|close|\bok\b|saya mengerti)$/i,
           });
 
         const roleCandidates = page.getByRole('button', {
-          name: /mengerti|tutup|close|\bok\b|\bya\b|lanjut|simpan|saya mengerti|setuju/i,
+          name: /^(mengerti|tutup|close|\bok\b|saya mengerti)$/i,
+        });
+
+        // Also check if dialog button exists inside active modal
+        const dialogBtn = page.locator('.v-dialog:visible button, .swal2-container:visible button').filter({
+          hasText: /mengerti|tutup|close|\bok\b|\bya\b|setuju|batal/i,
         });
 
         let targetBtn: any = null;
-        if (await candidates.first().isVisible().catch(() => false)) {
+        if (await dialogBtn.first().isVisible().catch(() => false)) {
+          targetBtn = dialogBtn.first();
+        } else if (await candidates.first().isVisible().catch(() => false)) {
           targetBtn = candidates.first();
         } else if (
           await roleCandidates.first().isVisible().catch(() => false)

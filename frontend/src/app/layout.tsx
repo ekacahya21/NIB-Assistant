@@ -34,7 +34,10 @@ export default function RootLayout({
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         />
       </head>
-      <body className="min-h-full flex flex-col font-sans bg-background text-on-background">
+      <body
+        className="min-h-full flex flex-col font-sans bg-background text-on-background"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

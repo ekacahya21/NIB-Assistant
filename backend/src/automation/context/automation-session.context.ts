@@ -20,4 +20,8 @@ export interface AutomationSessionContext {
   waitForProductInput: () => Promise<any>;
   waitForParameterInput: () => Promise<string>;
   waitForEmail: () => Promise<string>;
+  waitForDynamicPrompt?: (
+    config: import('../services/self-healing-agent.service').DynamicPromptConfig,
+  ) => Promise<any>;
 }
+

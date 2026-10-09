@@ -105,6 +105,16 @@ export class AutomationController {
     return { success: true };
   }
 
+  @Post('dynamic-action/:draftId')
+  submitDynamicAction(
+    @Param('draftId') draftId: string,
+    @Body() body: { promptId?: string; value: any },
+  ) {
+    this.automationService.submitDynamicUserAction(draftId, body);
+    return { success: true };
+  }
+
+
   @Get('redirection-url/:draftId')
   getRedirectionUrl(@Param('draftId') draftId: string) {
     const url = this.automationService.getRedirectionUrl(draftId);

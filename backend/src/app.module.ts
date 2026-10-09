@@ -12,6 +12,7 @@ import { AutomationService } from './automation/automation.service';
 import { PortalInteractionHelper } from './automation/services/portal-interaction.helper';
 import { RegistrationFlowService } from './automation/services/registration-flow.service';
 import { FilingFlowService } from './automation/services/filing-flow.service';
+import { SelfHealingAgentService } from './automation/services/self-healing-agent.service';
 import { DocumentsModule } from './documents/documents.module';
 import { PrismaService } from './prisma.service';
 import { AuthController } from './auth/auth.controller';
@@ -42,6 +43,7 @@ import { KtpModule } from './ktp/ktp.module';
     PortalInteractionHelper,
     RegistrationFlowService,
     FilingFlowService,
+    SelfHealingAgentService,
     PrismaService,
     {
       provide: APP_FILTER,

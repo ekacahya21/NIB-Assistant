@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSessionId } from "../../utils/session";
 import SearchableSelect from "@/components/molecules/SearchableSelect";
 import LiveConsole from "@/components/organisms/LiveConsole";
+import DynamicInterventionModal, { DynamicPromptConfig } from "@/components/molecules/DynamicInterventionModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -70,6 +71,10 @@ export default function AutomationPage() {
   const [selectedParameter, setSelectedParameter] = useState<string>("");
   const [isSubmittingParameter, setIsSubmittingParameter] = useState<boolean>(false);
   const [parameterError, setParameterError] = useState<string>("");
+
+  // Self-Healing Dynamic Prompt States
+  const [dynamicPrompt, setDynamicPrompt] = useState<DynamicPromptConfig | null>(null);
+  const [isSubmittingDynamic, setIsSubmittingDynamic] = useState<boolean>(false);
 
   // Dynamic Background Process UI States
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -218,7 +223,7 @@ export default function AutomationPage() {
 
   useEffect(() => {
     let timerId: any;
-    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter || isPromptingKbli2025 || isPromptingEmail) {
+    if (isPromptingOtp || isPromptingPassword || isPromptingProduct || isPromptingParameter || isPromptingKbli2025 || isPromptingEmail || dynamicPrompt) {
       clearElapsedTimer();
       setTimeLeft(120);
       timerId = setInterval(() => {
@@ -238,7 +243,7 @@ export default function AutomationPage() {
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter, isPromptingKbli2025, isPromptingEmail]);
+  }, [isPromptingOtp, isPromptingPassword, isPromptingProduct, isPromptingParameter, isPromptingKbli2025, isPromptingEmail, dynamicPrompt]);
 
   // Add Log helper
   const addLog = (text: string, type: "info" | "success" | "warn" | "error" = "info") => {
@@ -330,6 +335,7 @@ export default function AutomationPage() {
               setIsPromptingParameter(false);
               setIsPromptingKbli2025(false);
               setIsPromptingEmail(false);
+              setDynamicPrompt(null);
               if (payload.text.toLowerCase().includes("ktp")) {
                 setErrorType("ktp_mismatch");
               } else if (payload.text.toLowerCase().includes("nik")) {
@@ -346,6 +352,12 @@ export default function AutomationPage() {
               }
             }
             addLog(payload.text, payload.status || "info");
+
+            // Intercept Self-Healing Dynamic Prompts
+            if (payload.data?.dynamicPrompt) {
+              setDynamicPrompt(payload.data.dynamicPrompt);
+              setStatusText(`Menunggu konfirmasi: ${payload.data.dynamicPrompt.title}`);
+            }
             
             // Map text to UI Status indicator
             if (payload.step === 1) setStatusText("Membuka Portal OSS");
@@ -676,6 +688,33 @@ export default function AutomationPage() {
     setIsPromptingOtp(false);
     setIsPromptingPassword(false);
     setIsPromptingEmail(false);
+  };
+
+  const handleDynamicActionSubmit = async (value: any) => {
+    if (!dynamicPrompt) return;
+    setIsSubmittingDynamic(true);
+    const draftId = typeof window !== "undefined" ? sessionStorage.getItem("draft_id") || "DEMO123" : "DEMO123";
+
+    try {
+      const res = await fetch(`${API_URL}/automation/dynamic-action/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptId: dynamicPrompt.promptId,
+          value,
+        }),
+      });
+      if (res.ok) {
+        addLog(`[Self-Healing] Respons berhasil dikirim: ${typeof value === "object" ? JSON.stringify(value) : value}`, "success");
+        setDynamicPrompt(null);
+      } else {
+        addLog("[Self-Healing] Gagal mengirim respons ke sistem.", "error");
+      }
+    } catch (err: any) {
+      addLog(`[Self-Healing] Error: ${err.message}`, "error");
+    } finally {
+      setIsSubmittingDynamic(false);
+    }
   };
 
   const handleOtpSubmit = (e: React.FormEvent) => {
@@ -1667,6 +1706,15 @@ export default function AutomationPage() {
 
         </div>
       </main>
+
+      {/* Dynamic Self-Healing Intervention Modal */}
+      <DynamicInterventionModal
+        isOpen={!!dynamicPrompt}
+        config={dynamicPrompt}
+        isSubmitting={isSubmittingDynamic}
+        onSubmit={handleDynamicActionSubmit}
+        onCancel={() => handleDynamicActionSubmit("Batal")}
+      />
 
     </div>
   );

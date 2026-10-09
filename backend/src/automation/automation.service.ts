@@ -55,6 +55,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   >();
   private readonly activeParameterInputs = new Map<string, string>();
   private readonly activeEmails = new Map<string, string>();
+  private readonly activeDynamicPrompts = new Map<string, any>();
   private readonly activeTokens = new Map<string, string>();
   private readonly subjectToDraftId = new Map<
     Subject<AutomationEvent>,
@@ -220,6 +221,11 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
   submitEmail(draftId: string, email: string) {
     this.activeEmails.set(draftId, email);
+    this.userConfirmations.next(draftId);
+  }
+
+  submitDynamicUserAction(draftId: string, payload: any) {
+    this.activeDynamicPrompts.set(draftId, payload);
     this.userConfirmations.next(draftId);
   }
 
@@ -705,6 +711,20 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
           this.waitForUserInput<string>(draftId, this.activeParameterInputs),
         waitForEmail: () =>
           this.waitForUserInput<string>(draftId, this.activeEmails),
+        waitForDynamicPrompt: (config) => {
+          this.logStep(
+            subject,
+            activeStep,
+            'info',
+            `[Self-Healing] Memerlukan konfirmasi pengguna: ${config.title}`,
+            { dynamicPrompt: config },
+          );
+          return this.waitForUserInput<any>(
+            draftId,
+            this.activeDynamicPrompts,
+            180000,
+          );
+        },
       };
 
       // Step 1: Initialize Browser
@@ -1131,6 +1151,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       this.activeProductInputs.delete(draftId);
       this.activeParameterInputs.delete(draftId);
       this.activeEmails.delete(draftId);
+      this.activeDynamicPrompts.delete(draftId);
       this.filingFlowService.clearDraftData(draftId);
       this.activeTokens.delete(draftId);
       this.executionTimers.delete(draftId);

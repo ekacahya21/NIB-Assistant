@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { DraftsService } from '../../drafts/drafts.service';
 import { DocumentsService } from '../../documents/documents.service';
 import { PortalInteractionHelper } from './portal-interaction.helper';
 import { AutomationSessionContext } from '../context/automation-session.context';
+import { SelfHealingAgentService } from './self-healing-agent.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -17,6 +18,7 @@ export class FilingFlowService {
     private readonly interactionHelper: PortalInteractionHelper,
     private readonly draftsService: DraftsService,
     private readonly documentsService: DocumentsService,
+    @Optional() private readonly selfHealingAgent?: SelfHealingAgentService,
   ) {}
 
   public getRedirectionUrl(draftId: string): string | undefined {
@@ -30,6 +32,39 @@ export class FilingFlowService {
   public clearDraftData(draftId: string) {
     this.redirectionUrls.delete(draftId);
     this.kdIzins.delete(draftId);
+  }
+
+  public async healValidationErrorsIfPresent(
+    page: any,
+    context: AutomationSessionContext,
+    step: number,
+  ): Promise<boolean> {
+    const errorLocator = page
+      .locator(
+        'text="Wajib diisi", text="harus diisi", .v-messages__message:has-text("Wajib")',
+      )
+      .first();
+    const hasValidationError = await errorLocator
+      .isVisible()
+      .catch(() => false);
+
+    if (hasValidationError && this.selfHealingAgent) {
+      context.logStep(
+        step,
+        'warn',
+        '[Self-Healing] Mendeteksi error validasi form ("Wajib diisi"). Menjalankan pemulihan visual AI...',
+      );
+      const result = await this.selfHealingAgent.healAndAct({
+        page,
+        targetDescription:
+          'Pilihan opsi atau input yang masih kosong bertanda "Wajib diisi"',
+        actionType: 'click',
+        currentStep: step,
+        context,
+      });
+      return result.success;
+    }
+    return false;
   }
 
   public async executeLoginSteps(
@@ -874,7 +909,13 @@ export class FilingFlowService {
       )
       .catch(() => null);
 
-    await page.getByRole('button', { name: 'Simpan Posisi Lokasi' }).click();
+    await this.interactionHelper.clickAndHealValidation(
+      page,
+      page.getByRole('button', { name: 'Simpan Posisi Lokasi' }),
+      'Tombol Simpan Posisi Lokasi',
+      context,
+      { step: 5 },
+    );
 
     const prosesLokasiRes = await prosesLokasiPromise;
     let id_proyek_lokasi: string | undefined;
@@ -948,6 +989,32 @@ export class FilingFlowService {
       await page.waitForTimeout(500);
     }
 
+    // Check Question 3: UU Cipta Kerja question
+    const ciptaKerjaQuestion = page.getByRole('radiogroup', {
+      name: /Cipta Kerja|sebelum implementasi/i,
+    });
+    if (await ciptaKerjaQuestion.isVisible().catch(() => false)) {
+      await ciptaKerjaQuestion
+        .getByLabel('Tidak')
+        .check()
+        .catch(() => null);
+      await page.waitForTimeout(500);
+    }
+
+    // Generic check for any remaining unselected radiogroups in this section
+    const unselectedRadios = page.locator(
+      '.v-input--radio-group:has-text("Wajib diisi"), .v-input--radio-group:not(:has(input:checked))',
+    );
+    const unselectedCount = await unselectedRadios.count().catch(() => 0);
+    for (let i = 0; i < unselectedCount; i++) {
+      const group = unselectedRadios.nth(i);
+      const tidakBtn = group.getByLabel(/tidak/i).first();
+      if (await tidakBtn.isVisible().catch(() => false)) {
+        await tidakBtn.check().catch(() => null);
+        await page.waitForTimeout(300);
+      }
+    }
+
     const getListKbliPromise = page
       .waitForResponse(
         (response: any) =>
@@ -959,7 +1026,13 @@ export class FilingFlowService {
     context.logStep(6, 'info', 'Memilih KBLI...');
     const btnSelanjutnya = page.getByRole('button', { name: 'Selanjutnya' });
     if (await btnSelanjutnya.isVisible().catch(() => false)) {
-      await btnSelanjutnya.click();
+      await this.interactionHelper.clickAndHealValidation(
+        page,
+        btnSelanjutnya,
+        'Tombol Selanjutnya (KBLI)',
+        context,
+        { step: 6 },
+      );
       await getListKbliPromise;
     }
 
@@ -1277,7 +1350,13 @@ export class FilingFlowService {
       name: 'Tambah Bidang Usaha',
     });
     if (await btnTambahBidang.isVisible().catch(() => false)) {
-      await btnTambahBidang.click();
+      await this.interactionHelper.clickAndHealValidation(
+        page,
+        btnTambahBidang,
+        'Tombol Tambah Bidang Usaha',
+        context,
+        { step: 6 },
+      );
     }
 
     const prosesBidangUsahaRes = await prosesBidangUsahaPromise;
@@ -1297,7 +1376,13 @@ export class FilingFlowService {
       .catch(() => null);
     if (await inputRestoran.isVisible().catch(() => false)) {
       await inputRestoran.fill(draft.namaUsaha);
-      await page.getByRole('button', { name: 'Selanjutnya' }).click();
+      await this.interactionHelper.clickAndHealValidation(
+        page,
+        page.getByRole('button', { name: 'Selanjutnya' }),
+        'Tombol Selanjutnya (Nama Kegiatan Usaha)',
+        context,
+        { step: 6 },
+      );
     }
 
     return { id_proyek };
