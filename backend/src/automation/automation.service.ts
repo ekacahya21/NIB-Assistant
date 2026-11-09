@@ -1332,10 +1332,10 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
         'Browser Chromium headful berhasil diluncurkan.',
       );
       const context = await browser.newContext({
-        viewport: { width: 1024, height: 768 },
+        viewport: { width: 1280, height: 800 },
         recordVideo: {
           dir: './recordings',
-          size: { width: 1024, height: 768 },
+          size: { width: 1280, height: 800 },
         },
       });
       const page = await context.newPage();

@@ -495,18 +495,111 @@ export class FilingFlowService {
       } catch (e) {}
     }
 
-    // pilih menu kelola lokasi usaha
-    await page.getByText('Perizinan Berusaha', { exact: true }).click();
-    await page.getByText('Kelola Usaha', { exact: true }).click();
-    await page.getByText('Lokasi Usaha', { exact: true }).click();
+    // Dismiss any popup/dialog/announcement that might appear on dashboard before clicking menu
+    await this.interactionHelper.dismissPopupIfVisible(page, context, 5, 3000);
 
-    // wait for redirected page loaded
-    await page
-      .waitForURL(/.*\/(lokasi-usaha|kelola-usaha).*/, {
-        waitUntil: 'load',
-        timeout: 15000,
-      })
-      .catch(() => null);
+    const initialUrl = page.url() || '';
+    const isAlreadyOnLocation =
+      initialUrl.includes('lokasi-usaha') || initialUrl.includes('kelola-usaha');
+
+    if (!isAlreadyOnLocation) {
+      context.logStep(5, 'info', 'Membuka menu Kelola Usaha -> Lokasi Usaha...');
+      let menuNavSucceeded = false;
+
+      try {
+        // Cek apakah drawer menu sedang collapsed/tertutup (misal tombol hamburger)
+        const drawerToggle = page
+          .locator('.v-app-bar-nav-icon, button[aria-label*="menu" i]')
+          .first();
+        if (await drawerToggle.isVisible().catch(() => false)) {
+          const menuVisible = await page
+            .locator('.v-list-item, nav, .v-navigation-drawer')
+            .filter({ hasText: /Perizinan Berusaha/i })
+            .first()
+            .isVisible()
+            .catch(() => false);
+          if (!menuVisible) {
+            await drawerToggle.click().catch(() => null);
+            await page.waitForTimeout(500);
+          }
+        }
+
+        // Cari menu Perizinan Berusaha dengan selector fleksibel
+        const perizinanMenu = page
+          .locator('.v-list-item, .v-btn, nav a, nav button, [role="menuitem"]')
+          .filter({ hasText: /Perizinan Berusaha/i })
+          .or(page.getByText('Perizinan Berusaha', { exact: true }))
+          .first();
+
+        await perizinanMenu.waitFor({ state: 'visible', timeout: 8000 });
+        await perizinanMenu.click();
+        await page.waitForTimeout(500);
+
+        const kelolaMenu = page
+          .locator('.v-list-item, .v-btn, nav a, nav button, [role="menuitem"]')
+          .filter({ hasText: /Kelola Usaha/i })
+          .or(page.getByText('Kelola Usaha', { exact: true }))
+          .first();
+        await kelolaMenu.waitFor({ state: 'visible', timeout: 5000 });
+        await kelolaMenu.click();
+        await page.waitForTimeout(500);
+
+        const lokasiMenu = page
+          .locator('.v-list-item, .v-btn, nav a, nav button, [role="menuitem"]')
+          .filter({ hasText: /Lokasi Usaha/i })
+          .or(page.getByText('Lokasi Usaha', { exact: true }))
+          .first();
+        await lokasiMenu.waitFor({ state: 'visible', timeout: 5000 });
+        await lokasiMenu.click();
+
+        // wait for redirected page loaded
+        await page
+          .waitForURL(/.*\/(lokasi-usaha|kelola-usaha).*/, {
+            waitUntil: 'load',
+            timeout: 15000,
+          })
+          .catch(() => null);
+
+        menuNavSucceeded = true;
+      } catch (menuErr: any) {
+        context.logStep(
+          5,
+          'warn',
+          `Navigasi menu UI terhambat (${menuErr?.message || menuErr}). Melakukan navigasi langsung ke URL lokasi-usaha...`,
+        );
+      }
+
+      const postUrl = page.url() || '';
+      if (
+        !menuNavSucceeded ||
+        (!postUrl.includes('lokasi-usaha') && !postUrl.includes('kelola-usaha'))
+      ) {
+        const baseUrl =
+          process.env.OSS_BERANDA_URL || 'https://beranda-stg.oss.go.id';
+        let directLokasiUrl = `${baseUrl}/lokasi-usaha`;
+        if (jwtAccessToken) {
+          directLokasiUrl += `?auth-code=${encodeURIComponent(jwtAccessToken)}`;
+          if (context.refreshToken) {
+            directLokasiUrl += `&refresh-code=${encodeURIComponent(context.refreshToken)}`;
+          }
+        }
+        context.logStep(
+          5,
+          'info',
+          `Mengalihkan langsung ke halaman lokasi usaha via URL: ${directLokasiUrl}`,
+        );
+        await page
+          .goto(directLokasiUrl, { waitUntil: 'load', timeout: 30000 })
+          .catch((e: any) => {
+            context.logStep(
+              5,
+              'warn',
+              `Navigasi langsung lokasi-usaha mengalami kendala: ${e?.message}`,
+            );
+          });
+        await page.waitForTimeout(2000);
+      }
+    }
 
     // check if there's any popup message, close by clicking "Mengerti"
     await this.interactionHelper.dismissPopupIfVisible(page, context, 5, 5000);
